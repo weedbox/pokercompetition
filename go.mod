@@ -10,6 +10,6 @@ require (
 	github.com/thoas/go-funk v0.9.3 // indirect
 	github.com/weedbox/pokerface v0.0.0-20230604223057-d954afbd2b09 // indirect
 	github.com/weedbox/pokermodel v0.0.0-20230606101228-20d6285a9533 // indirect
-	github.com/weedbox/pokertable v0.0.0-20230606163450-1764250abf26 // indirect
+	github.com/weedbox/pokertable v0.0.0-20230608160754-a2fd1febb89f // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

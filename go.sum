@@ -19,6 +19,10 @@ github.com/weedbox/pokertable v0.0.0-20230606141816-85c3008b8c6c h1:M7f4WuP1MZw8
 github.com/weedbox/pokertable v0.0.0-20230606141816-85c3008b8c6c/go.mod h1:Th61YtayRsWvDvjftZL7R6BMNgVGuQhx9P9msSxZh+o=
 github.com/weedbox/pokertable v0.0.0-20230606163450-1764250abf26 h1:+Ag2WBVJqBwsjWarJHb63ERaEF/Eylf6dNYl4XMV3tg=
 github.com/weedbox/pokertable v0.0.0-20230606163450-1764250abf26/go.mod h1:v1bYu3FY25xz2P2f0nDJIMyoqOhjjbu/guU+++umgU0=
+github.com/weedbox/pokertable v0.0.0-20230607143834-8d27aff0fbc5 h1:8ZhHJFHtyitdHQpfwnFVb4lXFYrqWEnnbv11SMUctGc=
+github.com/weedbox/pokertable v0.0.0-20230607143834-8d27aff0fbc5/go.mod h1:v1bYu3FY25xz2P2f0nDJIMyoqOhjjbu/guU+++umgU0=
+github.com/weedbox/pokertable v0.0.0-20230608160754-a2fd1febb89f h1:OSS3ruv4UtFSBu/uqgrfI3n/4ZNfTd/nQj8eKgivxhI=
+github.com/weedbox/pokertable v0.0.0-20230608160754-a2fd1febb89f/go.mod h1:v1bYu3FY25xz2P2f0nDJIMyoqOhjjbu/guU+++umgU0=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/yaml.v2 v2.2.2/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=

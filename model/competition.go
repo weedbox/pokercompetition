@@ -2,7 +2,9 @@ package model
 
 import (
 	"encoding/json"
+	"time"
 
+	"github.com/thoas/go-funk"
 	pokertablemodel "github.com/weedbox/pokertable/model"
 )
 
@@ -63,14 +65,15 @@ type CompetitionMeta struct {
 }
 
 type CompetitionState struct {
-	OpenGameAt    int64                    `json:"open_game_at"`    // 比賽開始時間 (可報名、尚未開打)
-	DisableGameAt int64                    `json:"disable_game_at"` // 比賽未開打前，賽局可見時間
-	StartGameAt   int64                    `json:"start_game_at"`   // 比賽開打時間 (可報名、開打)
-	EndGameAt     int64                    `json:"end_game_at"`     // 比賽結束時間
-	Players       []*CompetitionPlayer     `json:"players"`         // 參與過比賽玩家陣列
-	Status        CompetitionStateStatus   `json:"status"`          // 賽事狀態
-	Tables        []*pokertablemodel.Table `json:"tables"`          // 多桌
-	Rankings      []*CompetitionRank       `json:"rankings"`        // 玩家排名 (陣列 Index 即是排名 rank - 1, ex: index 0 -> 第一名, index 1 -> 第二名...)
+	OpenAt    int64                    `json:"open_game_at"`    // 賽事開始時間 (可報名、尚未開打)
+	DisableAt int64                    `json:"disable_game_at"` // 賽事未開打前，賽局可見時間
+	StartAt   int64                    `json:"start_game_at"`   // 賽事開打時間 (可報名、開打)
+	EndAt     int64                    `json:"end_game_at"`     // 賽事結束時間
+	Players   []*CompetitionPlayer     `json:"players"`         // 參與過賽事玩家陣列
+	Status    CompetitionStateStatus   `json:"status"`          // 賽事狀態
+	Tables    []*pokertablemodel.Table `json:"tables"`          // 多桌
+	Rankings  []*CompetitionRank       `json:"rankings"`        // 玩家排名 (陣列 Index 即是排名 rank - 1, ex: index 0 -> 第一名, index 1 -> 第二名...)
+	// TODO: 停止買入後要依照目前賽事人數建立對應容量的 CompetitionRank 陣列
 }
 
 type CompetitionRank struct {
@@ -79,16 +82,18 @@ type CompetitionRank struct {
 }
 
 type CompetitionPlayer struct {
-	PlayerID string `json:"player_id"` // 玩家 ID
-	TableID  string `json:"table_id"`  // 桌次 ID
-	JoinAt   int64  `json:"join_at"`   // 加入時間
+	PlayerID       string `json:"player_id"` // 玩家 ID
+	CurrentTableID string `json:"table_id"`  // 當前桌次 ID
+	JoinAt         int64  `json:"join_at"`   // 加入時間
 
 	// current info
-	Status     CompetitionPlayerStatus `json:"status"`       // 參與玩家狀態
-	Rank       int                     `json:"rank"`         // 排名
-	Chips      int64                   `json:"chips"`        // 當前籌碼
-	ReBuyTimes int                     `json:"re_buy_times"` // 補碼次數
-	AddonTimes int                     `json:"addon_times"`  // 增購次數
+	Status     CompetitionPlayerStatus `json:"status"`        // 參與玩家狀態
+	Rank       int                     `json:"rank"`          // 當前桌次排名
+	Chips      int64                   `json:"chips"`         // 當前籌碼
+	IsReBuying bool                    `json:"is_re_buying"`  // 是否正在補碼
+	ReBuyEndAt int64                   `json:"re_buy_end_at"` // 最後補碼時間
+	ReBuyTimes int                     `json:"re_buy_times"`  // 補碼次數
+	AddonTimes int                     `json:"addon_times"`   // 增購次數
 
 	// statistics info
 	// best
@@ -122,8 +127,9 @@ type Ticket struct {
 type Blind struct {
 	ID               string       `json:"id"`                 // ID
 	Name             string       `json:"name"`               // 名稱
+	InitialLevel     int          `json:"initial_level"`      // 起始盲注級別
 	FinalBuyInLevel  int          `json:"final_buy_in_level"` // 最後買入盲注等級
-	DealerBlindTimes int          `json:"delear_blind_times"` // Dealer 位置要收取的前注倍數 (短牌用)
+	DealerBlindTimes int          `json:"dealer_blind_times"` // Dealer 位置要收取的前注倍數 (短牌用)
 	Levels           []BlindLevel `json:"levels"`             // 級別資訊列表
 }
 
@@ -154,6 +160,42 @@ type AddonSetting struct {
 	MaxTimes    int     `json:"max_times"`     // 最大次數
 }
 
+// Competition Setters
+func (competition *Competition) Start() {
+	competition.State.Status = CompetitionStateStatus_DelayedBuyin
+	competition.State.StartAt = time.Now().Unix()
+
+	if competition.Meta.Mode == CompetitionMode_CT {
+		competition.State.EndAt = competition.State.StartAt + int64((time.Duration(competition.Meta.MaxDurationMins) * time.Minute).Seconds())
+	}
+}
+
+func (competition *Competition) DeleteTable(targetIdx int) {
+	competition.State.Tables = append(competition.State.Tables[:targetIdx], competition.State.Tables[targetIdx+1:]...)
+}
+
+func (competition *Competition) DeletePlayer(targetIdx int) {
+	competition.State.Players = append(competition.State.Players[:targetIdx], competition.State.Players[targetIdx+1:]...)
+}
+
+func (competition *Competition) FindTableIdx(predicate func(*pokertablemodel.Table) bool) int {
+	for idx, table := range competition.State.Tables {
+		if predicate(table) {
+			return idx
+		}
+	}
+	return -1
+}
+
+func (competition *Competition) FindPlayerIdx(predicate func(*CompetitionPlayer) bool) int {
+	for idx, player := range competition.State.Players {
+		if predicate(player) {
+			return idx
+		}
+	}
+	return -1
+}
+
 // Competition Getters
 func (competition Competition) GetJSON() (*string, error) {
 	encoded, err := json.Marshal(competition)
@@ -162,4 +204,30 @@ func (competition Competition) GetJSON() (*string, error) {
 	}
 	json := string(encoded)
 	return &json, nil
+}
+
+func (competition Competition) CanStart() bool {
+	currentPlayerCount := 0
+	for _, table := range competition.State.Tables {
+		currentPlayerCount += len(table.State.PlayerStates)
+	}
+
+	if currentPlayerCount >= competition.Meta.MinPlayerCount {
+		// 開打條件一: 當賽局已經設定 StartAt (開打時間) & 現在時間已經大於等於開打時間且達到最小開桌人數
+		if competition.State.StartAt > 0 && time.Now().Unix() >= competition.State.StartAt {
+			return true
+		}
+
+		// 開打條件二: 賽局沒有設定 StartAt (開打時間) & 達到最小開桌人數
+		if competition.State.StartAt == 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (competition Competition) PlayingPlayerCount() int {
+	return len(funk.Filter(competition.State.Players, func(player *CompetitionPlayer) bool {
+		return (player.Status != CompetitionPlayerStatus_Knockout)
+	}).([]*CompetitionPlayer))
 }
