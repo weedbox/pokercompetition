@@ -77,11 +77,8 @@ func (engine *competitionEngine) Start(competition model.Competition, tables []*
 		competition.State.EndAt = time.Now().Add(time.Minute * time.Duration(competition.Meta.MaxDurationMins)).Unix()
 	}
 
-	// Step 2: 桌次資料
+	// Step 2: 更新桌次資料
 	copy(competition.State.Tables, tables)
-	// for idx, table := range tables {
-	// 	competition.State.Tables[idx] = table
-	// }
 
 	return competition
 }
