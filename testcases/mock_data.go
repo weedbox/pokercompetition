@@ -19,7 +19,7 @@ type TableSettingPayload struct {
 
 type CompetitionSettingPayload struct {
 	// Competition
-	Meta          model.CompetitionMeta
+	Meta      model.CompetitionMeta
 	StartAt   int64
 	DisableAt int64
 
@@ -91,8 +91,8 @@ func NewCTCompetitionSettingPayload(tableSettings ...TableSettingPayload) Compet
 			TableMinPlayingCount: 2,
 			MinChipsUnit:         10,
 		},
-		StartAt:   -1,
-		DisableAt: time.Now().Add(time.Hour * 24).Unix(),
+		StartAt:       -1,
+		DisableAt:     time.Now().Add(time.Hour * 24).Unix(),
 		TableSettings: tableSettings,
 	}
 }
@@ -109,7 +109,7 @@ func NewTableSettingPayload() TableSettingPayload {
 
 func NewDefaultCompetitionSetting(competitionSetting CompetitionSettingPayload) pokercompetition.CompetitionSetting {
 	return pokercompetition.CompetitionSetting{
-		Meta:          competitionSetting.Meta,
+		Meta:      competitionSetting.Meta,
 		StartAt:   competitionSetting.StartAt,
 		DisableAt: competitionSetting.DisableAt,
 	}
