@@ -5,8 +5,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/weedbox/pokercompetition"
-	"github.com/weedbox/pokercompetition/model"
-	pokertablemodel "github.com/weedbox/pokertable/model"
+	"github.com/weedbox/pokertable"
 )
 
 type TableSettingPayload struct {
@@ -19,7 +18,7 @@ type TableSettingPayload struct {
 
 type CompetitionSettingPayload struct {
 	// Competition
-	Meta      model.CompetitionMeta
+	Meta      pokercompetition.CompetitionMeta
 	StartAt   int64
 	DisableAt int64
 
@@ -29,14 +28,14 @@ type CompetitionSettingPayload struct {
 
 func NewCTCompetitionSettingPayload(tableSettings ...TableSettingPayload) CompetitionSettingPayload {
 	return CompetitionSettingPayload{
-		Meta: model.CompetitionMeta{
-			Blind: model.Blind{
+		Meta: pokercompetition.CompetitionMeta{
+			Blind: pokercompetition.Blind{
 				ID:               uuid.New().String(),
 				Name:             "20 min FAST",
 				InitialLevel:     1,
 				FinalBuyInLevel:  2,
 				DealerBlindTimes: 1,
-				Levels: []model.BlindLevel{
+				Levels: []pokercompetition.BlindLevel{
 					{
 						Level:        1,
 						SBChips:      10,
@@ -60,7 +59,7 @@ func NewCTCompetitionSettingPayload(tableSettings ...TableSettingPayload) Compet
 					},
 				},
 			},
-			Ticket: model.Ticket{
+			Ticket: pokercompetition.Ticket{
 				ID:   uuid.New().String(),
 				Name: "CT 3300 20 min",
 			},
@@ -68,20 +67,20 @@ func NewCTCompetitionSettingPayload(tableSettings ...TableSettingPayload) Compet
 			MaxDurationMins: 60,
 			MinPlayerCount:  3,
 			MaxPlayerCount:  9,
-			Rule:            model.CompetitionRule_Default,
-			Mode:            model.CompetitionMode_CT,
-			BuyInSetting: model.BuyInSetting{
+			Rule:            pokercompetition.CompetitionRule_Default,
+			Mode:            pokercompetition.CompetitionMode_CT,
+			BuyInSetting: pokercompetition.BuyInSetting{
 				IsFree:     false,
 				MinTickets: 1,
 				MaxTickets: 2,
 			},
-			ReBuySetting: model.ReBuySetting{
+			ReBuySetting: pokercompetition.ReBuySetting{
 				MinTicket:        1,
 				MaxTicket:        2,
 				MaxTimes:         6,
 				WaitingTimeInSec: 15,
 			},
-			AddonSetting: model.AddonSetting{
+			AddonSetting: pokercompetition.AddonSetting{
 				IsBreakOnly: true,
 				RedeemChips: []int64{},
 				MaxTimes:    0,
@@ -115,10 +114,10 @@ func NewDefaultCompetitionSetting(competitionSetting CompetitionSettingPayload) 
 	}
 }
 
-func NewDefaultTableSetting(competitionMeta model.CompetitionMeta, tableSetting TableSettingPayload) pokertablemodel.TableSetting {
-	blindLevels := []pokertablemodel.BlindLevel{}
+func NewDefaultTableSetting(competitionMeta pokercompetition.CompetitionMeta, tableSetting TableSettingPayload) pokertable.TableSetting {
+	blindLevels := []pokertable.BlindLevel{}
 	for _, bl := range competitionMeta.Blind.Levels {
-		blindLevels = append(blindLevels, pokertablemodel.BlindLevel{
+		blindLevels = append(blindLevels, pokertable.BlindLevel{
 			Level:        bl.Level,
 			SBChips:      bl.SBChips,
 			BBChips:      bl.BBChips,
@@ -127,21 +126,21 @@ func NewDefaultTableSetting(competitionMeta model.CompetitionMeta, tableSetting 
 		})
 	}
 
-	joinPlayers := []pokertablemodel.JoinPlayer{}
+	joinPlayers := []pokertable.JoinPlayer{}
 	for _, player := range tableSetting.JoinPlayers {
-		joinPlayers = append(joinPlayers, pokertablemodel.JoinPlayer{
+		joinPlayers = append(joinPlayers, pokertable.JoinPlayer{
 			PlayerID:    player.PlayerID,
 			RedeemChips: player.RedeemChips,
 		})
 	}
 
-	return pokertablemodel.TableSetting{
+	return pokertable.TableSetting{
 		ShortID:        tableSetting.ShortID,
 		Code:           tableSetting.Code,
 		Name:           tableSetting.Name,
 		InvitationCode: tableSetting.InvitationCode,
-		CompetitionMeta: pokertablemodel.CompetitionMeta{
-			Blind: pokertablemodel.Blind{
+		CompetitionMeta: pokertable.CompetitionMeta{
+			Blind: pokertable.Blind{
 				ID:              competitionMeta.Blind.ID,
 				Name:            competitionMeta.Blind.Name,
 				FinalBuyInLevel: competitionMeta.Blind.FinalBuyInLevel,

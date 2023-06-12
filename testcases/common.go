@@ -1,88 +1,176 @@
 package testcases
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/weedbox/pokertable"
-	pokertablemodel "github.com/weedbox/pokertable/model"
-	pokertableutil "github.com/weedbox/pokertable/util"
 )
 
-func FindCurrentPlayerID(table pokertablemodel.Table, currPlayerIndex int) string {
-	for playingPlayerIndex, playerIndex := range table.State.PlayingPlayerIndexes {
-		if playingPlayerIndex == currPlayerIndex {
-			return table.State.PlayerStates[playerIndex].PlayerID
+func logJSON(t *testing.T, msg string, jsonPrinter func() (string, error)) {
+	json, _ := jsonPrinter()
+	fmt.Printf("\n===== [%s] =====\n%s\n", msg, json)
+}
+
+func FindCurrentPlayerID(table *pokertable.Table) string {
+	currGamePlayerIdx := table.State.GameState.Status.CurrentPlayer
+	for gamePlayerIdx, playerIdx := range table.State.GamePlayerIndexes {
+		if gamePlayerIdx == currGamePlayerIdx {
+			return table.State.PlayerStates[playerIdx].PlayerID
 		}
 	}
 	return ""
 }
 
-func AllGamePlayersReady(t *testing.T, tableEngine pokertable.TableEngine, table pokertablemodel.Table) pokertablemodel.Table {
-	ret := table
-	for _, playingPlayerIdx := range table.State.PlayingPlayerIndexes {
-		player := table.State.PlayerStates[playingPlayerIdx]
-		table, err := tableEngine.PlayerReady(table, player.PlayerID)
-		assert.Nil(t, err)
-		ret = table
+func PrintPlayerActionLog(table *pokertable.Table, playerID, actionLog string) {
+	findPlayerIdx := func(players []*pokertable.TablePlayerState, targetPlayerID string) int {
+		for idx, player := range players {
+			if player.PlayerID == targetPlayerID {
+				return idx
+			}
+		}
+
+		return -1
 	}
-	return ret
+
+	positions := make([]string, 0)
+	playerIdx := findPlayerIdx(table.State.PlayerStates, playerID)
+	if playerIdx != -1 {
+		positions = table.State.PlayerStates[playerIdx].Positions
+	}
+
+	fmt.Printf("[%s] %s%+v: %s\n", table.State.GameState.Status.Round, playerID, positions, actionLog)
 }
 
-func AllPlayersPlaying(t *testing.T, tableEngine pokertable.TableEngine, table pokertablemodel.Table) pokertablemodel.Table {
+func NewPlayerActionErrorLog(table *pokertable.Table, playerID, actionLog string, err error) string {
+	if err == nil {
+		return ""
+	}
+
+	findPlayerIdx := func(players []*pokertable.TablePlayerState, targetPlayerID string) int {
+		for idx, player := range players {
+			if player.PlayerID == targetPlayerID {
+				return idx
+			}
+		}
+
+		return -1
+	}
+
+	positions := make([]string, 0)
+	playerIdx := findPlayerIdx(table.State.PlayerStates, playerID)
+	if playerIdx != -1 {
+		positions = table.State.PlayerStates[playerIdx].Positions
+	}
+
+	return fmt.Sprintf("[%s] %s%+v: %s. Error: %s\n", table.State.GameState.Status.Round, playerID, positions, actionLog, err.Error())
+}
+
+func AllGamePlayersReady(t *testing.T, tableEngine pokertable.TableEngine, table *pokertable.Table) {
+	for _, playerIdx := range table.State.GamePlayerIndexes {
+		player := table.State.PlayerStates[playerIdx]
+		err := tableEngine.PlayerReady(table.ID, player.PlayerID)
+		assert.Nil(t, err, NewPlayerActionErrorLog(table, FindCurrentPlayerID(table), "ready", err))
+		PrintPlayerActionLog(table, player.PlayerID, fmt.Sprintf("ready. CurrentEvent: %s", table.State.GameState.Status.CurrentEvent.Name))
+	}
+}
+
+func PlayersPlayingCallCheck(t *testing.T, tableEngine pokertable.TableEngine, tableID string) {
 	// game started
 	// all players ready
-	table = AllGamePlayersReady(t, tableEngine, table)
+	table, _ := tableEngine.GetTable(tableID)
+	AllGamePlayersReady(t, tableEngine, table)
+	// logJSON(t, fmt.Sprintf("Game %d - all players ready", table.State.GameCount), table.GetJSON)
 
 	// preflop
+	// pay sb
+	PrintPlayerActionLog(table, FindCurrentPlayerID(table), "pay sb")
+	err := tableEngine.PlayerPaySB(tableID, FindCurrentPlayerID(table))
+	assert.Nil(t, err, NewPlayerActionErrorLog(table, FindCurrentPlayerID(table), "pay sb", err))
+	fmt.Printf("[PlayerPaySB] dealer receive bb.\n")
+
+	// pay bb
+	PrintPlayerActionLog(table, FindCurrentPlayerID(table), "pay bb")
+	err = tableEngine.PlayerPayBB(tableID, FindCurrentPlayerID(table))
+	assert.Nil(t, err, NewPlayerActionErrorLog(table, FindCurrentPlayerID(table), "pay bb", err))
+	fmt.Printf("[PlayerPayBB] dealer receive bb.\n")
+
+	// rest players ready
+	AllGamePlayersReady(t, tableEngine, table)
+	// logJSON(t, fmt.Sprintf("Game %d - preflop all players ready", table.State.GameCount), table.GetJSON)
+
 	// dealer move
-	table, err := tableEngine.PlayerWager(table, FindCurrentPlayerID(table, table.State.GameState.Status.CurrentPlayer), pokertableutil.WagerAction_Call, 0)
-	assert.Nil(t, err)
+	PrintPlayerActionLog(table, FindCurrentPlayerID(table), "call")
+	err = tableEngine.PlayerCall(tableID, FindCurrentPlayerID(table))
+	assert.Nil(t, err, NewPlayerActionErrorLog(table, FindCurrentPlayerID(table), "call", err))
 
 	// sb move
-	tableEngine.PlayerWager(table, FindCurrentPlayerID(table, table.State.GameState.Status.CurrentPlayer), pokertableutil.WagerAction_Call, 0)
+	PrintPlayerActionLog(table, FindCurrentPlayerID(table), "call")
+	err = tableEngine.PlayerCall(tableID, FindCurrentPlayerID(table))
+	assert.Nil(t, err, NewPlayerActionErrorLog(table, FindCurrentPlayerID(table), "call", err))
 
 	// bb move
-	tableEngine.PlayerWager(table, FindCurrentPlayerID(table, table.State.GameState.Status.CurrentPlayer), pokertableutil.WagerAction_Check, 0)
+	PrintPlayerActionLog(table, FindCurrentPlayerID(table), "check")
+	err = tableEngine.PlayerCheck(tableID, FindCurrentPlayerID(table))
+	assert.Nil(t, err, NewPlayerActionErrorLog(table, FindCurrentPlayerID(table), "check", err))
+
+	// logJSON(t, fmt.Sprintf("Game %d - preflop all players done actions", table.State.GameCount), table.GetJSON)
 
 	// flop
 	// all players ready
-	table = AllGamePlayersReady(t, tableEngine, table)
-
-	// dealer move
-	tableEngine.PlayerWager(table, FindCurrentPlayerID(table, table.State.GameState.Status.CurrentPlayer), pokertableutil.WagerAction_Bet, 10)
+	AllGamePlayersReady(t, tableEngine, table)
 
 	// sb move
-	tableEngine.PlayerWager(table, FindCurrentPlayerID(table, table.State.GameState.Status.CurrentPlayer), pokertableutil.WagerAction_Call, 0)
+	PrintPlayerActionLog(table, FindCurrentPlayerID(table), "bet 10")
+	err = tableEngine.PlayerBet(tableID, FindCurrentPlayerID(table), 10)
+	assert.Nil(t, err, NewPlayerActionErrorLog(table, FindCurrentPlayerID(table), "bet 10", err))
 
 	// bb move
-	tableEngine.PlayerWager(table, FindCurrentPlayerID(table, table.State.GameState.Status.CurrentPlayer), pokertableutil.WagerAction_Call, 0)
+	PrintPlayerActionLog(table, FindCurrentPlayerID(table), "call")
+	err = tableEngine.PlayerCall(tableID, FindCurrentPlayerID(table))
+	assert.Nil(t, err, NewPlayerActionErrorLog(table, FindCurrentPlayerID(table), "call", err))
+
+	// dealer move
+	PrintPlayerActionLog(table, FindCurrentPlayerID(table), "call")
+	err = tableEngine.PlayerCall(tableID, FindCurrentPlayerID(table))
+	assert.Nil(t, err, NewPlayerActionErrorLog(table, FindCurrentPlayerID(table), "call", err))
 
 	// turn
 	// all players ready
-	table = AllGamePlayersReady(t, tableEngine, table)
-
-	// dealer move
-	tableEngine.PlayerWager(table, FindCurrentPlayerID(table, table.State.GameState.Status.CurrentPlayer), pokertableutil.WagerAction_Bet, 10)
+	AllGamePlayersReady(t, tableEngine, table)
 
 	// sb move
-	tableEngine.PlayerWager(table, FindCurrentPlayerID(table, table.State.GameState.Status.CurrentPlayer), pokertableutil.WagerAction_Call, 0)
+	PrintPlayerActionLog(table, FindCurrentPlayerID(table), "bet 10")
+	err = tableEngine.PlayerBet(tableID, FindCurrentPlayerID(table), 10)
+	assert.Nil(t, err, NewPlayerActionErrorLog(table, FindCurrentPlayerID(table), "bet 10", err))
 
 	// bb move
-	tableEngine.PlayerWager(table, FindCurrentPlayerID(table, table.State.GameState.Status.CurrentPlayer), pokertableutil.WagerAction_Call, 0)
+	PrintPlayerActionLog(table, FindCurrentPlayerID(table), "call")
+	err = tableEngine.PlayerCall(tableID, FindCurrentPlayerID(table))
+	assert.Nil(t, err, NewPlayerActionErrorLog(table, FindCurrentPlayerID(table), "call", err))
+
+	// dealer move
+	PrintPlayerActionLog(table, FindCurrentPlayerID(table), "call")
+	err = tableEngine.PlayerCall(tableID, FindCurrentPlayerID(table))
+	assert.Nil(t, err, NewPlayerActionErrorLog(table, FindCurrentPlayerID(table), "call", err))
 
 	// river
 	// all players ready
-	table = AllGamePlayersReady(t, tableEngine, table)
-
-	// dealer move
-	tableEngine.PlayerWager(table, FindCurrentPlayerID(table, table.State.GameState.Status.CurrentPlayer), pokertableutil.WagerAction_Bet, 10)
+	AllGamePlayersReady(t, tableEngine, table)
 
 	// sb move
-	tableEngine.PlayerWager(table, FindCurrentPlayerID(table, table.State.GameState.Status.CurrentPlayer), pokertableutil.WagerAction_Call, 0)
+	PrintPlayerActionLog(table, FindCurrentPlayerID(table), "bet 10")
+	err = tableEngine.PlayerBet(tableID, FindCurrentPlayerID(table), 10)
+	assert.Nil(t, err, NewPlayerActionErrorLog(table, FindCurrentPlayerID(table), "bet 10", err))
 
 	// bb move
-	tableEngine.PlayerWager(table, FindCurrentPlayerID(table, table.State.GameState.Status.CurrentPlayer), pokertableutil.WagerAction_Call, 0)
+	PrintPlayerActionLog(table, FindCurrentPlayerID(table), "call")
+	err = tableEngine.PlayerCall(tableID, FindCurrentPlayerID(table))
+	assert.Nil(t, err, NewPlayerActionErrorLog(table, FindCurrentPlayerID(table), "call", err))
 
-	return table
+	// dealer move
+	PrintPlayerActionLog(table, FindCurrentPlayerID(table), "call")
+	err = tableEngine.PlayerCall(tableID, FindCurrentPlayerID(table))
+	assert.Nil(t, err, NewPlayerActionErrorLog(table, FindCurrentPlayerID(table), "call", err))
 }
