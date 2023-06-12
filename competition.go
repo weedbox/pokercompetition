@@ -1,11 +1,11 @@
-package model
+package pokercompetition
 
 import (
 	"encoding/json"
 	"time"
 
 	"github.com/thoas/go-funk"
-	pokertablemodel "github.com/weedbox/pokertable/model"
+	"github.com/weedbox/pokertable"
 )
 
 type CompetitionStateStatus string
@@ -53,26 +53,26 @@ type CompetitionMeta struct {
 	MaxDurationMins      int             `json:"max_duration_mins"`       // 比賽時間總長 (分鐘)
 	MinPlayerCount       int             `json:"min_player_count"`        // 最小參賽人數
 	MaxPlayerCount       int             `json:"max_player_count"`        // 最大參賽人數
+	TableMaxSeatCount    int             `json:"table_max_seat_count"`    // 每桌人數上限
+	TableMinPlayingCount int             `json:"table_min_playing_count"` // 每桌最小開打數
 	Rule                 CompetitionRule `json:"rule"`                    // 德州撲克規則, 常牌(default), 短牌(short_deck), 奧瑪哈(omaha)
 	Mode                 CompetitionMode `json:"mode"`                    // 賽事模式 (CT, MTT, Cash)
 	BuyInSetting         BuyInSetting    `json:"buy_in_setting"`          // BuyIn 設定
 	ReBuySetting         ReBuySetting    `json:"re_buy_setting"`          // ReBuy 設定
 	AddonSetting         AddonSetting    `json:"addon_setting"`           // Addon 設定
 	ActionTimeSecs       int             `json:"action_time_secs"`        // 思考時間 (秒數)
-	TableMaxSeatCount    int             `json:"table_max_seat_count"`    // 每桌人數上限
-	TableMinPlayingCount int             `json:"table_min_playing_count"` // 每桌最小開打數
 	MinChipsUnit         int64           `json:"min_chips_unit"`          // 最小單位籌碼量
 }
 
 type CompetitionState struct {
-	OpenAt    int64                    `json:"open_game_at"`    // 賽事開始時間 (可報名、尚未開打)
-	DisableAt int64                    `json:"disable_game_at"` // 賽事未開打前，賽局可見時間
-	StartAt   int64                    `json:"start_game_at"`   // 賽事開打時間 (可報名、開打)
-	EndAt     int64                    `json:"end_game_at"`     // 賽事結束時間
-	Players   []*CompetitionPlayer     `json:"players"`         // 參與過賽事玩家陣列
-	Status    CompetitionStateStatus   `json:"status"`          // 賽事狀態
-	Tables    []*pokertablemodel.Table `json:"tables"`          // 多桌
-	Rankings  []*CompetitionRank       `json:"rankings"`        // 玩家排名 (陣列 Index 即是排名 rank - 1, ex: index 0 -> 第一名, index 1 -> 第二名...)
+	OpenAt    int64                  `json:"open_game_at"`    // 賽事開始時間 (可報名、尚未開打)
+	DisableAt int64                  `json:"disable_game_at"` // 賽事未開打前，賽局可見時間
+	StartAt   int64                  `json:"start_game_at"`   // 賽事開打時間 (可報名、開打)
+	EndAt     int64                  `json:"end_game_at"`     // 賽事結束時間
+	Players   []*CompetitionPlayer   `json:"players"`         // 參與過賽事玩家陣列
+	Status    CompetitionStateStatus `json:"status"`          // 賽事狀態
+	Tables    []*pokertable.Table    `json:"tables"`          // 多桌
+	Rankings  []*CompetitionRank     `json:"rankings"`        // 玩家排名 (陣列 Index 即是排名 rank - 1, ex: index 0 -> 第一名, index 1 -> 第二名...)
 	// TODO: 停止買入後要依照目前賽事人數建立對應容量的 CompetitionRank 陣列
 }
 
@@ -161,73 +161,172 @@ type AddonSetting struct {
 }
 
 // Competition Setters
-func (competition *Competition) Start() {
-	competition.State.Status = CompetitionStateStatus_DelayedBuyin
-	competition.State.StartAt = time.Now().Unix()
+func (c *Competition) RefreshUpdateAt() {
+	c.UpdateAt = time.Now().Unix()
+}
 
-	if competition.Meta.Mode == CompetitionMode_CT {
-		competition.State.EndAt = competition.State.StartAt + int64((time.Duration(competition.Meta.MaxDurationMins) * time.Minute).Seconds())
+func (c *Competition) ConfigureWithSetting(setting CompetitionSetting) {
+	// configure meta
+	c.Meta = setting.Meta
+
+	// configure state
+	state := CompetitionState{
+		OpenAt:    time.Now().Unix(),
+		DisableAt: setting.DisableAt,
+		StartAt:   setting.StartAt,
+		EndAt:     UnsetValue,
+		Players:   make([]*CompetitionPlayer, 0),
+		Status:    CompetitionStateStatus_Registering,
+		Tables:    make([]*pokertable.Table, 0),
+		Rankings:  make([]*CompetitionRank, 0),
 	}
+	c.State = &state
 }
 
-func (competition *Competition) DeleteTable(targetIdx int) {
-	competition.State.Tables = append(competition.State.Tables[:targetIdx], competition.State.Tables[targetIdx+1:]...)
+func (c *Competition) Close() {
+	c.State.EndAt = time.Now().Unix()
+	c.State.Status = CompetitionStateStatus_End
 }
 
-func (competition *Competition) DeletePlayer(targetIdx int) {
-	competition.State.Players = append(competition.State.Players[:targetIdx], competition.State.Players[targetIdx+1:]...)
-}
+func (c *Competition) AddTable(table *pokertable.Table, playerCacheHandler func(PlayerCache)) {
+	// update tables
+	c.State.Tables = append(c.State.Tables, table)
 
-func (competition *Competition) FindTableIdx(predicate func(*pokertablemodel.Table) bool) int {
-	for idx, table := range competition.State.Tables {
-		if predicate(table) {
-			return idx
+	// update players
+	newPlayerData := make(map[string]int64)
+	for _, ps := range table.State.PlayerStates {
+		newPlayerData[ps.PlayerID] = ps.Bankroll
+	}
+
+	// find existing players
+	existingPlayerData := make(map[string]int64)
+	for _, player := range c.State.Players {
+		if bankroll, exist := newPlayerData[player.PlayerID]; exist {
+			existingPlayerData[player.PlayerID] = bankroll
 		}
 	}
-	return -1
-}
 
-func (competition *Competition) FindPlayerIdx(predicate func(*CompetitionPlayer) bool) int {
-	for idx, player := range competition.State.Players {
-		if predicate(player) {
-			return idx
+	// remove existing player data from new player data
+	for playerID := range existingPlayerData {
+		delete(newPlayerData, playerID)
+	}
+
+	// update existing player data
+	if len(existingPlayerData) > 0 {
+		for i := 0; i < len(c.State.Players); i++ {
+			player := c.State.Players[i]
+			if bankroll, exist := existingPlayerData[player.PlayerID]; exist {
+				c.State.Players[i].Chips = bankroll
+			}
 		}
 	}
-	return -1
+
+	// add new player data
+	if len(newPlayerData) > 0 {
+		newPlayerIdx := len(c.State.Players)
+		newPlayers := make([]*CompetitionPlayer, 0)
+		for playerID, bankroll := range newPlayerData {
+			player, playerCache := NewDefaultCompetitionPlayerData(table.ID, playerID, bankroll)
+			newPlayers = append(newPlayers, &player)
+			playerCache.PlayerIdx = newPlayerIdx
+			playerCacheHandler(playerCache)
+			newPlayerIdx++
+
+		}
+		c.State.Players = append(c.State.Players, newPlayers...)
+	}
+}
+
+func (c *Competition) Start() {
+	c.State.Status = CompetitionStateStatus_DelayedBuyin
+	c.State.StartAt = time.Now().Unix()
+
+	if c.Meta.Mode == CompetitionMode_CT {
+		c.State.EndAt = c.State.StartAt + int64((time.Duration(c.Meta.MaxDurationMins) * time.Minute).Seconds())
+	}
+}
+
+func (c *Competition) DeleteTable(targetIdx int) {
+	c.State.Tables = append(c.State.Tables[:targetIdx], c.State.Tables[targetIdx+1:]...)
+}
+
+func (c *Competition) DeletePlayer(targetIdx int) {
+	c.State.Players = append(c.State.Players[:targetIdx], c.State.Players[targetIdx+1:]...)
+}
+
+func (c *Competition) PlayerJoin(tableID, playerID string, playerIdx int, redeemChips int64, buyInPlayerCacheHandler func(PlayerCache), reBuyPlayerCacheHandler func(int)) {
+	if playerIdx == UnsetValue {
+		// BuyIn logic
+		player, playerCache := NewDefaultCompetitionPlayerData(tableID, playerID, redeemChips)
+		c.State.Players = append(c.State.Players, &player)
+		playerCache.PlayerIdx = len(c.State.Players) - 1
+		buyInPlayerCacheHandler(playerCache)
+	} else {
+		// ReBuy logic
+		c.State.Players[playerIdx].CurrentTableID = tableID
+		c.State.Players[playerIdx].Chips += redeemChips
+		c.State.Players[playerIdx].ReBuyTimes++
+		c.State.Players[playerIdx].IsReBuying = false
+		c.State.Players[playerIdx].ReBuyEndAt = UnsetValue
+		reBuyPlayerCacheHandler(c.State.Players[playerIdx].ReBuyTimes)
+	}
+}
+
+func (c *Competition) PlayerAddon(tableID, playerID string, playerIdx int, redeemChips int64) {
+	c.State.Players[playerIdx].CurrentTableID = tableID
+	c.State.Players[playerIdx].Chips += redeemChips
+	c.State.Players[playerIdx].AddonTimes++
 }
 
 // Competition Getters
-func (competition Competition) GetJSON() (*string, error) {
-	encoded, err := json.Marshal(competition)
+func (c Competition) GetJSON() (string, error) {
+	encoded, err := json.Marshal(c)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	json := string(encoded)
-	return &json, nil
+	return string(encoded), nil
 }
 
-func (competition Competition) CanStart() bool {
+func (c Competition) CanStart() bool {
 	currentPlayerCount := 0
-	for _, table := range competition.State.Tables {
+	for _, table := range c.State.Tables {
 		currentPlayerCount += len(table.State.PlayerStates)
 	}
 
-	if currentPlayerCount >= competition.Meta.MinPlayerCount {
+	if currentPlayerCount >= c.Meta.MinPlayerCount {
 		// 開打條件一: 當賽局已經設定 StartAt (開打時間) & 現在時間已經大於等於開打時間且達到最小開桌人數
-		if competition.State.StartAt > 0 && time.Now().Unix() >= competition.State.StartAt {
+		if c.State.StartAt > 0 && time.Now().Unix() >= c.State.StartAt {
 			return true
 		}
 
 		// 開打條件二: 賽局沒有設定 StartAt (開打時間) & 達到最小開桌人數
-		if competition.State.StartAt == 0 {
+		if c.State.StartAt == 0 {
 			return true
 		}
 	}
 	return false
 }
 
-func (competition Competition) PlayingPlayerCount() int {
-	return len(funk.Filter(competition.State.Players, func(player *CompetitionPlayer) bool {
+func (c Competition) PlayingPlayerCount() int {
+	return len(funk.Filter(c.State.Players, func(player *CompetitionPlayer) bool {
 		return (player.Status != CompetitionPlayerStatus_Knockout)
 	}).([]*CompetitionPlayer))
+}
+
+func (c Competition) FindTableIdx(predicate func(*pokertable.Table) bool) int {
+	for idx, table := range c.State.Tables {
+		if predicate(table) {
+			return idx
+		}
+	}
+	return UnsetValue
+}
+
+func (c Competition) FindPlayerIdx(predicate func(*CompetitionPlayer) bool) int {
+	for idx, player := range c.State.Players {
+		if predicate(player) {
+			return idx
+		}
+	}
+	return UnsetValue
 }
