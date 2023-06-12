@@ -8,8 +8,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/stretchr/testify v1.8.4 // indirect
 	github.com/thoas/go-funk v0.9.3 // indirect
-	github.com/weedbox/pokerface v0.0.0-20230604223057-d954afbd2b09 // indirect
-	github.com/weedbox/pokermodel v0.0.0-20230606101228-20d6285a9533 // indirect
-	github.com/weedbox/pokertable v0.0.0-20230608160754-a2fd1febb89f // indirect
+	github.com/weedbox/pokerface v0.0.0-20230612023724-9a4ee1b79b76 // indirect
+	github.com/weedbox/pokertable v0.0.0-20230610175442-167f209394fb // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

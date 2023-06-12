@@ -5,9 +5,7 @@ import (
 	"time"
 
 	"github.com/thoas/go-funk"
-
-	"github.com/weedbox/pokercompetition/model"
-	pokertablemodel "github.com/weedbox/pokertable/model"
+	"github.com/weedbox/pokertable"
 )
 
 type PlayerCache struct {
@@ -24,7 +22,7 @@ type RankData struct {
 	Chips    int64
 }
 
-func NewDefaultCompetitionPlayerData(tableID, playerID string, redeemChips int64) (model.CompetitionPlayer, PlayerCache) {
+func NewDefaultCompetitionPlayerData(tableID, playerID string, redeemChips int64) (CompetitionPlayer, PlayerCache) {
 	joinAt := time.Now().Unix()
 	playerCache := PlayerCache{
 		PlayerID:   playerID,
@@ -33,11 +31,11 @@ func NewDefaultCompetitionPlayerData(tableID, playerID string, redeemChips int64
 		TableID:    tableID,
 	}
 
-	player := model.CompetitionPlayer{
+	player := CompetitionPlayer{
 		PlayerID:              playerID,
 		CurrentTableID:        tableID,
 		JoinAt:                joinAt,
-		Status:                model.CompetitionPlayerStatus_Playing,
+		Status:                CompetitionPlayerStatus_Playing,
 		Rank:                  UnsetValue,
 		Chips:                 redeemChips,
 		IsReBuying:            false,
@@ -71,9 +69,9 @@ func NewDefaultCompetitionPlayerData(tableID, playerID string, redeemChips int64
 		2. 如果 Bankroll 相同則用加入時間排序  (早加入者名次高)
 	- @return 該桌玩家排名資料 Map, key: player id, value: RankData
 */
-func GetParticipatedPlayerTableRankingData(playerCacheData map[string]*PlayerCache, tablePlayers []*pokertablemodel.TablePlayerState, playingPlayerIndexes []int) map[string]RankData {
-	playingPlayers := make([]pokertablemodel.TablePlayerState, 0)
-	for _, playerIdx := range playingPlayerIndexes {
+func GetParticipatedPlayerTableRankingData(playerCacheData map[string]*PlayerCache, tablePlayers []*pokertable.TablePlayerState, gamePlayerIndexes []int) map[string]RankData {
+	playingPlayers := make([]pokertable.TablePlayerState, 0)
+	for _, playerIdx := range gamePlayerIndexes {
 		player := tablePlayers[playerIdx]
 		playingPlayers = append(playingPlayers, *player)
 	}
@@ -120,8 +118,8 @@ func GetParticipatedPlayerTableRankingData(playerCacheData map[string]*PlayerCac
 	GetSortedFinalKnockoutPlayerRankings 停止買入後被淘汰玩家的排名 (越早入桌者，排名越前面 index 越小)
 	  - @return SortedFinalKnockoutPlayerIDs 排序過後的淘汰玩家 ID 陣列
 */
-func GetSortedKnockoutPlayerRankings(playerCacheData map[string]*PlayerCache, players []*pokertablemodel.TablePlayerState, maxReBuyTimes int) []string {
-	sortedFinalKnockoutPlayers := make([]pokertablemodel.TablePlayerState, 0)
+func GetSortedKnockoutPlayerRankings(playerCacheData map[string]*PlayerCache, players []*pokertable.TablePlayerState, maxReBuyTimes int) []string {
+	sortedFinalKnockoutPlayers := make([]pokertable.TablePlayerState, 0)
 
 	// 找出可能的淘汰者們
 	for _, p := range players {
@@ -142,7 +140,7 @@ func GetSortedKnockoutPlayerRankings(playerCacheData map[string]*PlayerCache, pl
 		return playerCacheData[sortedFinalKnockoutPlayers[i].PlayerID].JoinAt > playerCacheData[sortedFinalKnockoutPlayers[j].PlayerID].JoinAt
 	})
 
-	return funk.Map(sortedFinalKnockoutPlayers, func(p pokertablemodel.TablePlayerState) string {
+	return funk.Map(sortedFinalKnockoutPlayers, func(p pokertable.TablePlayerState) string {
 		return p.PlayerID
 	}).([]string)
 }
@@ -154,10 +152,10 @@ func GetSortedKnockoutPlayerRankings(playerCacheData map[string]*PlayerCache, pl
 		2. 如果 Chips 相同則用加入時間排序  (早加入者名次高)
 	- @return 該桌玩家排名資料 Map, key: player id, value: RankData
 */
-func GetParticipatedPlayerCompetitionRankingData(playerCacheData map[string]*PlayerCache, players []*model.CompetitionPlayer) map[string]RankData {
-	playingPlayers := make([]model.CompetitionPlayer, 0)
+func GetParticipatedPlayerCompetitionRankingData(playerCacheData map[string]*PlayerCache, players []*CompetitionPlayer) map[string]RankData {
+	playingPlayers := make([]CompetitionPlayer, 0)
 	for _, player := range players {
-		if player.Status != model.CompetitionPlayerStatus_Knockout {
+		if player.Status != CompetitionPlayerStatus_Knockout {
 			playingPlayers = append(playingPlayers, *player)
 		}
 	}
