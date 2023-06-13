@@ -34,6 +34,8 @@ github.com/weedbox/pokertable v0.0.0-20230612181808-ae8975b235bb h1:4DTjQnOSncT6
 github.com/weedbox/pokertable v0.0.0-20230612181808-ae8975b235bb/go.mod h1:/bKGYUQ9QZn00E+Kwot7wUVZzKagMWXRZ0bzU/nv7Bk=
 github.com/weedbox/pokertable v0.0.0-20230612191812-32cb47e95228 h1:ficxvPWZ3Ul+DmQUODqzCFLuhPfejoqt6KmyjeDlcPY=
 github.com/weedbox/pokertable v0.0.0-20230612191812-32cb47e95228/go.mod h1:/bKGYUQ9QZn00E+Kwot7wUVZzKagMWXRZ0bzU/nv7Bk=
+github.com/weedbox/timebank v0.0.0-20230610090731-5f6d4b480f02 h1:+tUkr1MQc7EIaES6Aer3vkp2IXyDPZXb8KW4amBmfIM=
+github.com/weedbox/timebank v0.0.0-20230610090731-5f6d4b480f02/go.mod h1:7ZB83P7QCjvRQm4DsMFVIRxEeXaiH75BRMzI5SMBH6Y=
 gopkg.in/check.v1 v0.0.0-20161208181325-20d25e280405/go.mod h1:Co6ibVJAznAaIkqp8huTwlJQCZ016jof/cbN4VW5Yz0=
 gopkg.in/yaml.v2 v2.2.2/go.mod h1:hI93XBmqTisBFMUTm0b8Fm+jr3Dg1NNxqwp+5A1VGuI=
 gopkg.in/yaml.v3 v3.0.1 h1:fxVm/GzAzEWqLHuvctI91KS9hhNmmWOoWu0XTYJS7CA=

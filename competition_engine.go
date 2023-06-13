@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/weedbox/pokerface"
+	"github.com/weedbox/timebank"
 
 	"github.com/thoas/go-funk"
 
@@ -55,6 +56,7 @@ type CompetitionEngine interface {
 func NewCompetitionEngine() CompetitionEngine {
 	tableEngine := pokertable.NewTableEngine()
 	ce := &competitionEngine{
+		timebank:                       timebank.NewTimeBank(),
 		tableEngine:                    tableEngine,
 		competitionMap:                 make(map[string]*Competition),
 		playerCacheData:                make(map[string]*PlayerCache),
@@ -66,6 +68,7 @@ func NewCompetitionEngine() CompetitionEngine {
 }
 
 type competitionEngine struct {
+	timebank             *timebank.TimeBank
 	tableEngine          pokertable.TableEngine
 	competitionMap       map[string]*Competition
 	onCompetitionUpdated func(*Competition)
@@ -111,7 +114,7 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 	// create competition instance
 	competition := &Competition{
 		ID:       uuid.New().String(),
-		UpdateAt: time.Now().Unix(),
+		UpdateAt: time.Now().UnixMilli(),
 	}
 	competition.ConfigureWithSetting(competitionSetting)
 	for _, tableSetting := range competitionSetting.TableSettings {
@@ -119,7 +122,22 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 			return nil, err
 		}
 
-		// TODO: consider AutoEndTable: close table but don't do any settlement
+		// AutoEndTable
+		if competitionSetting.Meta.Mode == CompetitionMode_CT {
+			duration := competition.State.DisableAt - time.Now().Unix()
+			autoCloseTime := time.Duration(duration) * time.Minute
+			if err := ce.timebank.NewTask(autoCloseTime, func(isCancelled bool) {
+				if isCancelled {
+					return
+				}
+
+				if len(competition.State.Players) < competition.Meta.MinPlayerCount {
+					ce.CloseCompetition(competition.ID)
+				}
+			}); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	ce.EmitEvent(competition)
@@ -136,6 +154,7 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 	CloseCompetition 關閉賽事
 	  - 適用時機:
 	    - 賽事出狀況需要臨時關閉賽事
+		- 未達開賽條件自動關閉賽事
 */
 func (ce *competitionEngine) CloseCompetition(competitionID string) error {
 	competition, exist := ce.competitionMap[competitionID]
