@@ -73,7 +73,6 @@ type CompetitionState struct {
 	Status    CompetitionStateStatus `json:"status"`          // 賽事狀態
 	Tables    []*pokertable.Table    `json:"tables"`          // 多桌
 	Rankings  []*CompetitionRank     `json:"rankings"`        // 玩家排名 (陣列 Index 即是排名 rank - 1, ex: index 0 -> 第一名, index 1 -> 第二名...)
-	// TODO: 停止買入後要依照目前賽事人數建立對應容量的 CompetitionRank 陣列
 }
 
 type CompetitionRank struct {
@@ -162,7 +161,7 @@ type AddonSetting struct {
 
 // Competition Setters
 func (c *Competition) RefreshUpdateAt() {
-	c.UpdateAt = time.Now().Unix()
+	c.UpdateAt = time.Now().UnixMilli()
 }
 
 func (c *Competition) ConfigureWithSetting(setting CompetitionSetting) {
