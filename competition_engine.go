@@ -2,6 +2,8 @@ package pokercompetition
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/weedbox/pokerface"
@@ -29,7 +31,12 @@ var (
 
 // TODO: add distribute tables 拆併桌
 type CompetitionEngine interface {
+	// Test Only
+	TableEngine() pokertable.TableEngine
+
 	// Competition Actions
+	OnCompetitionUpdated(fn func(*Competition)) error                              // 賽事更新監聽器
+	GetCompetition(competitionID string) (*Competition, error)                     // 取得賽事
 	CreateCompetition(competitionSetting CompetitionSetting) (*Competition, error) // 建立賽事
 	CloseCompetition(competitionID string) error                                   // 關閉賽事
 	StartCompetition(competitionID string) error                                   // 開始賽事
@@ -48,11 +55,13 @@ type CompetitionEngine interface {
 func NewCompetitionEngine() CompetitionEngine {
 	tableEngine := pokertable.NewTableEngine()
 	ce := &competitionEngine{
-		tableEngine:     tableEngine,
-		competitionMap:  make(map[string]*Competition),
-		playerCacheData: make(map[string]*PlayerCache),
+		tableEngine:                    tableEngine,
+		competitionMap:                 make(map[string]*Competition),
+		playerCacheData:                make(map[string]*PlayerCache),
+		competitionTableGameSettledMap: make(map[string]map[string]bool),
 	}
 	ce.tableEngine.OnTableUpdated(ce.onCompetitionTableUpdated)
+	ce.tableEngine.OnTableSettled(ce.onCompetitionTableSettled)
 	return ce
 }
 
@@ -61,8 +70,16 @@ type competitionEngine struct {
 	competitionMap       map[string]*Competition
 	onCompetitionUpdated func(*Competition)
 
+	// competitionTableGameSettledMap Record which game in a table has been settled
+	// key: competition id, value: k: <table-id>.<game-id>, v: settled
+	competitionTableGameSettledMap map[string]map[string]bool
+
 	// playerCacheData key: playerID, value: PlayerCache
 	playerCacheData map[string]*PlayerCache
+}
+
+func (ce *competitionEngine) TableEngine() pokertable.TableEngine {
+	return ce.tableEngine
 }
 
 func (ce *competitionEngine) EmitEvent(competition *Competition) {
@@ -107,9 +124,11 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 
 	ce.EmitEvent(competition)
 
-	// update competitionMap
+	// set competitionMap
 	ce.competitionMap[competition.ID] = competition
 
+	// set competitionTableGameSettledMap
+	ce.competitionTableGameSettledMap[competition.ID] = make(map[string]bool)
 	return competition, nil
 }
 
@@ -125,7 +144,6 @@ func (ce *competitionEngine) CloseCompetition(competitionID string) error {
 	}
 
 	ce.settleCompetition(competition)
-
 	return nil
 }
 
@@ -384,33 +402,67 @@ func (ce *competitionEngine) onCompetitionTableUpdated(table *pokertable.Table) 
 		return
 	}
 
-	// 處理桌次已結束
-	if table.State.Status == pokertable.TableStateStatus_TableGameClosed {
-		ce.deleteCompetitionTable(competition, table.ID)
+	// 更新 competition 桌次
+	competition.State.Tables[tableIdx] = table
+}
+
+func (ce *competitionEngine) onCompetitionTableSettled(table *pokertable.Table) {
+	competition, exist := ce.competitionMap[table.Meta.CompetitionMeta.ID]
+	if !exist {
 		return
 	}
 
-	// 處理停止買入
+	tableIdx := competition.FindTableIdx(func(t *pokertable.Table) bool {
+		return table.ID == t.ID
+	})
+	if tableIdx == UnsetValue {
+		return
+	}
+
+	// 更新 competition state
+	competition.State.Tables[tableIdx] = table
 	if table.State.BlindState.IsFinalBuyInLevel() {
-		competition.State.Status = CompetitionStateStatus_DelayedBuyin
+		competition.State.Status = CompetitionStateStatus_StoppedBuyin
 
 		// 初始化排名陣列
 		if len(competition.State.Rankings) == 0 {
-			for _, table := range competition.State.Tables {
-				for i := 0; i < len(table.State.PlayerStates); i++ {
-					competition.State.Rankings = append(competition.State.Rankings, nil)
-				}
+			for i := 0; i < len(competition.State.Players); i++ {
+				competition.State.Rankings = append(competition.State.Rankings, nil)
 			}
 		}
 	}
 
-	// 桌次結算
-	if ce.shouldSettleTable(table.State.GameState.Status.Round, table.State.GameState.Status.CurrentEvent.Name) {
-		ce.tableSettlement(competition, table)
+	inGameTableStatuses := []pokertable.TableStateStatus{
+		pokertable.TableStateStatus_TableGameMatchOpen,
+		pokertable.TableStateStatus_TableGamePaused,
 	}
+	if funk.Contains(inGameTableStatuses, table.State.Status) {
+		// 處理 Game 進行中
+		// 更新 competitionTableGameSettledMap
+		tableGameID := fmt.Sprintf("%s.%s", table.ID, table.State.GameState.GameID)
+		_, competitionTableGameSettledMapExist := ce.competitionTableGameSettledMap[competition.ID][tableGameID]
+		if !competitionTableGameSettledMapExist {
+			ce.competitionTableGameSettledMap[competition.ID][tableGameID] = false
+		}
 
-	// 更新 competition 桌次
-	competition.State.Tables[tableIdx] = table
+		// 桌次結算
+		if ce.shouldSettleTable(table.State.GameState.Status.CurrentEvent.Name, competition.ID, tableGameID) {
+			ce.tableSettlement(competition, table, tableGameID, tableIdx)
+			// open new game
+			if table.State.Status == pokertable.TableStateStatus_TableGameMatchOpen {
+				_ = ce.tableEngine.GameOpen(table.ID)
+			}
+		}
+	} else if table.State.Status == pokertable.TableStateStatus_TableGameClosed {
+		// 桌次結算
+		tableGameID := fmt.Sprintf("%s.%s", table.ID, table.State.GameState.GameID)
+		if isSettled := ce.competitionTableGameSettledMap[competition.ID][tableGameID]; !isSettled {
+			ce.tableSettlement(competition, table, tableGameID, tableIdx)
+		}
+
+		// 處理桌次已結束
+		ce.deleteCompetitionTable(competition, table.ID)
+	}
 }
 
 func (ce *competitionEngine) addCompetitionTable(competition *Competition, tableSetting TableSetting) error {
@@ -447,6 +499,16 @@ func (ce *competitionEngine) deleteCompetitionTable(competition *Competition, ta
 	}
 
 	competition.DeleteTable(deleteTableIdx)
+
+	// delete related table game is settled data from competitionTableGameSettledMap
+	if tableGameSettledMap, existed := ce.competitionTableGameSettledMap[competition.ID]; existed {
+		for tableGame := range tableGameSettledMap {
+			if strings.Contains(tableGame, tableID) {
+				delete(ce.competitionTableGameSettledMap[competition.ID], tableGame)
+			}
+		}
+	}
+
 	if len(competition.State.Tables) == 0 {
 		ce.settleCompetition(competition)
 	}
@@ -481,6 +543,9 @@ func (ce *competitionEngine) settleCompetition(competition *Competition) {
 
 	// delete from competitionMap
 	delete(ce.competitionMap, competition.ID)
+
+	// delete from competitionTableGameSettledMap
+	delete(ce.competitionTableGameSettledMap, competition.ID)
 }
 
 /*
@@ -491,7 +556,7 @@ func (ce *competitionEngine) settleCompetition(competition *Competition) {
 	    - 更新玩家狀態 (桌內即時排名 & 當前後手碼量)
 		- 更新玩家狀態 (可補碼 Or 淘汰)
 */
-func (ce *competitionEngine) tableSettlement(competition *Competition, table *pokertable.Table) {
+func (ce *competitionEngine) tableSettlement(competition *Competition, table *pokertable.Table, tableGameID string, tableIdx int) {
 	// Step 1: 更新玩家桌內即時排名 & 當前後手碼量(該手有參賽者會更新排名，若沒參賽者排名為 0)
 	playerRankingData := GetParticipatedPlayerTableRankingData(ce.playerCacheData, table.State.PlayerStates, table.State.GamePlayerIndexes)
 	for playerIdx := 0; playerIdx < len(competition.State.Players); playerIdx++ {
@@ -517,7 +582,7 @@ func (ce *competitionEngine) tableSettlement(competition *Competition, table *po
 
 	// Step 3: 處理玩家淘汰
 	// 列出淘汰玩家
-	knockoutPlayerRankings := GetSortedKnockoutPlayerRankings(ce.playerCacheData, table.State.PlayerStates, competition.Meta.ReBuySetting.MaxTimes)
+	knockoutPlayerRankings := GetSortedKnockoutPlayerRankings(ce.playerCacheData, table.State.PlayerStates, competition.Meta.ReBuySetting.MaxTimes, table.State.BlindState.IsFinalBuyInLevel())
 	knockoutPlayerIDs := make([]string, 0)
 	for knockoutPlayerIDIdx := len(knockoutPlayerRankings) - 1; knockoutPlayerIDIdx >= 0; knockoutPlayerIDIdx-- {
 		knockoutPlayerID := knockoutPlayerRankings[knockoutPlayerIDIdx]
@@ -536,13 +601,18 @@ func (ce *competitionEngine) tableSettlement(competition *Competition, table *po
 
 		// 更新玩家狀態
 		competition.State.Players[ce.playerCacheData[knockoutPlayerID].PlayerIdx].Status = CompetitionPlayerStatus_Knockout
+		competition.State.Tables[tableIdx].PlayersLeave([]int{ce.playerCacheData[knockoutPlayerID].PlayerIdx})
 	}
 
-	// TableEngine Player Leave
+	// Step 4: TableEngine Player Leave
 	_ = ce.tableEngine.PlayersLeave(table.ID, knockoutPlayerIDs)
+
+	// Step 5: update tableGame isSettled
+	ce.competitionTableGameSettledMap[competition.ID][tableGameID] = true
 }
 
-func (ce *competitionEngine) shouldSettleTable(round, event string) bool {
-	// When game entering preflop, we need to settle previous game player status (knockout/re-buy)
-	return (round == pokertable.GameRound_Preflod) && (event == pokerface.GameEventSymbols[pokerface.GameEvent_RoundInitialized])
+func (ce *competitionEngine) shouldSettleTable(event, competitionID, tableGameID string) bool {
+	isSettled := ce.competitionTableGameSettledMap[competitionID][tableGameID]
+	// When game is closed, we need to settle game player status (knockout/re-buy)
+	return !isSettled && event == pokerface.GameEventSymbols[pokerface.GameEvent_GameClosed]
 }

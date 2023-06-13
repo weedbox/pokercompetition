@@ -238,7 +238,11 @@ func (c *Competition) AddTable(table *pokertable.Table, playerCacheHandler func(
 }
 
 func (c *Competition) Start() {
-	c.State.Status = CompetitionStateStatus_DelayedBuyin
+	if c.Meta.Blind.FinalBuyInLevel <= 0 {
+		c.State.Status = CompetitionStateStatus_StoppedBuyin
+	} else {
+		c.State.Status = CompetitionStateStatus_DelayedBuyin
+	}
 	c.State.StartAt = time.Now().Unix()
 
 	if c.Meta.Mode == CompetitionMode_CT {
@@ -300,7 +304,7 @@ func (c Competition) CanStart() bool {
 		}
 
 		// 開打條件二: 賽局沒有設定 StartAt (開打時間) & 達到最小開桌人數
-		if c.State.StartAt == 0 {
+		if c.State.StartAt <= 0 {
 			return true
 		}
 	}

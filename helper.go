@@ -115,20 +115,22 @@ func GetParticipatedPlayerTableRankingData(playerCacheData map[string]*PlayerCac
 }
 
 /*
-	GetSortedFinalKnockoutPlayerRankings 停止買入後被淘汰玩家的排名 (越早入桌者，排名越前面 index 越小)
+	GetSortedFinalKnockoutPlayerRankings 停止買入後被淘汰玩家的排名 (越早入桌者，排名越前面 index 越大)
 	  - @return SortedFinalKnockoutPlayerIDs 排序過後的淘汰玩家 ID 陣列
 */
-func GetSortedKnockoutPlayerRankings(playerCacheData map[string]*PlayerCache, players []*pokertable.TablePlayerState, maxReBuyTimes int) []string {
+func GetSortedKnockoutPlayerRankings(playerCacheData map[string]*PlayerCache, players []*pokertable.TablePlayerState, maxReBuyTimes int, isFinalBuyInLevel bool) []string {
 	sortedFinalKnockoutPlayers := make([]pokertable.TablePlayerState, 0)
 
 	// 找出可能的淘汰者們
 	for _, p := range players {
+		// 有籌碼就略過
 		if p.Bankroll > 0 {
 			continue
 		}
 
-		// 還有補碼次數
-		if playerCacheData[p.PlayerID].ReBuyTimes < maxReBuyTimes {
+		// 延遲買入階段 & 還有補碼次數就略過
+		allowToReBuy := playerCacheData[p.PlayerID].ReBuyTimes < maxReBuyTimes
+		if !isFinalBuyInLevel && allowToReBuy {
 			continue
 		}
 
@@ -137,7 +139,7 @@ func GetSortedKnockoutPlayerRankings(playerCacheData map[string]*PlayerCache, pl
 
 	// 依加入時間晚到早排序
 	sort.Slice(sortedFinalKnockoutPlayers, func(i int, j int) bool {
-		return playerCacheData[sortedFinalKnockoutPlayers[i].PlayerID].JoinAt > playerCacheData[sortedFinalKnockoutPlayers[j].PlayerID].JoinAt
+		return playerCacheData[sortedFinalKnockoutPlayers[i].PlayerID].JoinAt < playerCacheData[sortedFinalKnockoutPlayers[j].PlayerID].JoinAt
 	})
 
 	return funk.Map(sortedFinalKnockoutPlayers, func(p pokertable.TablePlayerState) string {
