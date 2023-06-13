@@ -5,35 +5,16 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/weedbox/pokercompetition"
-	"github.com/weedbox/pokertable"
 )
 
-type TableSettingPayload struct {
-	ShortID        string
-	Code           string
-	Name           string
-	InvitationCode string
-	JoinPlayers    []pokercompetition.JoinPlayer
-}
-
-type CompetitionSettingPayload struct {
-	// Competition
-	Meta      pokercompetition.CompetitionMeta
-	StartAt   int64
-	DisableAt int64
-
-	// Tables
-	TableSettings []TableSettingPayload
-}
-
-func NewCTCompetitionSettingPayload(tableSettings ...TableSettingPayload) CompetitionSettingPayload {
-	return CompetitionSettingPayload{
+func NewCTCompetitionSetting() pokercompetition.CompetitionSetting {
+	return pokercompetition.CompetitionSetting{
 		Meta: pokercompetition.CompetitionMeta{
 			Blind: pokercompetition.Blind{
 				ID:               uuid.New().String(),
 				Name:             "20 min FAST",
 				InitialLevel:     1,
-				FinalBuyInLevel:  2,
+				FinalBuyInLevel:  -1,
 				DealerBlindTimes: 1,
 				Levels: []pokercompetition.BlindLevel{
 					{
@@ -64,7 +45,7 @@ func NewCTCompetitionSettingPayload(tableSettings ...TableSettingPayload) Compet
 				Name: "CT 3300 20 min",
 			},
 			Scene:           "Scene 1",
-			MaxDurationMins: 60,
+			MaxDurationMins: 1,
 			MinPlayerCount:  3,
 			MaxPlayerCount:  9,
 			Rule:            pokercompetition.CompetitionRule_Default,
@@ -90,70 +71,16 @@ func NewCTCompetitionSettingPayload(tableSettings ...TableSettingPayload) Compet
 			TableMinPlayingCount: 2,
 			MinChipsUnit:         10,
 		},
-		StartAt:       -1,
-		DisableAt:     time.Now().Add(time.Hour * 24).Unix(),
-		TableSettings: tableSettings,
-	}
-}
-
-func NewTableSettingPayload() TableSettingPayload {
-	return TableSettingPayload{
-		ShortID:        "ABC123",
-		Code:           "01",
-		Name:           "table name",
-		InvitationCode: "come to play",
-		JoinPlayers:    []pokercompetition.JoinPlayer{},
-	}
-}
-
-func NewDefaultCompetitionSetting(competitionSetting CompetitionSettingPayload) pokercompetition.CompetitionSetting {
-	return pokercompetition.CompetitionSetting{
-		Meta:      competitionSetting.Meta,
-		StartAt:   competitionSetting.StartAt,
-		DisableAt: competitionSetting.DisableAt,
-	}
-}
-
-func NewDefaultTableSetting(competitionMeta pokercompetition.CompetitionMeta, tableSetting TableSettingPayload) pokertable.TableSetting {
-	blindLevels := []pokertable.BlindLevel{}
-	for _, bl := range competitionMeta.Blind.Levels {
-		blindLevels = append(blindLevels, pokertable.BlindLevel{
-			Level:        bl.Level,
-			SBChips:      bl.SBChips,
-			BBChips:      bl.BBChips,
-			AnteChips:    bl.AnteChips,
-			DurationMins: bl.DurationMins,
-		})
-	}
-
-	joinPlayers := []pokertable.JoinPlayer{}
-	for _, player := range tableSetting.JoinPlayers {
-		joinPlayers = append(joinPlayers, pokertable.JoinPlayer{
-			PlayerID:    player.PlayerID,
-			RedeemChips: player.RedeemChips,
-		})
-	}
-
-	return pokertable.TableSetting{
-		ShortID:        tableSetting.ShortID,
-		Code:           tableSetting.Code,
-		Name:           tableSetting.Name,
-		InvitationCode: tableSetting.InvitationCode,
-		CompetitionMeta: pokertable.CompetitionMeta{
-			Blind: pokertable.Blind{
-				ID:              competitionMeta.Blind.ID,
-				Name:            competitionMeta.Blind.Name,
-				FinalBuyInLevel: competitionMeta.Blind.FinalBuyInLevel,
-				InitialLevel:    competitionMeta.Blind.InitialLevel,
-				Levels:          blindLevels,
+		StartAt:   -1,
+		DisableAt: time.Now().Add(time.Hour * 24).Unix(),
+		TableSettings: []pokercompetition.TableSetting{
+			{
+				ShortID:        "ABC123",
+				Code:           "0001",
+				Name:           "20 min - 0001",
+				InvitationCode: "welcome to play",
+				JoinPlayers:    []pokercompetition.JoinPlayer{},
 			},
-			MaxDurationMins:      competitionMeta.MaxDurationMins,
-			Rule:                 string(competitionMeta.Rule),
-			Mode:                 string(competitionMeta.Mode),
-			TableMaxSeatCount:    competitionMeta.TableMaxSeatCount,
-			TableMinPlayingCount: competitionMeta.TableMinPlayingCount,
-			MinChipsUnit:         competitionMeta.MinChipsUnit,
 		},
-		JoinPlayers: joinPlayers,
 	}
 }

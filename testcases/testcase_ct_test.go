@@ -1,114 +1,129 @@
 package testcases
 
 import (
+	"fmt"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/weedbox/pokercompetition"
+	"github.com/weedbox/pokertable"
 )
 
 func TestCT(t *testing.T) {
-	// TODO: refactor this
-	// tableEngine := pokertable.NewTableEngine(pokertable.NewGameEngine())
-	// competitionEngine := pokercompetition.NewCompetitionEngine()
+	autoPlaying := func(t *testing.T, tableEngine pokertable.TableEngine, tableID string) {
+		// game started
+		// all players ready
+		table, err := tableEngine.GetTable(tableID)
+		assert.Nil(t, err, "failed to get table")
+		err = writeToFile("[Table] Game Count 1 Started", table.GetJSON)
+		assert.Nil(t, err, "log game count 1 started failed")
 
-	// // 後台建立 CT 賽事
-	// // Step 1: 建立賽事
-	// tableSettingPayload := NewTableSettingPayload()
-	// competitionSetting := NewDefaultCompetitionSetting(NewCTCompetitionSettingPayload(tableSettingPayload))
-	// competition := competitionEngine.Create(competitionSetting)
-	// // logData(t, "create competition", competition.GetJSON)
+		AllGamePlayersReady(t, tableEngine, table)
 
-	// // Step 2: 開桌
-	// tableSetting := NewDefaultTableSetting(competition.Meta, tableSettingPayload)
-	// tableSetting.CompetitionMeta.ID = competition.ID
-	// table, err := tableEngine.CreateTable(tableSetting)
-	// assert.Nil(t, err, "create table failed")
-	// // logData(t, "create table", table.GetJSON)
+		currPlayerID := ""
+		// preflop
+		// pay sb
+		currPlayerID = FindCurrentPlayerID(table)
+		PrintPlayerActionLog(table, currPlayerID, "pay sb")
+		err = tableEngine.PlayerPaySB(tableID, currPlayerID)
+		assert.Nil(t, err, NewPlayerActionErrorLog(table, currPlayerID, "pay sb", err))
+		fmt.Printf("[PlayerPaySB] dealer receive bb.\n")
 
-	// // Step 3: 賽事加入桌次
-	// competition = competitionEngine.AddTable(competition, &table)
-	// // logData(t, "add a table to competition", competition.GetJSON)
+		// pay bb
+		currPlayerID = FindCurrentPlayerID(table)
+		PrintPlayerActionLog(table, currPlayerID, "pay bb")
+		err = tableEngine.PlayerPayBB(tableID, currPlayerID)
+		assert.Nil(t, err, NewPlayerActionErrorLog(table, currPlayerID, "pay bb", err))
+		fmt.Printf("[PlayerPayBB] dealer receive bb.\n")
 
-	// // 玩家報名賽事
-	// joinPlayers := []pokercompetition.JoinPlayer{
-	// 	{PlayerID: "Jeffrey", RedeemChips: 1000, TableID: table.ID},
-	// 	{PlayerID: "Fred", RedeemChips: 1000, TableID: table.ID},
-	// 	{PlayerID: "Chuck", RedeemChips: 1000, TableID: table.ID},
-	// }
+		// rest players ready
+		AllGamePlayersReady(t, tableEngine, table)
+		err = writeToFile("[Table] Game Count 1 Preflop All Players Ready", table.GetJSON)
+		assert.Nil(t, err, "log game count 1 preflop all players ready failed")
 
-	// for _, joinPlayer := range joinPlayers {
-	// 	// Jeffrey 報名
-	// 	// Step 1: 加入賽事
-	// 	newCompetition, err := competitionEngine.PlayerJoin(competition, joinPlayer)
-	// 	assert.Nil(t, err, fmt.Sprintf("%s join competition failed", joinPlayer.PlayerID))
-	// 	competition = newCompetition
+		// dealer move
+		currPlayerID = FindCurrentPlayerID(table)
+		PrintPlayerActionLog(table, currPlayerID, "call")
+		err = tableEngine.PlayerCall(tableID, currPlayerID)
+		assert.Nil(t, err, NewPlayerActionErrorLog(table, currPlayerID, "call", err))
+		err = writeToFile(fmt.Sprintf("[Table] Game Count 1 preflop %s[dealer] call", currPlayerID), table.GetJSON)
+		assert.Nil(t, err, "log game count 1 preflop dealer call failed")
 
-	// 	// Step 2: 加入桌
-	// 	newTable, err := tableEngine.PlayerJoin(table, pokertable.JoinPlayer{PlayerID: joinPlayer.PlayerID, RedeemChips: joinPlayer.RedeemChips})
-	// 	assert.Nil(t, err, fmt.Sprintf("%s join table failed", joinPlayer.PlayerID))
-	// 	table = newTable
-	// }
-	// // logData(t, "all players join competition success", competition.GetJSON)
+		// sb move
+		currPlayerID = FindCurrentPlayerID(table)
+		PrintPlayerActionLog(table, currPlayerID, "call")
+		err = tableEngine.PlayerCall(tableID, currPlayerID)
+		assert.Nil(t, err, NewPlayerActionErrorLog(table, currPlayerID, "call", err))
+		err = writeToFile(fmt.Sprintf("[Table] Game Count 1 preflop %s[sb] call", currPlayerID), table.GetJSON)
+		assert.Nil(t, err, "log game count 1 preflop sb call failed")
 
-	// // 開打
-	// // Step 1: 賽事內所有桌次開打
-	// newTables := make([]*pokertable.Table, 0)
-	// for _, table := range competition.State.Tables {
-	// 	newTable, err := tableEngine.StartGame(*table)
-	// 	assert.Nil(t, err, fmt.Sprintf("table %s start game failed", table.ID))
-	// 	newTables = append(newTables, &newTable)
-	// }
+		// bb move
+		currPlayerID = FindCurrentPlayerID(table)
+		PrintPlayerActionLog(table, currPlayerID, "check")
+		err = tableEngine.PlayerCheck(tableID, currPlayerID)
+		assert.Nil(t, err, NewPlayerActionErrorLog(table, currPlayerID, "check", err))
+		err = writeToFile(fmt.Sprintf("[Table] Game Count 1 preflop %s[bb] check", currPlayerID), table.GetJSON)
+		assert.Nil(t, err, "log game count 1 preflop bb check failed")
 
-	// // Step 2: 賽事開打
-	// competition = competitionEngine.Start(competition, newTables)
-	// // logData(t, "competition is started", competition.GetJSON)
+		// logJSON(t, fmt.Sprintf("Game %d - preflop all players done actions", table.State.GameCount), table.GetJSON)
 
-	// // 玩家自動玩比賽 (game count 1)
-	// newTable := AllPlayersPlaying(t, tableEngine, *competition.State.Tables[0])
+		// flop
+		// all players ready
+		AllGamePlayersReady(t, tableEngine, table)
+		err = writeToFile("[Table] Game Count 1 Flop All Players Ready", table.GetJSON)
+		assert.Nil(t, err, "log game count 1 flop all players ready failed")
 
-	// // Subscribe TableUpdated
-	// competition.State.Tables[0] = &newTable
-	// // logData(t, "table game count 1 is closed", competition.GetJSON)
+		// sb move
+		currPlayerID = FindCurrentPlayerID(table)
+		PrintPlayerActionLog(table, currPlayerID, "allin")
+		err = tableEngine.PlayerAllin(tableID, currPlayerID)
+		assert.Nil(t, err, NewPlayerActionErrorLog(table, currPlayerID, "all in", err))
+		err = writeToFile(fmt.Sprintf("[Table] Game Count 1 flop %s[sb] all in", currPlayerID), table.GetJSON)
+		assert.Nil(t, err, "log game count 1 preflop sb all in failed")
 
-	// // // Make 1 person ReBuy
-	// // competition.State.Tables[0].State.PlayerStates[0].Bankroll = 0
+		// bb move
+		currPlayerID = FindCurrentPlayerID(table)
+		PrintPlayerActionLog(table, currPlayerID, "allin")
+		err = tableEngine.PlayerAllin(tableID, currPlayerID)
+		assert.Nil(t, err, NewPlayerActionErrorLog(table, currPlayerID, "all in", err))
+		err = writeToFile(fmt.Sprintf("[Table] Game Count 1 flop %s[bb] all in", currPlayerID), table.GetJSON)
+		assert.Nil(t, err, "log game count 1 preflop bb all in failed")
 
-	// // Make 1 person Knockout
-	// // competition.State.Tables[0].State.PlayerStates[0].Bankroll = 0
-	// // targetPlayerIdx := -1
-	// // for idx, player := range competition.State.Players {
-	// // 	if player.PlayerID == competition.State.Tables[0].State.PlayerStates[0].PlayerID {
-	// // 		targetPlayerIdx = idx
-	// // 		break
-	// // 	}
-	// // }
-	// // competition.State.Players[targetPlayerIdx].ReBuyTimes = competition.Meta.ReBuySetting.MaxTimes
+		// dealer move
+		currPlayerID = FindCurrentPlayerID(table)
+		PrintPlayerActionLog(table, currPlayerID, "allin")
+		_ = tableEngine.PlayerAllin(tableID, currPlayerID)
+		assert.Nil(t, err, NewPlayerActionErrorLog(table, currPlayerID, "all in", err))
+	}
 
-	// // 桌結算
-	// competition = competitionEngine.TableSettlement(competition, *competition.State.Tables[0])
-	// // logData(t, "table game count 1 is settled", competition.GetJSON)
+	competitionEngine := pokercompetition.NewCompetitionEngine()
+	competitionEngine.OnCompetitionUpdated(func(competition *pokercompetition.Competition) {})
 
-	// // 如果是停止買入，要建立 Competition.State.Rankings 陣列
-	// for _, table := range competition.State.Tables {
-	// 	for i := 0; i < len(table.State.PlayerStates); i++ {
-	// 		competition.State.Rankings = append(competition.State.Rankings, nil)
-	// 	}
-	// }
+	// 後台建立 CT 賽事
+	competition, err := competitionEngine.CreateCompetition(NewCTCompetitionSetting())
+	assert.Nil(t, err, "create ct competition failed")
+	err = writeToFile("[Competition] Create CT Competition", competition.GetJSON)
+	assert.Nil(t, err, "log create ct competition failed")
 
-	// // Make TableClosed
-	// competition.State.Tables[0].State.Status = pokertable.TableStateStatus_TableGameClosed
+	competitionID := competition.ID
+	tableID := competition.State.Tables[0].ID
 
-	// // 桌次關閉
-	// tableID := competition.State.Tables[0].ID
-	// newCompetition, err := competitionEngine.CloseTable(competition, competition.State.Tables[0])
-	// assert.Nil(t, err, fmt.Sprintf("close table %s failed", tableID))
-	// competition = newCompetition
-	// // logData(t, fmt.Sprintf("close table %s success", tableID), competition.GetJSON)
+	// 玩家報名賽事
+	joinPlayers := []pokercompetition.JoinPlayer{
+		{PlayerID: "Jeffrey", RedeemChips: 1000},
+		{PlayerID: "Fred", RedeemChips: 1000},
+		{PlayerID: "Chuck", RedeemChips: 1000},
+	}
 
-	// // 賽事結算
-	// shouldSettleCompetition := len(competition.State.Tables) == 0
-	// if shouldSettleCompetition {
-	// 	competition.State.Status = pokercompetition.CompetitionStateStatus_End
-	// 	newCompetition = competitionEngine.Settlement(competition)
-	// 	competition = newCompetition
-	// 	logData(t, "competition is settled & end", competition.GetJSON)
-	// }
+	for _, joinPlayer := range joinPlayers {
+		err := competitionEngine.PlayerJoin(competitionID, tableID, joinPlayer)
+		assert.Nil(t, err, fmt.Sprintf("%s join competition failed", joinPlayer.PlayerID))
+		err = writeToFile(fmt.Sprintf("[Competition] %s join competition", joinPlayer.PlayerID), competition.GetJSON)
+		assert.Nil(t, err, fmt.Sprintf("%s join competition failed", joinPlayer.PlayerID))
+	}
+
+	// 玩家自動玩比賽
+	autoPlaying(t, competitionEngine.TableEngine(), tableID)
+	err = writeToFile("[Competition] Game Count 1 Competition Settlement", competition.GetJSON)
+	assert.Nil(t, err, "log game count 1 competition settlement failed")
 }
