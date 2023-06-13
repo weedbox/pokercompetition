@@ -96,8 +96,8 @@ func AllGamePlayersReady(t *testing.T, tableEngine pokertable.TableEngine, table
 		err := tableEngine.PlayerReady(table.ID, player.PlayerID)
 		assert.Nil(t, err, NewPlayerActionErrorLog(table, FindCurrentPlayerID(table), "ready", err))
 		PrintPlayerActionLog(table, player.PlayerID, fmt.Sprintf("ready. CurrentEvent: %s", table.State.GameState.Status.CurrentEvent.Name))
-		err = writeToFile(fmt.Sprintf("[Table] Game Count 1 %s Ready", player.PlayerID), table.GetJSON)
-		assert.Nil(t, err, "log game count 1 preflop all players ready failed")
+		err = writeToFile(fmt.Sprintf("[Table] Game Count [%d] %s Ready", table.State.GameCount, player.PlayerID), table.GetJSON)
+		assert.Nil(t, err, fmt.Sprintf("log game count [%d] %s ready failed", table.State.GameCount, player.PlayerID))
 	}
 }
 
