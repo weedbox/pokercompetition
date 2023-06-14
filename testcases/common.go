@@ -2,6 +2,7 @@ package testcases
 
 import (
 	"fmt"
+	"io/ioutil"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,23 +10,23 @@ import (
 )
 
 func writeToFile(logTitle string, jsonPrinter func() (string, error)) error {
-	// file := "./game_log.txt"
-	// encodedData, err := ioutil.ReadFile(file)
-	// if err != nil {
-	// 	return err
-	// }
+	file := "./game_log.txt"
+	encodedData, err := ioutil.ReadFile(file)
+	if err != nil {
+		return err
+	}
 
-	// jsonString, _ := jsonPrinter()
-	// newData := ""
-	// if len(encodedData) > 0 {
-	// 	newData = fmt.Sprintf("%s\n\n========== [%s] ==========\n%s", string(encodedData), logTitle, jsonString)
-	// } else {
-	// 	newData = fmt.Sprintf("========== [%s] ==========\n%s", logTitle, jsonString)
-	// }
-	// err = ioutil.WriteFile(file, []byte(newData), 0644)
-	// if err != nil {
-	// 	return err
-	// }
+	jsonString, _ := jsonPrinter()
+	newData := ""
+	if len(encodedData) > 0 {
+		newData = fmt.Sprintf("%s\n\n========== [%s] ==========\n%s", string(encodedData), logTitle, jsonString)
+	} else {
+		newData = fmt.Sprintf("========== [%s] ==========\n%s", logTitle, jsonString)
+	}
+	err = ioutil.WriteFile(file, []byte(newData), 0644)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }

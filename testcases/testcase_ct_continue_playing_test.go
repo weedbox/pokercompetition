@@ -3,8 +3,10 @@ package testcases
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/thoas/go-funk"
 	"github.com/weedbox/pokercompetition"
 	"github.com/weedbox/pokertable"
 )
@@ -161,12 +163,13 @@ func TestCT_ContinuePlaying(t *testing.T) {
 	tableID := competition.State.Tables[0].ID
 
 	// 玩家報名賽事
-	joinPlayers := []pokercompetition.JoinPlayer{
-		{PlayerID: "Jeffrey", RedeemChips: 1000},
-		{PlayerID: "Fred", RedeemChips: 1000},
-		{PlayerID: "Chuck", RedeemChips: 1000},
-	}
-
+	playerIDs := []string{"Jeffrey", "Fred", "Chuck"}
+	joinPlayers := funk.Map(playerIDs, func(playerID string) pokercompetition.JoinPlayer {
+		return pokercompetition.JoinPlayer{
+			PlayerID:    playerID,
+			RedeemChips: 1000,
+		}
+	}).([]pokercompetition.JoinPlayer)
 	for _, joinPlayer := range joinPlayers {
 		err := competitionEngine.PlayerJoin(competitionID, tableID, joinPlayer)
 		assert.Nil(t, err, fmt.Sprintf("%s join competition failed", joinPlayer.PlayerID))
@@ -179,5 +182,6 @@ func TestCT_ContinuePlaying(t *testing.T) {
 		autoPlaying(t, competitionEngine.TableEngine(), tableID)
 		err = writeToFile(fmt.Sprintf("[Competition] Game Count [%d] Competition Settlement", (i+1)), competition.GetJSON)
 		assert.Nil(t, err, fmt.Sprintf("log game count [%d] competition settlement failed", (i+1)))
+		time.Sleep(2 * time.Second)
 	}
 }

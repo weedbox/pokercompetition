@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/thoas/go-funk"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/weedbox/pokercompetition"
 	"github.com/weedbox/pokertable"
@@ -15,8 +17,8 @@ func TestCT_StartToClose(t *testing.T) {
 		// all players ready
 		table, err := tableEngine.GetTable(tableID)
 		assert.Nil(t, err, "failed to get table")
-		err = writeToFile("[Table] Game Count 1 Started", table.GetJSON)
-		assert.Nil(t, err, "log game count 1 started failed")
+		err = writeToFile(fmt.Sprintf("[Table] Game Count [%d] Started", table.State.GameCount), table.GetJSON)
+		assert.Nil(t, err, fmt.Sprintf("log game count [%d] started failed", table.State.GameCount))
 
 		AllGamePlayersReady(t, tableEngine, table)
 
@@ -103,12 +105,13 @@ func TestCT_StartToClose(t *testing.T) {
 	tableID := competition.State.Tables[0].ID
 
 	// 玩家報名賽事
-	joinPlayers := []pokercompetition.JoinPlayer{
-		{PlayerID: "Jeffrey", RedeemChips: 1000},
-		{PlayerID: "Fred", RedeemChips: 1000},
-		{PlayerID: "Chuck", RedeemChips: 1000},
-	}
-
+	playerIDs := []string{"Jeffrey", "Fred", "Chuck"}
+	joinPlayers := funk.Map(playerIDs, func(playerID string) pokercompetition.JoinPlayer {
+		return pokercompetition.JoinPlayer{
+			PlayerID:    playerID,
+			RedeemChips: 1000,
+		}
+	}).([]pokercompetition.JoinPlayer)
 	for _, joinPlayer := range joinPlayers {
 		err := competitionEngine.PlayerJoin(competitionID, tableID, joinPlayer)
 		assert.Nil(t, err, fmt.Sprintf("%s join competition failed", joinPlayer.PlayerID))
