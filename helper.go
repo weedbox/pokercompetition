@@ -46,7 +46,7 @@ func NewDefaultCompetitionPlayerData(tableID, playerID string, redeemChips int64
 		BestWinningCombo:      make([]string, 0),
 		TotalRedeemChips:      redeemChips,
 		TotalGameCounts:       0,
-		TotalWalks:            0,
+		TotalWalkTimes:        0,
 		TotalVPIPTimes:        0,
 		TotalFoldTimes:        0,
 		TotalPreflopFoldTimes: 0,
