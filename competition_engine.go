@@ -2,11 +2,13 @@ package pokercompetition
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/thoas/go-funk"
 	"github.com/weedbox/pokertable"
+	"github.com/weedbox/pokertablebalancer"
 	"github.com/weedbox/timebank"
 )
 
@@ -25,7 +27,6 @@ var (
 	ErrLeaveRejected                   = errors.New("not allowed to leave")
 )
 
-// TODO: add balance tables 拆併桌
 type CompetitionEngine interface {
 	// Test Only
 	TableEngine() pokertable.TableEngine
@@ -37,15 +38,17 @@ type CompetitionEngine interface {
 	CloseCompetition(competitionID string) error                                   // 關閉賽事
 	StartCompetition(competitionID string) error                                   // 開始賽事
 
-	// Table Operations
-	AddTable(competitionID string, tableSetting TableSetting) error // 新增桌次
-	CloseTable(competitionID, tableID string) error                 // 關閉桌次
-
 	// Player Operations
 	PlayerJoin(competitionID, tableID string, joinPlayer JoinPlayer) error  // 玩家報名或補碼
 	PlayerAddon(competitionID, tableID string, joinPlayer JoinPlayer) error // 玩家增購
 	PlayerRefund(competitionID, playerID string) error                      // 玩家退賽
 	PlayerLeave(competitionID, tableID, playerID string) error              // 玩家離桌結算 (現金桌)
+
+	// SeatManager Api Implementations
+	SetSeatManager(seatManager pokertablebalancer.SeatManager)
+	AutoCreateTable(competitionID string) (*pokertablebalancer.CreateTableResp, error)                                       // 拆併桌自動開桌
+	AutoCloseTable(competitionID string, tableID string) (*pokertablebalancer.CloseTableResp, error)                         // 拆併桌自動關桌
+	AutoJoinTable(competitionID string, entries []*pokertablebalancer.TableEntry) (*pokertablebalancer.JoinTableResp, error) // 拆併桌玩家自動入桌
 }
 
 func NewCompetitionEngine() CompetitionEngine {
@@ -61,6 +64,7 @@ func NewCompetitionEngine() CompetitionEngine {
 }
 
 type competitionEngine struct {
+	seatManager          pokertablebalancer.SeatManager
 	timebank             *timebank.TimeBank
 	tableEngine          pokertable.TableEngine
 	competitionMap       map[string]*Competition
@@ -94,6 +98,15 @@ func (ce *competitionEngine) GetCompetition(competitionID string) (*Competition,
 
 func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSetting) (*Competition, error) {
 	// validate competitionSetting
+	now := time.Now()
+	if competitionSetting.StartAt != UnsetValue && competitionSetting.StartAt < now.Unix() {
+		return nil, ErrInvalidCreateCompetitionSetting
+	}
+
+	if competitionSetting.DisableAt < now.Unix() {
+		return nil, ErrInvalidCreateCompetitionSetting
+	}
+
 	for _, tableSetting := range competitionSetting.TableSettings {
 		if len(tableSetting.JoinPlayers) > competitionSetting.Meta.TableMaxSeatCount {
 			return nil, ErrInvalidCreateCompetitionSetting
@@ -103,19 +116,18 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 	// create competition instance
 	competition := &Competition{
 		ID:       uuid.New().String(),
-		UpdateAt: time.Now().UnixMilli(),
+		UpdateAt: now.UnixMilli(),
 	}
 	competition.ConfigureWithSetting(competitionSetting)
 	for _, tableSetting := range competitionSetting.TableSettings {
-		if err := ce.addCompetitionTable(competition, tableSetting); err != nil {
+		if _, err := ce.addCompetitionTable(competition, tableSetting); err != nil {
 			return nil, err
 		}
 
-		// AutoEndTable
 		if competitionSetting.Meta.Mode == CompetitionMode_CT {
-			duration := competition.State.DisableAt - time.Now().Unix()
-			autoCloseTime := time.Duration(duration) * time.Second
-			if err := ce.timebank.NewTask(autoCloseTime, func(isCancelled bool) {
+			// AutoEndTable
+			autoCloseTime := time.Unix(competition.State.DisableAt, 0)
+			if err := ce.timebank.NewTaskWithDeadline(autoCloseTime, func(isCancelled bool) {
 				if isCancelled {
 					return
 				}
@@ -133,6 +145,23 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 
 	// set competitionMap
 	ce.competitionMap[competition.ID] = competition
+
+	// auto startCompetition until StartAt
+	if competition.State.StartAt > 0 {
+		autoStartTime := time.Unix(competition.State.StartAt, 0)
+		if err := ce.timebank.NewTaskWithDeadline(autoStartTime, func(isCancelled bool) {
+			if isCancelled {
+				return
+			}
+
+			c, _ := ce.GetCompetition(competition.ID)
+			if c.State.Status == CompetitionStateStatus_Registering {
+				ce.StartCompetition(competition.ID)
+			}
+		}); err != nil {
+			return nil, err
+		}
+	}
 
 	return competition, nil
 }
@@ -152,44 +181,8 @@ func (ce *competitionEngine) CloseCompetition(competitionID string) error {
 }
 
 /*
-	AddTable 新增桌次
-	  - 適用時機: CT/Cash 開新桌、MTT 拆併桌 (開新桌)
-*/
-func (ce *competitionEngine) AddTable(competitionID string, tableSetting TableSetting) error {
-	competition, exist := ce.competitionMap[competitionID]
-	if !exist {
-		return ErrCompetitionNotFound
-	}
-
-	if err := ce.addCompetitionTable(competition, tableSetting); err != nil {
-		return err
-	}
-
-	ce.EmitEvent(competition)
-	return nil
-}
-
-/*
-	CloseTable 關閉桌次
-	  - 適用時機: CT/Cash 某桌結束、MTT 拆併桌 (關閉某桌)
-*/
-func (ce *competitionEngine) CloseTable(competitionID, tableID string) error {
-	competition, exist := ce.competitionMap[competitionID]
-	if !exist {
-		return ErrCompetitionNotFound
-	}
-
-	if err := ce.closeCompetitionTable(competition, tableID); err != nil {
-		return err
-	}
-
-	ce.EmitEvent(competition)
-	return nil
-}
-
-/*
 	StartCompetition 開賽
-	  - 適用時機: MTT 手動開賽
+	  - 適用時機: MTT 手動開賽、MTT 自動開賽、CT 開賽
 */
 func (ce *competitionEngine) StartCompetition(competitionID string) error {
 	competition, exist := ce.competitionMap[competitionID]
@@ -199,7 +192,10 @@ func (ce *competitionEngine) StartCompetition(competitionID string) error {
 
 	competition.Start()
 
-	// TODO: 啟動拆併桌
+	// 啟動拆併桌
+	if competition.Meta.Mode == CompetitionMode_MTT {
+		ce.activateSeatManager(competition.ID, competition.Meta)
+	}
 
 	ce.EmitEvent(competition)
 	return nil
@@ -219,19 +215,21 @@ func (ce *competitionEngine) PlayerJoin(competitionID, tableID string, joinPlaye
 	playerIdx := competition.FindPlayerIdx(func(player *CompetitionPlayer) bool {
 		return player.PlayerID == joinPlayer.PlayerID
 	})
+	isBuyIn := playerIdx == UnsetValue
 	validStatuses := []CompetitionStateStatus{
 		CompetitionStateStatus_Registering,
 		CompetitionStateStatus_DelayedBuyin,
 	}
 	if !funk.Contains(validStatuses, competition.State.Status) {
 		if playerIdx == UnsetValue {
+			fmt.Println("[ERROR] ErrBuyInRejected because status is: ", competition.State.Status)
 			return ErrBuyInRejected
 		} else {
 			return ErrReBuyRejected
 		}
 	}
 
-	if playerIdx != UnsetValue {
+	if !isBuyIn {
 		// validate ReBuy times
 		if competition.State.Players[playerIdx].ReBuyTimes >= competition.Meta.ReBuySetting.MaxTime {
 			return ErrExceedReBuyLimit
@@ -245,31 +243,39 @@ func (ce *competitionEngine) PlayerJoin(competitionID, tableID string, joinPlaye
 	reBuyPlayerCacheHandler := func(reBuyTimes int) {
 		ce.playerCacheData[joinPlayer.PlayerID].ReBuyTimes = reBuyTimes
 	}
-	competition.PlayerJoin(tableID, joinPlayer.PlayerID, playerIdx, joinPlayer.RedeemChips, buyInPlayerCacheHandler, reBuyPlayerCacheHandler)
+	competition.PlayerJoin(tableID, joinPlayer.PlayerID, playerIdx, joinPlayer.RedeemChips, isBuyIn, buyInPlayerCacheHandler, reBuyPlayerCacheHandler)
+	ce.EmitEvent(competition)
 
-	// call tableEngine
-	jp := pokertable.JoinPlayer{
-		PlayerID:    joinPlayer.PlayerID,
-		RedeemChips: joinPlayer.RedeemChips,
-	}
-	if err := ce.tableEngine.PlayerJoin(tableID, jp); err != nil {
-		return err
-	}
+	switch competition.Meta.Mode {
+	case CompetitionMode_CT:
+		// call tableEngine
+		jp := pokertable.JoinPlayer{
+			PlayerID:    joinPlayer.PlayerID,
+			RedeemChips: joinPlayer.RedeemChips,
+		}
+		if err := ce.tableEngine.PlayerJoin(tableID, jp); err != nil {
+			return err
+		}
 
-	// auto start game if condition is reached
-	tableIdx := competition.FindTableIdx(func(table *pokertable.Table) bool {
-		return table.ID == tableID
-	})
-	if tableIdx != UnsetValue {
-		if competition.Meta.Mode == CompetitionMode_CT && competition.CanStart() {
-			competition.Start()
-			if err := ce.tableEngine.StartTableGame(tableID); err != nil {
-				return err
+		// auto start game if condition is reached
+		tableIdx := competition.FindTableIdx(func(table *pokertable.Table) bool {
+			return table.ID == tableID
+		})
+		if tableIdx != UnsetValue {
+			if competition.CanStart() {
+				if err := ce.StartCompetition(competition.ID); err != nil {
+					return err
+				}
+				if err := ce.tableEngine.StartTableGame(tableID); err != nil {
+					return err
+				}
 			}
 		}
+	case CompetitionMode_MTT:
+		// MTT 玩家 entering waiting mode
+		ce.seatManagerJoinPlayer(competitionID, []string{joinPlayer.PlayerID})
 	}
 
-	ce.EmitEvent(competition)
 	return nil
 }
 
@@ -414,7 +420,8 @@ func (ce *competitionEngine) onCompetitionTableUpdated(table *pokertable.Table) 
 
 	// 處理因 table status 產生的變化
 	tableStatusHandlerMap := map[pokertable.TableStateStatus]func(*Competition, *pokertable.Table, int){
-		pokertable.TableStateStatus_TableGameSettled: ce.settleTable,
+		pokertable.TableStateStatus_TableGameSettled: ce.settleCompetitionTable,
+		pokertable.TableStateStatus_TableClosed:      ce.closeCompetitionTable,
 	}
 	handler, ok := tableStatusHandlerMap[table.State.Status]
 	if !ok {
@@ -423,53 +430,40 @@ func (ce *competitionEngine) onCompetitionTableUpdated(table *pokertable.Table) 
 	handler(competition, table, tableIdx)
 }
 
-func (ce *competitionEngine) addCompetitionTable(competition *Competition, tableSetting TableSetting) error {
+func (ce *competitionEngine) addCompetitionTable(competition *Competition, tableSetting TableSetting) (string, error) {
 	// create table
 	setting := NewPokerTableSetting(competition.ID, competition.Meta, tableSetting)
 	table, err := ce.tableEngine.CreateTable(setting)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	// add table
 	competition.AddTable(table, func(playerCache PlayerCache) {
 		ce.playerCacheData[playerCache.PlayerID] = &playerCache
 	})
-	return nil
+	return table.ID, nil
 }
 
-func (ce *competitionEngine) closeCompetitionTable(competition *Competition, tableID string) error {
-	// tableEngine delete table
-	if err := ce.tableEngine.DeleteTable(tableID); err != nil {
-		return err
-	}
-
-	return ce.deleteCompetitionTable(competition, tableID)
-}
-
-func (ce *competitionEngine) deleteCompetitionTable(competition *Competition, tableID string) error {
+/*
+	closeCompetitionTable 桌次關閉
+	  - 適用時機: 桌次結束已發生
+*/
+func (ce *competitionEngine) closeCompetitionTable(competition *Competition, table *pokertable.Table, tableIdx int) {
 	// competition close table
-	deleteTableIdx := competition.FindTableIdx(func(table *pokertable.Table) bool {
-		return table.ID == tableID
-	})
-	if deleteTableIdx == UnsetValue {
-		return ErrTableNotFound
-	}
-
-	competition.DeleteTable(deleteTableIdx)
+	competition.DeleteTable(tableIdx)
+	ce.EmitEvent(competition)
 
 	if len(competition.State.Tables) == 0 {
 		ce.settleCompetition(competition)
 	}
-
-	return nil
 }
 
 /*
-	settleTable 桌次結算
+	settleCompetitionTable 桌次結算
 	  - 適用時機: 每手結束
 */
-func (ce *competitionEngine) settleTable(competition *Competition, table *pokertable.Table, tableIdx int) {
+func (ce *competitionEngine) settleCompetitionTable(competition *Competition, table *pokertable.Table, tableIdx int) {
 	// 桌次結算: 更新玩家桌內即時排名 & 當前後手碼量(該手有參賽者會更新排名，若沒參賽者排名為 0)
 	playerRankingData := GetParticipatedPlayerTableRankingData(ce.playerCacheData, table.State.PlayerStates, table.State.GamePlayerIndexes)
 	for playerIdx := 0; playerIdx < len(competition.State.Players); playerIdx++ {
@@ -531,9 +525,37 @@ func (ce *competitionEngine) settleTable(competition *Competition, table *pokert
 	// TableEngine Player Leave
 	_ = ce.tableEngine.PlayersLeave(table.ID, knockoutPlayerIDs)
 
-	// 處理桌次已結束
-	if table.IsClose(table.EndGameAt(), table.AlivePlayers(), table.State.BlindState.IsFinalBuyInLevel()) {
-		ce.CloseTable(competition.ID, table.ID)
+	// 桌次處理
+	switch competition.Meta.Mode {
+	case CompetitionMode_CT:
+		// 結束桌
+		if table.IsClose() {
+			_ = ce.tableEngine.DeleteTable(table.ID)
+		}
+	case CompetitionMode_MTT:
+		// 拆併桌更新賽事狀態
+		ce.seatManagerUpdateCompetitionStatus(competition.ID, table.State.BlindState.IsFinalBuyInLevel())
+
+		currentPlayerIDs := make([]string, 0)
+		for _, player := range table.State.PlayerStates {
+			if !funk.Contains(knockoutPlayerIDs, player.PlayerID) {
+				currentPlayerIDs = append(currentPlayerIDs, player.PlayerID)
+			}
+		}
+
+		// 拆併桌更新桌次狀態
+		isSuspend, err := ce.seatManagerUpdateTable(competition.ID, table, currentPlayerIDs)
+		if err == nil && isSuspend {
+			// call table agent to balance table
+			_ = ce.tableEngine.BalanceTable(table.ID)
+
+			// update player status
+			for _, playerID := range currentPlayerIDs {
+				if playerCache, exist := ce.playerCacheData[playerID]; exist {
+					competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_WaitingTableBalancing
+				}
+			}
+		}
 	}
 }
 
@@ -560,6 +582,11 @@ func (ce *competitionEngine) settleCompetition(competition *Competition) {
 
 	// clear cache
 	ce.playerCacheData = make(map[string]*PlayerCache)
+
+	if competition.Meta.Mode == CompetitionMode_MTT {
+		// unregister seat manager
+		ce.deactivateSeatManager(competition.ID)
+	}
 
 	// delete from competitionMap
 	delete(ce.competitionMap, competition.ID)

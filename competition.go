@@ -40,17 +40,18 @@ const (
 )
 
 type Competition struct {
-	ID       string            `json:"id"`        // 賽事 Unique ID
-	Meta     CompetitionMeta   `json:"meta"`      // 賽事固定資料
-	State    *CompetitionState `json:"state"`     // 賽事動態資料
-	UpdateAt int64             `json:"update_at"` // 更新時間 (MilliSeconds)
+	ID           string            `json:"id"`            // 賽事 Unique ID
+	Meta         CompetitionMeta   `json:"meta"`          // 賽事固定資料
+	State        *CompetitionState `json:"state"`         // 賽事動態資料
+	UpdateAt     int64             `json:"update_at"`     // 更新時間 (MilliSeconds)
+	UpdateSerial int64             `json:"update_serial"` // 更新序列號 (數字越大越晚發生)
 }
 
 type CompetitionMeta struct {
 	Blind               Blind           `json:"blind"`                  // 盲注資訊
 	Ticket              Ticket          `json:"ticket"`                 // 票券資訊
 	Scene               string          `json:"scene"`                  // 場景
-	MaxDuration         int             `json:"max_duration"`           // 比賽時間總長 (分鐘)
+	MaxDuration         int             `json:"max_duration"`           // 比賽時間總長 (Seconds)
 	MinPlayerCount      int             `json:"min_player_count"`       // 最小參賽人數
 	MaxPlayerCount      int             `json:"max_player_count"`       // 最大參賽人數
 	TableMaxSeatCount   int             `json:"table_max_seat_count"`   // 每桌人數上限
@@ -60,12 +61,12 @@ type CompetitionMeta struct {
 	BuyInSetting        BuyInSetting    `json:"buy_in_setting"`         // BuyIn 設定
 	ReBuySetting        ReBuySetting    `json:"re_buy_setting"`         // ReBuy 設定
 	AddonSetting        AddonSetting    `json:"addon_setting"`          // Addon 設定
-	ActionTime          int             `json:"action_time"`            // 思考時間 (秒數)
+	ActionTime          int             `json:"action_time"`            // 思考時間 (Seconds)
 	MinChipUnit         int64           `json:"min_chip_unit"`          // 最小單位籌碼量
 }
 
 type CompetitionState struct {
-	OpenAt    int64                  `json:"open_at"`    // 賽事開始時間 (可報名、尚未開打)
+	OpenAt    int64                  `json:"open_at"`    // 賽事建立時間 (可報名、尚未開打)
 	DisableAt int64                  `json:"disable_at"` // 賽事未開打前，賽局可見時間 (Seconds)
 	StartAt   int64                  `json:"start_at"`   // 賽事開打時間 (可報名、開打) (Seconds)
 	EndAt     int64                  `json:"end_at"`     // 賽事結束時間 (Seconds)
@@ -137,7 +138,7 @@ type BlindLevel struct {
 	SB       int64 `json:"sb"`       // 小盲籌碼量
 	BB       int64 `json:"bb"`       // 大盲籌碼量
 	Ante     int64 `json:"ante"`     // 前注籌碼量
-	Duration int   `json:"duration"` // 等級持續時間
+	Duration int   `json:"duration"` // 等級持續時間 (Seconds)
 }
 
 type BuyInSetting struct {
@@ -150,7 +151,7 @@ type ReBuySetting struct {
 	MinTicket   int `json:"min_ticket"`   // 最小票數
 	MaxTicket   int `json:"max_ticket"`   // 最大票數
 	MaxTime     int `json:"max_time"`     // 最大次數
-	WaitingTime int `json:"waiting_time"` // 玩家可補碼時間
+	WaitingTime int `json:"waiting_time"` // 玩家可補碼時間 (Seconds)
 }
 
 type AddonSetting struct {
@@ -162,6 +163,7 @@ type AddonSetting struct {
 // Competition Setters
 func (c *Competition) RefreshUpdateAt() {
 	c.UpdateAt = time.Now().UnixMilli()
+	c.UpdateSerial++
 }
 
 func (c *Competition) ConfigureWithSetting(setting CompetitionSetting) {
@@ -183,7 +185,9 @@ func (c *Competition) ConfigureWithSetting(setting CompetitionSetting) {
 }
 
 func (c *Competition) Close() {
-	c.State.EndAt = time.Now().Unix()
+	if c.Meta.Mode == CompetitionMode_MTT {
+		c.State.EndAt = time.Now().Unix()
+	}
 	c.State.Status = CompetitionStateStatus_End
 }
 
@@ -216,6 +220,7 @@ func (c *Competition) AddTable(table *pokertable.Table, playerCacheHandler func(
 			player := c.State.Players[i]
 			if bankroll, exist := existingPlayerData[player.PlayerID]; exist {
 				c.State.Players[i].Chips = bankroll
+				c.State.Players[i].Status = CompetitionPlayerStatus_Playing
 			}
 		}
 	}
@@ -242,9 +247,9 @@ func (c *Competition) Start() {
 	} else {
 		c.State.Status = CompetitionStateStatus_DelayedBuyin
 	}
-	c.State.StartAt = time.Now().Unix()
 
 	if c.Meta.Mode == CompetitionMode_CT {
+		c.State.StartAt = time.Now().Unix()
 		c.State.EndAt = c.State.StartAt + int64((time.Duration(c.Meta.MaxDuration) * time.Minute).Seconds())
 	}
 }
@@ -257,21 +262,27 @@ func (c *Competition) DeletePlayer(targetIdx int) {
 	c.State.Players = append(c.State.Players[:targetIdx], c.State.Players[targetIdx+1:]...)
 }
 
-func (c *Competition) PlayerJoin(tableID, playerID string, playerIdx int, redeemChips int64, buyInPlayerCacheHandler func(PlayerCache), reBuyPlayerCacheHandler func(int)) {
-	if playerIdx == UnsetValue {
-		// BuyIn logic
+func (c *Competition) PlayerJoin(tableID, playerID string, playerIdx int, redeemChips int64, isBuyIn bool, buyInPlayerCacheHandler func(PlayerCache), reBuyPlayerCacheHandler func(int)) {
+	if isBuyIn {
 		player, playerCache := NewDefaultCompetitionPlayerData(tableID, playerID, redeemChips)
+		if c.Meta.Mode == CompetitionMode_MTT && c.State.Status == CompetitionStateStatus_Registering {
+			// MTT 且尚未開賽: 玩家狀態為等待拆併桌中
+			player.Status = CompetitionPlayerStatus_WaitingTableBalancing
+		}
 		c.State.Players = append(c.State.Players, &player)
 		playerCache.PlayerIdx = len(c.State.Players) - 1
 		buyInPlayerCacheHandler(playerCache)
 	} else {
-		// ReBuy logic
+		// 若是 IsReBuying 則更新相關數據，否則是拆併桌移動到新桌
 		c.State.Players[playerIdx].CurrentTableID = tableID
-		c.State.Players[playerIdx].Chips += redeemChips
-		c.State.Players[playerIdx].ReBuyTimes++
-		c.State.Players[playerIdx].IsReBuying = false
-		c.State.Players[playerIdx].ReBuyEndAt = UnsetValue
-		reBuyPlayerCacheHandler(c.State.Players[playerIdx].ReBuyTimes)
+		if c.State.Players[playerIdx].IsReBuying {
+			// ReBuy logic
+			c.State.Players[playerIdx].Chips = redeemChips
+			c.State.Players[playerIdx].ReBuyTimes++
+			c.State.Players[playerIdx].IsReBuying = false
+			c.State.Players[playerIdx].ReBuyEndAt = UnsetValue
+			reBuyPlayerCacheHandler(c.State.Players[playerIdx].ReBuyTimes)
+		}
 	}
 }
 
