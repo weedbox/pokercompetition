@@ -302,6 +302,10 @@ func (c Competition) GetJSON() (string, error) {
 }
 
 func (c Competition) CanStart() bool {
+	if c.State.Status != CompetitionStateStatus_Registering {
+		return false
+	}
+
 	currentPlayerCount := 0
 	for _, table := range c.State.Tables {
 		currentPlayerCount += len(table.State.PlayerStates)

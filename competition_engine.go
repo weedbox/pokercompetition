@@ -146,8 +146,7 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 
 	// create competition instance
 	competition := &Competition{
-		ID:       uuid.New().String(),
-		UpdateAt: now.UnixMilli(),
+		ID: uuid.New().String(),
 	}
 	competition.ConfigureWithSetting(competitionSetting)
 	for _, tableSetting := range competitionSetting.TableSettings {
@@ -156,9 +155,9 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 		}
 
 		if competitionSetting.Meta.Mode == CompetitionMode_CT {
-			// AutoEndTable
-			autoCloseTime := time.Unix(competition.State.DisableAt, 0)
-			if err := ce.timebank.NewTaskWithDeadline(autoCloseTime, func(isCancelled bool) {
+			// AutoEndTable (When Disable Time is reached)
+			disableAutoCloseTime := time.Unix(competition.State.DisableAt, 0)
+			if err := ce.timebank.NewTaskWithDeadline(disableAutoCloseTime, func(isCancelled bool) {
 				if isCancelled {
 					return
 				}
@@ -231,8 +230,41 @@ func (ce *competitionEngine) StartCompetition(competitionID string) error {
 
 	competition.Start()
 
-	// 啟動拆併桌
-	if competition.Meta.Mode == CompetitionMode_MTT {
+	switch competition.Meta.Mode {
+	case CompetitionMode_CT:
+		// AutoEndTable (Final BuyIn Level & Table Is Pause)
+		finalBuyInLevelTime := int64(0)
+		for _, level := range competition.Meta.Blind.Levels {
+			finalBuyInLevelTime += int64(level.Duration)
+			if level.Level == competition.Meta.Blind.FinalBuyInLevel {
+				break
+			}
+		}
+		pauseAutoCloseTime := time.Unix(competition.State.StartAt+finalBuyInLevelTime, 0)
+		if err := ce.timebank.NewTaskWithDeadline(pauseAutoCloseTime, func(isCancelled bool) {
+			if isCancelled {
+				return
+			}
+
+			c, exist := ce.competitions.Load(competitionID)
+			if !exist {
+				return
+			}
+
+			if len(c.(*Competition).State.Tables[0].AlivePlayers()) < 2 {
+				// 初始化排名陣列
+				if len(c.(*Competition).State.Rankings) == 0 {
+					for i := 0; i < len(c.(*Competition).State.Players); i++ {
+						c.(*Competition).State.Rankings = append(c.(*Competition).State.Rankings, nil)
+					}
+				}
+				ce.CloseCompetition(competition.ID)
+			}
+		}); err != nil {
+			return err
+		}
+	case CompetitionMode_MTT:
+		// 啟動拆併桌
 		ce.activateSeatManager(competition.ID, competition.Meta)
 	}
 

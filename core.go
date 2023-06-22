@@ -1,6 +1,7 @@
 package pokercompetition
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/thoas/go-funk"
@@ -26,13 +27,13 @@ func (ce *competitionEngine) incomingRequest(competitionID string, action Reques
 
 func (ce *competitionEngine) emitEvent(eventName string, playerID string, competition *Competition) {
 	competition.RefreshUpdateAt()
-	// fmt.Printf("->[#%d][%s] emit Event: %s\n", competition.UpdateSerial, playerID, eventName)
+	fmt.Printf("->[#%d][%s] emit Event: %s\n", competition.UpdateSerial, playerID, eventName)
 	ce.onCompetitionUpdated(competition)
 }
 
 func (ce *competitionEngine) emitErrorEvent(eventName RequestAction, playerID string, err error, competition *Competition) {
 	competition.RefreshUpdateAt()
-	// fmt.Printf("->[#%d][%s] emit ERROR Event: %s, Error: %v\n", table.UpdateSerial, playerID, eventName, err)
+	fmt.Printf("->[#%d][%s] emit ERROR Event: %s, Error: %v\n", competition.UpdateSerial, playerID, eventName, err)
 	ce.onCompetitionErrorUpdated(err)
 }
 
@@ -116,23 +117,6 @@ func (ce *competitionEngine) handlePlayerJoin(payload Payload) {
 		}
 		if err := ce.tableEngine.PlayerJoin(tableID, jp); err != nil {
 			ce.emitErrorEvent("PlayerJoin -> Table", joinPlayer.PlayerID, err, competition)
-		}
-
-		// auto start game if condition is reached
-		tableIdx := competition.FindTableIdx(func(table *pokertable.Table) bool {
-			return table.ID == tableID
-		})
-		if tableIdx != UnsetValue {
-			if competition.CanStart() {
-				if err := ce.StartCompetition(competition.ID); err != nil {
-					ce.emitErrorEvent("CT Auto StartCompetition", "", err, competition)
-					return
-				}
-				if err := ce.tableEngine.StartTableGame(tableID); err != nil {
-					ce.emitErrorEvent("CT Auto StartTableGame", "", err, competition)
-					return
-				}
-			}
 		}
 	case CompetitionMode_MTT:
 		// MTT 玩家 entering waiting mode
@@ -271,21 +255,15 @@ func (ce *competitionEngine) onCompetitionTableUpdated(table *pokertable.Table) 
 	}
 	ce.onTableUpdated(table)
 
-	// TODO: Test Only, has to remove it
-	switch table.State.Status {
-	case pokertable.TableStateStatus_TableGameOpened:
-		DebugPrintTableGameOpened(*table)
-	case pokertable.TableStateStatus_TableGameSettled:
-		DebugPrintTableGameSettled(*table)
-	}
-
 	// 更新 competition table
 	competition.State.Tables[tableIdx] = table
 
 	// 處理因 table status 產生的變化
 	tableStatusHandlerMap := map[pokertable.TableStateStatus]func(*Competition, *pokertable.Table, int){
+		pokertable.TableStateStatus_TableCreated:     ce.autoStartCTCompetition,
 		pokertable.TableStateStatus_TableGameSettled: ce.settleCompetitionTable,
 		pokertable.TableStateStatus_TableClosed:      ce.closeCompetitionTable,
+		pokertable.TableStateStatus_TablePausing:     ce.updatePauseCTCompetition,
 	}
 	handler, ok := tableStatusHandlerMap[table.State.Status]
 	if !ok {
@@ -307,6 +285,41 @@ func (ce *competitionEngine) addCompetitionTable(competition *Competition, table
 		ce.insertPlayerCache(competition.ID, playerCache.PlayerID, playerCache)
 	})
 	return table.ID, nil
+}
+
+func (ce *competitionEngine) autoStartCTCompetition(competition *Competition, table *pokertable.Table, tableIdx int) {
+	if competition.Meta.Mode != CompetitionMode_CT {
+		return
+	}
+
+	if !competition.CanStart() {
+		return
+	}
+	// auto start game if condition is reached
+	if err := ce.StartCompetition(competition.ID); err != nil {
+		ce.emitErrorEvent("CT Auto StartCompetition", "", err, competition)
+		return
+	}
+
+	if err := ce.tableEngine.StartTableGame(table.ID); err != nil {
+		ce.emitErrorEvent("CT Auto StartTableGame", "", err, competition)
+		return
+	}
+}
+
+func (ce *competitionEngine) updatePauseCTCompetition(competition *Competition, table *pokertable.Table, tableIdx int) {
+	if competition.Meta.Mode != CompetitionMode_CT {
+		return
+	}
+
+	if table.IsClose() {
+		ce.closeCompetitionTable(competition, table, tableIdx)
+	} else if len(table.AlivePlayers()) > competition.Meta.TableMinPlayerCount {
+		// 人數又足以開始新遊戲一定是延遲買入階段
+		competition.State.Status = CompetitionStateStatus_DelayedBuyin
+		_ = ce.tableEngine.TableGameOpen(table.ID)
+		ce.emitEvent("Game Reopen:", "", competition)
+	}
 }
 
 /*
