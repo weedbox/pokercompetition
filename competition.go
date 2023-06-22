@@ -43,7 +43,7 @@ type Competition struct {
 	ID           string            `json:"id"`            // 賽事 Unique ID
 	Meta         CompetitionMeta   `json:"meta"`          // 賽事固定資料
 	State        *CompetitionState `json:"state"`         // 賽事動態資料
-	UpdateAt     int64             `json:"update_at"`     // 更新時間 (MilliSeconds)
+	UpdateAt     int64             `json:"update_at"`     // 更新時間 (Seconds)
 	UpdateSerial int64             `json:"update_serial"` // 更新序列號 (數字越大越晚發生)
 }
 
@@ -162,7 +162,7 @@ type AddonSetting struct {
 
 // Competition Setters
 func (c *Competition) RefreshUpdateAt() {
-	c.UpdateAt = time.Now().UnixMilli()
+	c.UpdateAt = time.Now().Unix()
 	c.UpdateSerial++
 }
 
@@ -230,7 +230,7 @@ func (c *Competition) AddTable(table *pokertable.Table, playerCacheHandler func(
 		newPlayerIdx := len(c.State.Players)
 		newPlayers := make([]*CompetitionPlayer, 0)
 		for playerID, bankroll := range newPlayerData {
-			player, playerCache := NewDefaultCompetitionPlayerData(table.ID, playerID, bankroll)
+			player, playerCache := newDefaultCompetitionPlayerData(table.ID, playerID, bankroll)
 			newPlayers = append(newPlayers, &player)
 			playerCache.PlayerIdx = newPlayerIdx
 			playerCacheHandler(playerCache)
@@ -264,7 +264,7 @@ func (c *Competition) DeletePlayer(targetIdx int) {
 
 func (c *Competition) PlayerJoin(tableID, playerID string, playerIdx int, redeemChips int64, isBuyIn bool, buyInPlayerCacheHandler func(PlayerCache), reBuyPlayerCacheHandler func(int)) {
 	if isBuyIn {
-		player, playerCache := NewDefaultCompetitionPlayerData(tableID, playerID, redeemChips)
+		player, playerCache := newDefaultCompetitionPlayerData(tableID, playerID, redeemChips)
 		if c.Meta.Mode == CompetitionMode_MTT && c.State.Status == CompetitionStateStatus_Registering {
 			// MTT 且尚未開賽: 玩家狀態為等待拆併桌中
 			player.Status = CompetitionPlayerStatus_WaitingTableBalancing
