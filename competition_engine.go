@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/thoas/go-funk"
 	"github.com/weedbox/pokertable"
 	"github.com/weedbox/pokertablebalancer"
 	"github.com/weedbox/timebank"
@@ -49,7 +50,7 @@ type CompetitionEngine interface {
 	PlayerRefund(competitionID, tableID, playerID string) error             // 玩家退賽
 	PlayerLeave(competitionID, tableID, playerID string) error              // 玩家離桌結算 (現金桌)
 
-	// // SeatManager Api Implementations
+	// SeatManager Api Implementations
 	AutoCreateTable(competitionID string) (*pokertablebalancer.CreateTableResp, error)                                       // 拆併桌自動開桌
 	AutoCloseTable(competitionID string, tableID string) (*pokertablebalancer.CloseTableResp, error)                         // 拆併桌自動關桌
 	AutoJoinTable(competitionID string, entries []*pokertablebalancer.TableEntry) (*pokertablebalancer.JoinTableResp, error) // 拆併桌玩家自動入桌
@@ -170,6 +171,10 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 			}
 		}
 	}
+	if competition.Meta.Mode == CompetitionMode_MTT {
+		// 啟動拆併桌
+		ce.activateSeatManager(competition.ID, competition.Meta)
+	}
 
 	ce.emitEvent("CreateCompetition", "", competition)
 
@@ -264,8 +269,11 @@ func (ce *competitionEngine) StartCompetition(competitionID string) error {
 			return err
 		}
 	case CompetitionMode_MTT:
-		// 啟動拆併桌
-		ce.activateSeatManager(competition.ID, competition.Meta)
+		// 拆併桌加入玩家
+		playerIDs := funk.Map(competition.State.Players, func(player *CompetitionPlayer) string {
+			return player.PlayerID
+		}).([]string)
+		ce.seatManagerJoinPlayer(competition.ID, playerIDs)
 	}
 
 	ce.emitEvent("StartCompetition", "", competition)
@@ -311,7 +319,7 @@ func (ce *competitionEngine) PlayerLeave(competitionID, tableID, playerID string
 func (ce *competitionEngine) AutoCreateTable(competitionID string) (*pokertablebalancer.CreateTableResp, error) {
 	ce.lock.Lock()
 	defer ce.lock.Unlock()
-
+	// fmt.Println("[pokercompetition#AutoCreateTable] competitionID: ", competitionID)
 	c, exist := ce.competitions.Load(competitionID)
 	if !exist {
 		return nil, ErrCompetitionNotFound
@@ -383,6 +391,7 @@ func (ce *competitionEngine) AutoJoinTable(competitionID string, entries []*poke
 		return nil, ErrCompetitionNotFound
 	}
 	competition := c.(*Competition)
+	tableIDs := make(map[string]interface{})
 
 	for _, entry := range entries {
 		playerCache, exist := ce.getPlayerCache(competitionID, entry.PlayerId)
@@ -392,13 +401,39 @@ func (ce *competitionEngine) AutoJoinTable(competitionID string, entries []*poke
 
 		playerIdx := playerCache.PlayerIdx
 		redeemChips := competition.State.Players[playerIdx].Chips
+		tableIDs[entry.TableId] = struct{}{}
 
-		jp := JoinPlayer{
+		// update cache & competition players
+		playerCache.TableID = entry.TableId
+		competition.State.Players[playerIdx].CurrentTableID = entry.TableId
+		competition.State.Players[playerIdx].Status = CompetitionPlayerStatus_Playing
+
+		// call tableEngine
+		jp := pokertable.JoinPlayer{
 			PlayerID:    entry.PlayerId,
 			RedeemChips: redeemChips,
 		}
-		if err := ce.PlayerJoin(competitionID, entry.TableId, jp); err != nil {
-			return nil, err
+		// fmt.Printf("[pokercompetition#AutoJoinTable] TableID: %s, JoinPlayer: %+v\n", entry.TableId, jp)
+		if err := ce.tableEngine.PlayerJoin(entry.TableId, jp); err != nil {
+			ce.emitErrorEvent("AutoJoinTable -> Table PlayerJoin", jp.PlayerID, err, competition)
+		}
+	}
+	ce.emitEvent("Players AutoJoinTable & Playing", "", competition)
+
+	// Auto Start Table if necessary
+	for tableID := range tableIDs {
+		tableIdx := competition.FindTableIdx(func(t *pokertable.Table) bool {
+			return tableID == t.ID
+		})
+		if tableIdx == UnsetValue {
+			continue
+		}
+
+		table := competition.State.Tables[tableIdx]
+		if competition.State.Tables[tableIdx].State.Status == pokertable.TableStateStatus_TableCreated && table.State.StartAt == UnsetValue {
+			if err := ce.tableEngine.StartTableGame(tableID); err != nil {
+				ce.emitErrorEvent("AutoJoinTable -> Table StartTableGame", "", err, competition)
+			}
 		}
 	}
 

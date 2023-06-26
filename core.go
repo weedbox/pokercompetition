@@ -1,7 +1,6 @@
 package pokercompetition
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/thoas/go-funk"
@@ -27,13 +26,13 @@ func (ce *competitionEngine) incomingRequest(competitionID string, action Reques
 
 func (ce *competitionEngine) emitEvent(eventName string, playerID string, competition *Competition) {
 	competition.RefreshUpdateAt()
-	fmt.Printf("->[#%d][%s] emit Event: %s\n", competition.UpdateSerial, playerID, eventName)
+	// fmt.Printf("->[Competition][#%d][%s] emit Event: %s\n", competition.UpdateSerial, playerID, eventName)
 	ce.onCompetitionUpdated(competition)
 }
 
 func (ce *competitionEngine) emitErrorEvent(eventName RequestAction, playerID string, err error, competition *Competition) {
 	competition.RefreshUpdateAt()
-	fmt.Printf("->[#%d][%s] emit ERROR Event: %s, Error: %v\n", competition.UpdateSerial, playerID, eventName, err)
+	// fmt.Printf("->[Competition][#%d][%s] emit ERROR Event: %s, Error: %v\n", competition.UpdateSerial, playerID, eventName, err)
 	ce.onCompetitionErrorUpdated(err)
 }
 
@@ -106,7 +105,12 @@ func (ce *competitionEngine) handlePlayerJoin(payload Payload) {
 		}
 	}
 	competition.PlayerJoin(tableID, joinPlayer.PlayerID, playerIdx, joinPlayer.RedeemChips, isBuyIn, buyInPlayerCacheHandler, reBuyPlayerCacheHandler)
-	ce.emitEvent("PlayerJoin", joinPlayer.PlayerID, competition)
+
+	if isBuyIn {
+		ce.emitEvent("PlayerJoin -> Buy In", joinPlayer.PlayerID, competition)
+	} else {
+		ce.emitEvent("PlayerJoin -> Re Buy", joinPlayer.PlayerID, competition)
+	}
 
 	switch competition.Meta.Mode {
 	case CompetitionMode_CT:
@@ -116,11 +120,25 @@ func (ce *competitionEngine) handlePlayerJoin(payload Payload) {
 			RedeemChips: joinPlayer.RedeemChips,
 		}
 		if err := ce.tableEngine.PlayerJoin(tableID, jp); err != nil {
-			ce.emitErrorEvent("PlayerJoin -> Table", joinPlayer.PlayerID, err, competition)
+			ce.emitErrorEvent("CT PlayerJoin -> Table", joinPlayer.PlayerID, err, competition)
 		}
 	case CompetitionMode_MTT:
-		// MTT 玩家 entering waiting mode
-		ce.seatManagerJoinPlayer(competition.ID, []string{joinPlayer.PlayerID})
+		// 開賽前 (status = registering) 玩家配桌會等到正式開賽後才進入拆併桌程式，所以都先留在等待區
+		if competition.State.Status == CompetitionStateStatus_DelayedBuyin {
+			if isBuyIn {
+				// 已經開賽了，BuyIn 玩家丟到拆併桌 Queue
+				ce.seatManagerJoinPlayer(competition.ID, []string{joinPlayer.PlayerID})
+			} else {
+				// ReBuy 玩家 call tableEngine
+				jp := pokertable.JoinPlayer{
+					PlayerID:    joinPlayer.PlayerID,
+					RedeemChips: joinPlayer.RedeemChips,
+				}
+				if err := ce.tableEngine.PlayerJoin(tableID, jp); err != nil {
+					ce.emitErrorEvent("MTT PlayerJoin -> Table", joinPlayer.PlayerID, err, competition)
+				}
+			}
+		}
 	}
 }
 
@@ -260,10 +278,10 @@ func (ce *competitionEngine) onCompetitionTableUpdated(table *pokertable.Table) 
 
 	// 處理因 table status 產生的變化
 	tableStatusHandlerMap := map[pokertable.TableStateStatus]func(*Competition, *pokertable.Table, int){
-		pokertable.TableStateStatus_TableCreated:     ce.autoStartCTCompetition,
+		pokertable.TableStateStatus_TableCreated:     ce.handleCompetitionTableCreated,
 		pokertable.TableStateStatus_TableGameSettled: ce.settleCompetitionTable,
 		pokertable.TableStateStatus_TableClosed:      ce.closeCompetitionTable,
-		pokertable.TableStateStatus_TablePausing:     ce.updatePauseCTCompetition,
+		pokertable.TableStateStatus_TablePausing:     ce.updatePauseCompetition,
 	}
 	handler, ok := tableStatusHandlerMap[table.State.Status]
 	if !ok {
@@ -287,11 +305,14 @@ func (ce *competitionEngine) addCompetitionTable(competition *Competition, table
 	return table.ID, nil
 }
 
-func (ce *competitionEngine) autoStartCTCompetition(competition *Competition, table *pokertable.Table, tableIdx int) {
-	if competition.Meta.Mode != CompetitionMode_CT {
-		return
+func (ce *competitionEngine) handleCompetitionTableCreated(competition *Competition, table *pokertable.Table, tableIdx int) {
+	switch competition.Meta.Mode {
+	case CompetitionMode_CT:
+		ce.handleCTTableCreated(competition, table, tableIdx)
 	}
+}
 
+func (ce *competitionEngine) handleCTTableCreated(competition *Competition, table *pokertable.Table, tableIdx int) {
 	if !competition.CanStart() {
 		return
 	}
@@ -307,11 +328,7 @@ func (ce *competitionEngine) autoStartCTCompetition(competition *Competition, ta
 	}
 }
 
-func (ce *competitionEngine) updatePauseCTCompetition(competition *Competition, table *pokertable.Table, tableIdx int) {
-	if competition.Meta.Mode != CompetitionMode_CT {
-		return
-	}
-
+func (ce *competitionEngine) updatePauseCompetition(competition *Competition, table *pokertable.Table, tableIdx int) {
 	if table.IsClose() {
 		ce.closeCompetitionTable(competition, table, tableIdx)
 	} else if len(table.AlivePlayers()) > competition.Meta.TableMinPlayerCount {
@@ -403,7 +420,6 @@ func (ce *competitionEngine) settleCompetitionTable(competition *Competition, ta
 			continue
 		}
 		competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_Knockout
-		competition.State.Tables[tableIdx].PlayersLeave([]int{playerCache.PlayerIdx})
 	}
 
 	// TableEngine Player Leave
