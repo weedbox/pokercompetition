@@ -29,14 +29,14 @@ const (
 	CompetitionPlayerStatus_Knockout              CompetitionPlayerStatus = "knockout"                // 已淘汰
 
 	// CompetitionMode
-	CompetitionMode_CT   = "ct"   // 倒數錦標賽
-	CompetitionMode_MTT  = "mtt"  // 大型錦標賽
-	CompetitionMode_Cash = "cash" // 現金桌
+	CompetitionMode_CT   CompetitionMode = "ct"   // 倒數錦標賽
+	CompetitionMode_MTT  CompetitionMode = "mtt"  // 大型錦標賽
+	CompetitionMode_Cash CompetitionMode = "cash" // 現金桌
 
 	// CompetitionRule
-	CompetitionRule_Default   = "default"    // 常牌
-	CompetitionRule_ShortDeck = "short_deck" // 短牌
-	CompetitionRule_Omaha     = "omaha"      // 奧瑪哈
+	CompetitionRule_Default   CompetitionRule = "default"    // 常牌
+	CompetitionRule_ShortDeck CompetitionRule = "short_deck" // 短牌
+	CompetitionRule_Omaha     CompetitionRule = "omaha"      // 奧瑪哈
 )
 
 type Competition struct {
