@@ -1,7 +1,6 @@
 package actor
 
 import (
-	"fmt"
 	"math/rand"
 	"time"
 
@@ -53,6 +52,16 @@ func (br *botRunner) Humanized(enabled bool) {
 }
 
 func (br *botRunner) UpdateTableState(table *pokertable.Table) error {
+	// only allow bot player in this table can move
+	playerExist := false
+	for _, player := range table.State.PlayerStates {
+		if player.PlayerID == br.playerID {
+			playerExist = true
+		}
+	}
+	if !playerExist {
+		return nil
+	}
 
 	br.tableInfo = table
 
@@ -98,7 +107,7 @@ func (br *botRunner) requestMove() error {
 
 	// Do ready() and pay() automatically
 	if gs.HasAction(br.gamePlayerIdx, "ready") {
-		fmt.Printf("[#%d][%d][%s][%s] READY\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
+		// fmt.Printf("[#%d][%d][%s][%s] READY\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
 		return br.actions.Ready()
 	} else if gs.HasAction(br.gamePlayerIdx, "pass") {
 		return br.actions.Pass()
@@ -107,7 +116,7 @@ func (br *botRunner) requestMove() error {
 		// Pay for ante and blinds
 		switch gs.Status.CurrentEvent.Name {
 		case pokerface.GameEventSymbols[pokerface.GameEvent_Prepared]:
-			fmt.Printf("[#%d][%d][%s][%s] PAY ANTE\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
+			// fmt.Printf("[#%d][%d][%s][%s] PAY ANTE\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
 
 			// Ante
 			return br.actions.Pay(gs.Meta.Ante)
@@ -116,10 +125,10 @@ func (br *botRunner) requestMove() error {
 
 			// blinds
 			if gs.HasPosition(br.gamePlayerIdx, "sb") {
-				fmt.Printf("[#%d][%d][%s][%s] PAY SB\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
+				// fmt.Printf("[#%d][%d][%s][%s] PAY SB\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
 				return br.actions.Pay(gs.Meta.Blind.SB)
 			} else if gs.HasPosition(br.gamePlayerIdx, "bb") {
-				fmt.Printf("[#%d][%d][%s][%s] PAY BB\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
+				// fmt.Printf("[#%d][%d][%s][%s] PAY BB\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
 				return br.actions.Pay(gs.Meta.Blind.BB)
 			}
 
@@ -213,12 +222,12 @@ func (br *botRunner) requestAI() error {
 		minBet := gs.Status.MiniBet
 
 		if player.InitialStackSize <= minBet {
-			fmt.Printf("[#%d][%d][%s][%s] BET %d\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round, player.InitialStackSize)
+			// fmt.Printf("[#%d][%d][%s][%s] BET %d\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round, player.InitialStackSize)
 			return br.actions.Bet(player.InitialStackSize)
 		}
 
 		chips := rand.Int63n(player.InitialStackSize-minBet) + minBet
-		fmt.Printf("[#%d][%d][%s][%s] BET %d\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round, chips)
+		// fmt.Printf("[#%d][%d][%s][%s] BET %d\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round, chips)
 		return br.actions.Bet(chips)
 	case "raise":
 
@@ -226,23 +235,23 @@ func (br *botRunner) requestAI() error {
 		minChipLevel := gs.Status.CurrentWager + gs.Status.PreviousRaiseSize
 
 		if maxChipLevel == minChipLevel {
-			fmt.Printf("[#%d][%d][%s][%s] RAISE %d\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round, minChipLevel)
+			// fmt.Printf("[#%d][%d][%s][%s] RAISE %d\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round, minChipLevel)
 			return br.actions.Raise(minChipLevel)
 		}
 
 		chips := rand.Int63n(maxChipLevel-minChipLevel) + minChipLevel
-		fmt.Printf("[#%d][%d][%s][%s] RAISE %d\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round, chips)
+		// fmt.Printf("[#%d][%d][%s][%s] RAISE %d\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round, chips)
 		return br.actions.Raise(chips)
 	case "call":
-		fmt.Printf("[#%d][%d][%s][%s] CALL\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
+		// fmt.Printf("[#%d][%d][%s][%s] CALL\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
 		return br.actions.Call()
 	case "check":
-		fmt.Printf("[#%d][%d][%s][%s] CHECK\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
+		// fmt.Printf("[#%d][%d][%s][%s] CHECK\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
 		return br.actions.Check()
 	case "allin":
-		fmt.Printf("[#%d][%d][%s][%s] ALLIN\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
+		// fmt.Printf("[#%d][%d][%s][%s] ALLIN\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
 		return br.actions.Allin()
 	}
-	fmt.Printf("[#%d][%d][%s][%s] FOLD\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
+	// fmt.Printf("[#%d][%d][%s][%s] FOLD\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
 	return br.actions.Fold()
 }

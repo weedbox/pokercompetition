@@ -12,7 +12,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/thoas/go-funk"
 	"github.com/weedbox/pokercompetition"
-	pokertable "github.com/weedbox/pokertable"
+	"github.com/weedbox/pokertable"
+	"github.com/weedbox/pokertablebalancer"
 )
 
 func TestActor_Basic(t *testing.T) {
@@ -227,7 +228,7 @@ func TestActor_CT(t *testing.T) {
 		}
 	})
 	competitionEngine.OnCompetitionTableErrorUpdated(func(err error) {
-		t.Log("[Table] ERROR:", err)
+		// t.Log("[Table] ERROR:", err)
 	})
 
 	// 玩家報名賽事
@@ -237,6 +238,137 @@ func TestActor_CT(t *testing.T) {
 		assert.Nil(t, err, fmt.Sprintf("%s join competition failed", joinPlayer.PlayerID))
 		logData = append(logData, makeLog(fmt.Sprintf("[Competition] %s join competition", joinPlayer.PlayerID), competition.GetJSON))
 	}
+
+	wg.Wait()
+}
+
+func TestActor_MTT(t *testing.T) {
+	logData := make([]string, 0)
+	makeLog := func(logTitle string, jsonPrinter func() (string, error)) string {
+		jsonString, _ := jsonPrinter()
+		return fmt.Sprintf("========== [%s] ==========\n%s", logTitle, jsonString)
+	}
+
+	// 建立賽事引擎
+	competitionEngine := pokercompetition.NewCompetitionEngine()
+	competitionEngine.SetSeatManager(pokertablebalancer.NewSeatManager(competitionEngine))
+
+	// 後台建立 MTT 賽事
+	competition, err := competitionEngine.CreateCompetition(NewMTTCompetitionSetting())
+	assert.Nil(t, err, "create mtt competition failed")
+	logData = append(logData, makeLog("[Competition] Create MTT Competition", competition.GetJSON))
+	assert.Equal(t, pokercompetition.CompetitionStateStatus_Registering, competition.State.Status, "status should be registering")
+	assert.Equal(t, pokercompetition.CompetitionMode_MTT, competition.Meta.Mode, "mode should be mtt")
+
+	competitionID := competition.ID
+
+	// 建立 Bot 玩家
+	playerCount := 20
+	playerIDs := make([]string, 0)
+	for i := 1; i <= playerCount; i++ {
+		playerID := fmt.Sprintf("player-%d", i)
+		playerIDs = append(playerIDs, playerID)
+	}
+	joinPlayers := funk.Map(playerIDs, func(playerID string) pokercompetition.JoinPlayer {
+		return pokercompetition.JoinPlayer{
+			PlayerID:    playerID,
+			RedeemChips: 5000,
+		}
+	}).([]pokercompetition.JoinPlayer)
+
+	// Preparing actors
+	actors := make([]Actor, 0)
+	for _, p := range joinPlayers {
+
+		// Create new actor
+		a := NewActor()
+
+		// Initializing table engine adapter to communicate with table engine
+		tc := NewTableEngineAdapter(competitionEngine.TableEngine(), nil)
+		a.SetAdapter(tc)
+
+		// Initializing bot runner
+		bot := NewBotRunner(p.PlayerID)
+		a.SetRunner(bot)
+
+		actors = append(actors, a)
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	competitionEngine.OnCompetitionUpdated(func(competition *pokercompetition.Competition) {
+		logData = append(logData, makeLog(fmt.Sprintf("[Competition] Serial: %d", competition.UpdateSerial), competition.GetJSON))
+
+		if competition.State.Status == pokercompetition.CompetitionStateStatus_End {
+			DebugPrintCompetitionEnded(*competition)
+
+			// write log
+			data := strings.Join(logData, "\n\n")
+			err := ioutil.WriteFile("./game_log.txt", []byte(data), 0644)
+			if err != nil {
+				t.Log("Log failed", err)
+			} else {
+				t.Log("Log completed")
+			}
+			wg.Done()
+			return
+		}
+
+		if competition.State.Status == pokercompetition.CompetitionStateStatus_DelayedBuyin {
+			for _, player := range competition.State.Players {
+				if player.Chips == 0 && player.ReBuyTimes < competition.Meta.ReBuySetting.MaxTime {
+					jp := pokercompetition.JoinPlayer{
+						PlayerID:    player.PlayerID,
+						RedeemChips: 3100,
+					}
+					err := competitionEngine.PlayerJoin(competitionID, player.CurrentTableID, jp)
+					assert.Nil(t, err, fmt.Sprintf("%s re-buy failed", jp.PlayerID))
+					t.Logf("%s is rebuying", jp.PlayerID)
+				}
+			}
+		}
+	})
+	competitionEngine.OnCompetitionErrorUpdated(func(err error) {
+		t.Log("[Competition] Error:", err)
+	})
+
+	competitionEngine.OnCompetitionTableUpdated(func(table *pokertable.Table) {
+		logData = append(logData, makeLog(fmt.Sprintf("[Table] Serial: %d", table.UpdateSerial), table.GetJSON))
+
+		// Update table state via adapter
+		for _, a := range actors {
+			a.GetTable().UpdateTableState(table)
+		}
+
+		switch table.State.Status {
+		case pokertable.TableStateStatus_TableGameOpened:
+			DebugPrintTableGameOpenedShort(*table)
+		case pokertable.TableStateStatus_TableGameSettled:
+			ccc, _ := competitionEngine.GetCompetition(competitionID)
+			DebugPrintTableGameSettledShort(*table, string(ccc.State.Status))
+		case pokertable.TableStateStatus_TablePausing:
+			ccc, _ := competitionEngine.GetCompetition(competitionID)
+			t.Logf("table %s [%s] is pausing. Final Buy In? %+v", table.ID, ccc.State.Status, table.State.BlindState.IsFinalBuyInLevel())
+		case pokertable.TableStateStatus_TableClosed:
+			t.Logf("table %s is close", table.ID)
+		}
+	})
+	competitionEngine.OnCompetitionTableErrorUpdated(func(err error) {
+		t.Log("[Table] ERROR:", err)
+	})
+
+	// 玩家報名賽事
+	for _, joinPlayer := range joinPlayers {
+		// time.Sleep(time.Millisecond * 100)
+		err := competitionEngine.PlayerJoin(competitionID, "", joinPlayer)
+		assert.Nil(t, err, fmt.Sprintf("%s buy in failed", joinPlayer.PlayerID))
+		logData = append(logData, makeLog(fmt.Sprintf("[Competition] %s buy in", joinPlayer.PlayerID), competition.GetJSON))
+	}
+
+	// 手動開賽
+	err = competitionEngine.StartCompetition(competitionID)
+	assert.Nil(t, err, "start mtt competition failed")
 
 	wg.Wait()
 }

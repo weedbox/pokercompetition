@@ -6,8 +6,31 @@ import (
 	"time"
 
 	"github.com/weedbox/pokercompetition"
-	pokertable "github.com/weedbox/pokertable"
+	"github.com/weedbox/pokertable"
 )
+
+func DebugPrintTableGameOpenedShort(t pokertable.Table) {
+	fmt.Printf("---------- [%s] 第 (%d) 手開局 ----------\n", t.ID, t.State.GameCount)
+	fmt.Println("[Game Players]")
+	for _, playerIdx := range t.State.GamePlayerIndexes {
+		player := t.State.PlayerStates[playerIdx]
+		seat := "X"
+		if player.Seat != -1 {
+			seat = strconv.Itoa(player.Seat)
+		}
+		fmt.Printf("seat: %s [%v], player: %s, bankroll: %d, between bb-dealer? %v\n", seat, player.Positions, player.PlayerID, player.Bankroll, player.IsBetweenDealerBB)
+	}
+
+	fmt.Println()
+}
+
+func DebugPrintTableGameSettledShort(t pokertable.Table, extra string) {
+	fmt.Printf("---------- [%s] 第 (%d) 手結算 [%s] ----------\n", t.ID, t.State.GameCount, extra)
+	fmt.Println("---------- Player Result ----------")
+	for _, player := range t.State.PlayerStates {
+		fmt.Printf("%s: seat: %d[%+v], bankroll: %d\n", player.PlayerID, player.Seat, player.Positions, player.Bankroll)
+	}
+}
 
 func DebugPrintTableGameOpened(t pokertable.Table) {
 	timeString := func(timestamp int64) string {
@@ -165,7 +188,7 @@ func DebugPrintCompetitionEnded(c pokercompetition.Competition) {
 		if player.Status == pokercompetition.CompetitionPlayerStatus_Knockout {
 			isKnockout = "O"
 		}
-		fmt.Printf("%s, 加入時間: %s, 淘汰: %s, 桌次: %s, 桌排名: %d, 籌碼: %d\n", player.PlayerID, timeString(player.JoinAt), isKnockout, player.CurrentTableID, player.Rank, player.Chips)
+		fmt.Printf("%s, 加入時間: %s, 狀態: %s, 淘汰: %s, 桌次: %s, 桌排名: %d, 籌碼: %d\n", player.PlayerID, timeString(player.JoinAt), player.Status, isKnockout, player.CurrentTableID, player.Rank, player.Chips)
 	}
 
 	fmt.Println("---------- 最後排名 ----------")
