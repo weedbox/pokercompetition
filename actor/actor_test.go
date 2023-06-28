@@ -272,7 +272,7 @@ func TestActor_MTT(t *testing.T) {
 	joinPlayers := funk.Map(playerIDs, func(playerID string) pokercompetition.JoinPlayer {
 		return pokercompetition.JoinPlayer{
 			PlayerID:    playerID,
-			RedeemChips: 5000,
+			RedeemChips: 4000,
 		}
 	}).([]pokercompetition.JoinPlayer)
 
@@ -364,6 +364,7 @@ func TestActor_MTT(t *testing.T) {
 		err := competitionEngine.PlayerJoin(competitionID, "", joinPlayer)
 		assert.Nil(t, err, fmt.Sprintf("%s buy in failed", joinPlayer.PlayerID))
 		logData = append(logData, makeLog(fmt.Sprintf("[Competition] %s buy in", joinPlayer.PlayerID), competition.GetJSON))
+		t.Logf("%s buy in", joinPlayer.PlayerID)
 	}
 
 	// 手動開賽
