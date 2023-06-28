@@ -29,11 +29,18 @@ var (
 	ErrLeaveRejected                   = errors.New("not allowed to leave")
 )
 
+type TableBackend interface {
+	DeleteTable(tableID string) error
+	PlayerJoin(tableID string, playerID string, redeemChips int64) error
+	StartTableGame(tableID string) error
+	PlayerRedeemChips(tableID string, playerID string, redeemChips int64) error
+}
+
 type CompetitionEngine interface {
 	// Others
-	TableEngine() pokertable.TableEngine
-	OnCompetitionTableUpdated(fn func(*pokertable.Table))      // 桌次更新事件監聽器
-	OnCompetitionTableErrorUpdated(fn func(error))             // 桌次錯誤更新事件監聽器
+	// TableEngine() TableBackend
+	// OnCompetitionTableUpdated(fn func(*pokertable.Table)) // 桌次更新事件監聽器
+	// OnCompetitionTableErrorUpdated(fn func(error))        // 桌次錯誤更新事件監聽器
 	OnCompetitionUpdated(fn func(*Competition))                // 賽事更新事件監聽器
 	OnCompetitionErrorUpdated(fn func(error))                  // 賽事錯誤更新事件監聽器
 	SetSeatManager(seatManager pokertablebalancer.SeatManager) // 設定拆併桌管理器
@@ -56,21 +63,22 @@ type CompetitionEngine interface {
 	AutoJoinTable(competitionID string, entries []*pokertablebalancer.TableEntry) (*pokertablebalancer.JoinTableResp, error) // 拆併桌玩家自動入桌
 }
 
-func NewCompetitionEngine() CompetitionEngine {
+func NewCompetitionEngine(tableBackend TableBackend) CompetitionEngine {
 	ce := &competitionEngine{
 		timebank:                  timebank.NewTimeBank(),
+		tableBackend:              tableBackend,
 		onCompetitionUpdated:      func(*Competition) {},
 		onCompetitionErrorUpdated: func(error) {},
-		onTableUpdated:            func(*pokertable.Table) {},
-		onTableErrorUpdated:       func(error) {},
-		incoming:                  make(chan *Request, 1024),
-		competitions:              sync.Map{},
-		playerCaches:              sync.Map{},
+		// onTableUpdated:            func(*pokertable.Table) {},
+		// onTableErrorUpdated:       func(error) {},
+		incoming:     make(chan *Request, 1024),
+		competitions: sync.Map{},
+		playerCaches: sync.Map{},
 	}
-	tableEngine := pokertable.NewTableEngine()
-	tableEngine.OnTableUpdated(ce.onCompetitionTableUpdated)
-	tableEngine.OnErrorUpdated(ce.onCompetitionTableErrorUpdated)
-	ce.tableEngine = tableEngine
+	// tableEngine := pokertable.NewTableEngine()
+	// tableEngine.OnTableUpdated(ce.onCompetitionTableUpdated)
+	// tableEngine.OnErrorUpdated(ce.onCompetitionTableErrorUpdated)
+	// ce.tableEngine = tableEngine
 
 	go ce.run()
 	return ce
@@ -80,27 +88,27 @@ type competitionEngine struct {
 	lock                      sync.Mutex
 	seatManager               pokertablebalancer.SeatManager
 	timebank                  *timebank.TimeBank
-	tableEngine               pokertable.TableEngine
+	tableBackend              TableBackend
 	onCompetitionUpdated      func(*Competition)
 	onCompetitionErrorUpdated func(error)
-	onTableUpdated            func(*pokertable.Table)
-	onTableErrorUpdated       func(error)
-	incoming                  chan *Request
-	competitions              sync.Map
-	playerCaches              sync.Map // key: <competitionID.playerID>, value: PlayerCache
+	// onTableUpdated            func(*pokertable.Table)
+	// onTableErrorUpdated       func(error)
+	incoming     chan *Request
+	competitions sync.Map
+	playerCaches sync.Map // key: <competitionID.playerID>, value: PlayerCache
 }
 
-func (ce *competitionEngine) TableEngine() pokertable.TableEngine {
-	return ce.tableEngine
-}
+// func (ce *competitionEngine) TableEngine() pokertable.TableEngine {
+// 	return ce.tableEngine
+// }
 
-func (ce *competitionEngine) OnCompetitionTableUpdated(fn func(*pokertable.Table)) {
-	ce.onTableUpdated = fn
-}
+// func (ce *competitionEngine) OnCompetitionTableUpdated(fn func(*pokertable.Table)) {
+// 	ce.onTableUpdated = fn
+// }
 
-func (ce *competitionEngine) OnCompetitionTableErrorUpdated(fn func(error)) {
-	ce.onTableErrorUpdated = fn
-}
+// func (ce *competitionEngine) OnCompetitionTableErrorUpdated(fn func(error)) {
+// 	ce.onTableErrorUpdated = fn
+// }
 
 func (ce *competitionEngine) OnCompetitionUpdated(fn func(*Competition)) {
 	ce.onCompetitionUpdated = fn
@@ -369,7 +377,7 @@ func (ce *competitionEngine) AutoCloseTable(competitionID string, tableID string
 		return nil, ErrCompetitionNotFound
 	}
 
-	if err := ce.tableEngine.DeleteTable(tableID); err != nil {
+	if err := ce.tableBackend.DeleteTable(tableID); err != nil {
 		return nil, err
 	}
 
@@ -409,13 +417,9 @@ func (ce *competitionEngine) AutoJoinTable(competitionID string, entries []*poke
 		competition.State.Players[playerIdx].Status = CompetitionPlayerStatus_Playing
 
 		// call tableEngine
-		jp := pokertable.JoinPlayer{
-			PlayerID:    entry.PlayerId,
-			RedeemChips: redeemChips,
-		}
 		// fmt.Printf("[pokercompetition#AutoJoinTable] TableID: %s, JoinPlayer: %+v\n", entry.TableId, jp)
-		if err := ce.tableEngine.PlayerJoin(entry.TableId, jp); err != nil {
-			ce.emitErrorEvent("AutoJoinTable -> Table PlayerJoin", jp.PlayerID, err, competition)
+		if err := ce.tableBackend.PlayerJoin(entry.TableId, entry.PlayerId, redeemChips); err != nil {
+			ce.emitErrorEvent("AutoJoinTable -> Table PlayerJoin", entry.PlayerId, err, competition)
 		}
 	}
 	ce.emitEvent("Players AutoJoinTable & Playing", "", competition)
@@ -431,7 +435,7 @@ func (ce *competitionEngine) AutoJoinTable(competitionID string, entries []*poke
 
 		table := competition.State.Tables[tableIdx]
 		if competition.State.Tables[tableIdx].State.Status == pokertable.TableStateStatus_TableCreated && table.State.StartAt == UnsetValue {
-			if err := ce.tableEngine.StartTableGame(tableID); err != nil {
+			if err := ce.tableBackend.StartTableGame(tableID); err != nil {
 				ce.emitErrorEvent("AutoJoinTable -> Table StartTableGame", "", err, competition)
 			}
 		}

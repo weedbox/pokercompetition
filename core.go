@@ -119,7 +119,7 @@ func (ce *competitionEngine) handlePlayerJoin(payload Payload) {
 			PlayerID:    joinPlayer.PlayerID,
 			RedeemChips: joinPlayer.RedeemChips,
 		}
-		if err := ce.tableEngine.PlayerJoin(tableID, jp); err != nil {
+		if err := ce.tableBackend.PlayerJoin(tableID, jp); err != nil {
 			ce.emitErrorEvent("CT PlayerJoin -> Table", joinPlayer.PlayerID, err, competition)
 		}
 	case CompetitionMode_MTT:
@@ -134,7 +134,7 @@ func (ce *competitionEngine) handlePlayerJoin(payload Payload) {
 					PlayerID:    joinPlayer.PlayerID,
 					RedeemChips: joinPlayer.RedeemChips,
 				}
-				if err := ce.tableEngine.PlayerJoin(tableID, jp); err != nil {
+				if err := ce.tableBackend.PlayerJoin(tableID, jp); err != nil {
 					ce.emitErrorEvent("MTT PlayerJoin -> Table", joinPlayer.PlayerID, err, competition)
 				}
 			}
@@ -172,11 +172,7 @@ func (ce *competitionEngine) handlePlayerAddon(payload Payload) {
 	competition.PlayerAddon(tableID, joinPlayer.PlayerID, playerIdx, joinPlayer.RedeemChips)
 
 	// call tableEngine
-	jp := pokertable.JoinPlayer{
-		PlayerID:    joinPlayer.PlayerID,
-		RedeemChips: joinPlayer.RedeemChips,
-	}
-	if err := ce.tableEngine.PlayerRedeemChips(tableID, jp); err != nil {
+	if err := ce.tableBackend.PlayerRedeemChips(tableID, joinPlayer.PlayerID, joinPlayer.RedeemChips); err != nil {
 		ce.emitErrorEvent("PlayerAddon -> PlayerRedeemChips", joinPlayer.PlayerID, err, competition)
 		return
 	}
