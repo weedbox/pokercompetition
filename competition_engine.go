@@ -29,21 +29,12 @@ var (
 	ErrLeaveRejected                   = errors.New("not allowed to leave")
 )
 
-type TableBackend interface {
-	DeleteTable(tableID string) error
-	PlayerJoin(tableID string, playerID string, redeemChips int64) error
-	StartTableGame(tableID string) error
-	PlayerRedeemChips(tableID string, playerID string, redeemChips int64) error
-}
-
 type CompetitionEngine interface {
 	// Others
-	// TableEngine() TableBackend
-	// OnCompetitionTableUpdated(fn func(*pokertable.Table)) // 桌次更新事件監聽器
-	// OnCompetitionTableErrorUpdated(fn func(error))        // 桌次錯誤更新事件監聽器
 	OnCompetitionUpdated(fn func(*Competition))                // 賽事更新事件監聽器
-	OnCompetitionErrorUpdated(fn func(error))                  // 賽事錯誤更新事件監聽器
+	OnCompetitionErrorUpdated(fn func(*Competition, error))    // 賽事錯誤更新事件監聽器
 	SetSeatManager(seatManager pokertablebalancer.SeatManager) // 設定拆併桌管理器
+	UpdateTable(table *pokertable.Table)                       // 更新桌次狀態
 
 	// Competition Actions
 	GetCompetition(competitionID string) (*Competition, error)                     // 取得賽事
@@ -68,17 +59,14 @@ func NewCompetitionEngine(tableBackend TableBackend) CompetitionEngine {
 		timebank:                  timebank.NewTimeBank(),
 		tableBackend:              tableBackend,
 		onCompetitionUpdated:      func(*Competition) {},
-		onCompetitionErrorUpdated: func(error) {},
-		// onTableUpdated:            func(*pokertable.Table) {},
-		// onTableErrorUpdated:       func(error) {},
-		incoming:     make(chan *Request, 1024),
-		competitions: sync.Map{},
-		playerCaches: sync.Map{},
+		onCompetitionErrorUpdated: func(*Competition, error) {},
+		incoming:                  make(chan *Request, 1024),
+		competitions:              sync.Map{},
+		playerCaches:              sync.Map{},
 	}
-	// tableEngine := pokertable.NewTableEngine()
-	// tableEngine.OnTableUpdated(ce.onCompetitionTableUpdated)
-	// tableEngine.OnErrorUpdated(ce.onCompetitionTableErrorUpdated)
-	// ce.tableEngine = tableEngine
+	tableBackend.OnTableUpdated(func(table *pokertable.Table) {
+		ce.UpdateTable(table)
+	})
 
 	go ce.run()
 	return ce
@@ -90,31 +78,17 @@ type competitionEngine struct {
 	timebank                  *timebank.TimeBank
 	tableBackend              TableBackend
 	onCompetitionUpdated      func(*Competition)
-	onCompetitionErrorUpdated func(error)
-	// onTableUpdated            func(*pokertable.Table)
-	// onTableErrorUpdated       func(error)
-	incoming     chan *Request
-	competitions sync.Map
-	playerCaches sync.Map // key: <competitionID.playerID>, value: PlayerCache
+	onCompetitionErrorUpdated func(*Competition, error)
+	incoming                  chan *Request
+	competitions              sync.Map
+	playerCaches              sync.Map // key: <competitionID.playerID>, value: PlayerCache
 }
-
-// func (ce *competitionEngine) TableEngine() pokertable.TableEngine {
-// 	return ce.tableEngine
-// }
-
-// func (ce *competitionEngine) OnCompetitionTableUpdated(fn func(*pokertable.Table)) {
-// 	ce.onTableUpdated = fn
-// }
-
-// func (ce *competitionEngine) OnCompetitionTableErrorUpdated(fn func(error)) {
-// 	ce.onTableErrorUpdated = fn
-// }
 
 func (ce *competitionEngine) OnCompetitionUpdated(fn func(*Competition)) {
 	ce.onCompetitionUpdated = fn
 }
 
-func (ce *competitionEngine) OnCompetitionErrorUpdated(fn func(error)) {
+func (ce *competitionEngine) OnCompetitionErrorUpdated(fn func(*Competition, error)) {
 	ce.onCompetitionErrorUpdated = fn
 }
 
@@ -417,8 +391,12 @@ func (ce *competitionEngine) AutoJoinTable(competitionID string, entries []*poke
 		competition.State.Players[playerIdx].Status = CompetitionPlayerStatus_Playing
 
 		// call tableEngine
-		// fmt.Printf("[pokercompetition#AutoJoinTable] TableID: %s, JoinPlayer: %+v\n", entry.TableId, jp)
-		if err := ce.tableBackend.PlayerJoin(entry.TableId, entry.PlayerId, redeemChips); err != nil {
+		jp := pokertable.JoinPlayer{
+			PlayerID:    entry.PlayerId,
+			RedeemChips: redeemChips,
+		}
+
+		if err := ce.tableBackend.PlayerJoin(entry.TableId, jp); err != nil {
 			ce.emitErrorEvent("AutoJoinTable -> Table PlayerJoin", entry.PlayerId, err, competition)
 		}
 	}

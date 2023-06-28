@@ -1,6 +1,7 @@
 package pokercompetition
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/thoas/go-funk"
@@ -33,7 +34,7 @@ func (ce *competitionEngine) emitEvent(eventName string, playerID string, compet
 func (ce *competitionEngine) emitErrorEvent(eventName RequestAction, playerID string, err error, competition *Competition) {
 	competition.RefreshUpdateAt()
 	// fmt.Printf("->[Competition][#%d][%s] emit ERROR Event: %s, Error: %v\n", competition.UpdateSerial, playerID, eventName, err)
-	ce.onCompetitionErrorUpdated(err)
+	ce.onCompetitionErrorUpdated(competition, err)
 }
 
 func (ce *competitionEngine) run() {
@@ -172,7 +173,11 @@ func (ce *competitionEngine) handlePlayerAddon(payload Payload) {
 	competition.PlayerAddon(tableID, joinPlayer.PlayerID, playerIdx, joinPlayer.RedeemChips)
 
 	// call tableEngine
-	if err := ce.tableBackend.PlayerRedeemChips(tableID, joinPlayer.PlayerID, joinPlayer.RedeemChips); err != nil {
+	jp := pokertable.JoinPlayer{
+		PlayerID:    joinPlayer.PlayerID,
+		RedeemChips: joinPlayer.RedeemChips,
+	}
+	if err := ce.tableBackend.PlayerRedeemChips(tableID, jp); err != nil {
 		ce.emitErrorEvent("PlayerAddon -> PlayerRedeemChips", joinPlayer.PlayerID, err, competition)
 		return
 	}
@@ -202,7 +207,7 @@ func (ce *competitionEngine) handlePlayerRefund(payload Payload) {
 
 	if competition.Meta.Mode == CompetitionMode_CT {
 		// call tableEngine
-		if err := ce.tableEngine.PlayersLeave(tableID, []string{playerID}); err != nil {
+		if err := ce.tableBackend.PlayersLeave(tableID, []string{playerID}); err != nil {
 			ce.emitErrorEvent("PlayerRefund -> PlayersLeave Table", playerID, err, competition)
 			return
 		}
@@ -236,7 +241,7 @@ func (ce *competitionEngine) handlePlayerLeave(payload Payload) {
 	}
 
 	// call tableEngine
-	if err := ce.tableEngine.PlayersLeave(tableID, []string{playerID}); err != nil {
+	if err := ce.tableBackend.PlayersLeave(tableID, []string{playerID}); err != nil {
 		ce.emitErrorEvent("PlayerLeave -> PlayersLeave Table", playerID, err, competition)
 		return
 	}
@@ -250,11 +255,9 @@ func (ce *competitionEngine) handlePlayerLeave(payload Payload) {
 	ce.emitEvent("PlayerLeave", playerID, competition)
 }
 
-func (ce *competitionEngine) onCompetitionTableErrorUpdated(err error) {
-	ce.onTableErrorUpdated(err)
-}
-
-func (ce *competitionEngine) onCompetitionTableUpdated(table *pokertable.Table) {
+// func (ce *competitionEngine) onCompetitionTableUpdated(table *pokertable.Table) {
+func (ce *competitionEngine) UpdateTable(table *pokertable.Table) {
+	fmt.Println("[competitionEngine#UpdateTable] Table: ", table.State.Status)
 	c, exist := ce.competitions.Load(table.Meta.CompetitionMeta.ID)
 	if !exist {
 		return
@@ -267,7 +270,6 @@ func (ce *competitionEngine) onCompetitionTableUpdated(table *pokertable.Table) 
 	if tableIdx == UnsetValue {
 		return
 	}
-	ce.onTableUpdated(table)
 
 	// 更新 competition table
 	competition.State.Tables[tableIdx] = table
@@ -289,7 +291,7 @@ func (ce *competitionEngine) onCompetitionTableUpdated(table *pokertable.Table) 
 func (ce *competitionEngine) addCompetitionTable(competition *Competition, tableSetting TableSetting) (string, error) {
 	// create table
 	setting := NewPokerTableSetting(competition.ID, competition.Meta, tableSetting)
-	table, err := ce.tableEngine.CreateTable(setting)
+	table, err := ce.tableBackend.CreateTable(setting)
 	if err != nil {
 		return "", err
 	}
@@ -318,7 +320,7 @@ func (ce *competitionEngine) handleCTTableCreated(competition *Competition, tabl
 		return
 	}
 
-	if err := ce.tableEngine.StartTableGame(table.ID); err != nil {
+	if err := ce.tableBackend.StartTableGame(table.ID); err != nil {
 		ce.emitErrorEvent("CT Auto StartTableGame", "", err, competition)
 		return
 	}
@@ -330,7 +332,7 @@ func (ce *competitionEngine) updatePauseCompetition(competition *Competition, ta
 	} else if len(table.AlivePlayers()) > competition.Meta.TableMinPlayerCount {
 		// 人數又足以開始新遊戲一定是延遲買入階段
 		competition.State.Status = CompetitionStateStatus_DelayedBuyin
-		_ = ce.tableEngine.TableGameOpen(table.ID)
+		_ = ce.tableBackend.TableGameOpen(table.ID)
 		ce.emitEvent("Game Reopen:", "", competition)
 	}
 }
@@ -419,14 +421,14 @@ func (ce *competitionEngine) settleCompetitionTable(competition *Competition, ta
 	}
 
 	// TableEngine Player Leave
-	_ = ce.tableEngine.PlayersLeave(table.ID, knockoutPlayerIDs)
+	_ = ce.tableBackend.PlayersLeave(table.ID, knockoutPlayerIDs)
 
 	// 桌次處理
 	switch competition.Meta.Mode {
 	case CompetitionMode_CT:
 		// 結束桌
 		if table.IsClose() {
-			_ = ce.tableEngine.DeleteTable(table.ID)
+			_ = ce.tableBackend.DeleteTable(table.ID)
 		}
 	case CompetitionMode_MTT:
 		// 拆併桌更新賽事狀態
@@ -443,7 +445,7 @@ func (ce *competitionEngine) settleCompetitionTable(competition *Competition, ta
 		isSuspend, err := ce.seatManagerUpdateTable(competition.ID, table, currentPlayerIDs)
 		if err == nil && isSuspend {
 			// call table agent to balance table
-			_ = ce.tableEngine.BalanceTable(table.ID)
+			_ = ce.tableBackend.BalanceTable(table.ID)
 
 			// update player status
 			for _, playerID := range currentPlayerIDs {

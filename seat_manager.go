@@ -1,6 +1,7 @@
 package pokercompetition
 
 import (
+	"github.com/thoas/go-funk"
 	"github.com/weedbox/pokertable"
 	"github.com/weedbox/pokertablebalancer/psae"
 )
@@ -13,7 +14,6 @@ func (ce *competitionEngine) activateSeatManager(competitionID string, meta Comp
 	g := psae.NewGame()
 	g.MaxPlayersPerTable = meta.TableMaxSeatCount
 	g.MinInitialPlayers = meta.TableMinPlayerCount
-	g.TableLimit = 9999 // TODO: ask for max value
 	ce.seatManager.RegisterCompetition(competitionID, g)
 }
 
@@ -50,11 +50,20 @@ func (ce *competitionEngine) seatManagerUpdateTable(competitionID string, table 
 	}
 
 	// utgIndex 預設是 dealerIndex
-	currUGSeat := table.State.CurrentDealerSeat
-	if len(table.State.GamePlayerIndexes) > 4 {
-		// 4 人以上才有 utg
-		ugPlayerIdx := table.State.GamePlayerIndexes[3]
-		currUGSeat = table.State.PlayerStates[ugPlayerIdx].Seat
+	targetPlayerIdx := table.State.GamePlayerIndexes[0]
+	if table.State.CurrentBBSeat != UnsetValue {
+		for _, playerIdx := range table.State.GamePlayerIndexes {
+			if funk.Contains(table.State.PlayerStates[playerIdx].Positions, pokertable.Position_BB) {
+				targetPlayerIdx = playerIdx
+				break
+			}
+		}
+
+	}
+
+	currUGSeat := table.State.PlayerStates[targetPlayerIdx].Seat + 1
+	if currUGSeat == table.Meta.CompetitionMeta.TableMaxSeatCount {
+		currUGSeat = 0
 	}
 
 	tableSeats := 0
