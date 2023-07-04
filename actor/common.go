@@ -61,7 +61,7 @@ func NewCTCompetitionSetting() pokercompetition.CompetitionSetting {
 				MinTicket:   1,
 				MaxTicket:   2,
 				MaxTime:     6,
-				WaitingTime: 15,
+				WaitingTime: 3,
 			},
 			AddonSetting: pokercompetition.AddonSetting{
 				IsBreakOnly: true,

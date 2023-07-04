@@ -17,13 +17,22 @@ type ActionProbability struct {
 
 var (
 	actionProbabilities = []ActionProbability{
-		{Action: "check", Weight: 0.1},
+		{Action: "check", Weight: 0.0},
 		{Action: "call", Weight: 0.3},
-		{Action: "fold", Weight: 0.2},
-		{Action: "allin", Weight: 0.05},
-		{Action: "raise", Weight: 0.25},
+		{Action: "fold", Weight: 0.0},
+		{Action: "allin", Weight: 0.25},
+		{Action: "raise", Weight: 0.35},
 		{Action: "bet", Weight: 0.1},
 	}
+
+	// actionProbabilities = []ActionProbability{
+	// 	{Action: "check", Weight: 0.1},
+	// 	{Action: "call", Weight: 0.3},
+	// 	{Action: "fold", Weight: 0.2},
+	// 	{Action: "allin", Weight: 0.05},
+	// 	{Action: "raise", Weight: 0.25},
+	// 	{Action: "bet", Weight: 0.1},
+	// }
 )
 
 type botRunner struct {
@@ -137,18 +146,20 @@ func (br *botRunner) requestMove() error {
 		}
 	}
 
-	if !br.isHumanized || br.tableInfo.Meta.CompetitionMeta.ActionTime == 0 {
-		// fmt.Printf("[1][#%d][%d][%s][%s] br.requestAI\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
-		return br.requestAI()
-	}
+	// if !br.isHumanized || br.tableInfo.Meta.CompetitionMeta.ActionTime == 0 {
+	// 	// fmt.Printf("[1][#%d][%d][%s][%s] br.requestAI\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
+	// 	return br.requestAI()
+	// }
 
 	// For simulating human-like behavior, to incorporate random delays when performing actions.
-	thinkingTime := rand.Intn(br.tableInfo.Meta.CompetitionMeta.ActionTime)
-	if thinkingTime == 0 {
-		return br.requestAI()
-	}
+	// thinkingTime := rand.Intn(br.tableInfo.Meta.CompetitionMeta.ActionTime)
+	// if thinkingTime == 0 {
+	// 	return br.requestAI()
+	// }
 
-	return br.timebank.NewTask(time.Duration(thinkingTime)*time.Second, func(isCancelled bool) {
+	return br.timebank.NewTask(time.Duration(100)*time.Millisecond, func(isCancelled bool) {
+
+		// return br.timebank.NewTask(time.Duration(thinkingTime)*time.Second, func(isCancelled bool) {
 
 		if isCancelled {
 			return
