@@ -37,7 +37,7 @@ func (ce *competitionEngine) seatManagerJoinPlayer(competitionID string, playerI
 	}
 }
 
-func (ce *competitionEngine) seatManagerUpdateTable(competitionID string, table *pokertable.Table, currentPlayerIDs []string) (bool, error) {
+func (ce *competitionEngine) seatManagerUpdateTable(competitionID string, table *pokertable.Table, alivePlayerIDs []string) (bool, error) {
 	if ce.seatManager == nil {
 		return false, nil
 	}
@@ -58,7 +58,6 @@ func (ce *competitionEngine) seatManagerUpdateTable(competitionID string, table 
 				break
 			}
 		}
-
 	}
 
 	currUGSeat := table.State.PlayerStates[targetPlayerIdx].Seat + 1
@@ -76,7 +75,7 @@ func (ce *competitionEngine) seatManagerUpdateTable(competitionID string, table 
 
 	// 更新玩家列表
 	ts.Players = make(map[string]*psae.Player)
-	for _, pId := range currentPlayerIDs {
+	for _, pId := range alivePlayerIDs {
 		ts.Players[pId] = &psae.Player{
 			ID: pId,
 		}

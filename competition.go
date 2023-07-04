@@ -15,13 +15,13 @@ type CompetitionRule string
 
 const (
 	// CompetitionStateStatus
-	CompetitionStateStatus_Uncreated     CompetitionStateStatus = "uncreated"     // 賽事尚未建立
-	CompetitionStateStatus_Unregistering CompetitionStateStatus = "unregistering" // 賽事已建立 (但不可報名)
-	CompetitionStateStatus_Registering   CompetitionStateStatus = "registering"   // 賽事已建立 (可報名參賽)
-	CompetitionStateStatus_DelayedBuyin  CompetitionStateStatus = "delayed_buyin" // 賽事已建立 (延遲買入)
-	CompetitionStateStatus_StoppedBuyin  CompetitionStateStatus = "stopped_buyin" // 賽事已建立 (停止買入)
-	CompetitionStateStatus_End           CompetitionStateStatus = "end"           // 賽事已結束
-	CompetitionStateStatus_Restoring     CompetitionStateStatus = "restoring"     // 賽事資料轉移中 (Graceful Shutdown Use)
+	// CompetitionStateStatus_Uncreated     CompetitionStateStatus = "uncreated"     // 賽事尚未建立
+	// CompetitionStateStatus_Unregistering CompetitionStateStatus = "unregistering" // 賽事已建立 (但不可報名)
+	CompetitionStateStatus_Registering  CompetitionStateStatus = "registering"   // 賽事已建立 (可報名參賽)
+	CompetitionStateStatus_DelayedBuyIn CompetitionStateStatus = "delayed_buyin" // 賽事已建立 (延遲買入)
+	CompetitionStateStatus_StoppedBuyIn CompetitionStateStatus = "stopped_buyin" // 賽事已建立 (停止買入)
+	CompetitionStateStatus_End          CompetitionStateStatus = "end"           // 賽事已結束
+	CompetitionStateStatus_Restoring    CompetitionStateStatus = "restoring"     // 賽事資料轉移中 (Graceful Shutdown Use)
 
 	// CompetitionPlayerStatus
 	CompetitionPlayerStatus_WaitingTableBalancing CompetitionPlayerStatus = "waiting_table_balancing" // 等待拆併桌中
@@ -160,138 +160,6 @@ type AddonSetting struct {
 	MaxTime     int     `json:"max_time"`      // 最大次數
 }
 
-// Competition Setters
-func (c *Competition) RefreshUpdateAt() {
-	c.UpdateAt = time.Now().Unix()
-	c.UpdateSerial++
-}
-
-func (c *Competition) ConfigureWithSetting(setting CompetitionSetting) {
-	// configure meta
-	c.Meta = setting.Meta
-
-	// configure state
-	state := CompetitionState{
-		OpenAt:    time.Now().Unix(),
-		DisableAt: setting.DisableAt,
-		StartAt:   setting.StartAt,
-		EndAt:     UnsetValue,
-		Players:   make([]*CompetitionPlayer, 0),
-		Status:    CompetitionStateStatus_Registering,
-		Tables:    make([]*pokertable.Table, 0),
-		Rankings:  make([]*CompetitionRank, 0),
-	}
-	c.State = &state
-}
-
-func (c *Competition) Close() {
-	if c.Meta.Mode == CompetitionMode_MTT {
-		c.State.EndAt = time.Now().Unix()
-	}
-	c.State.Status = CompetitionStateStatus_End
-}
-
-func (c *Competition) AddTable(table *pokertable.Table, playerCacheHandler func(PlayerCache)) {
-	// update tables
-	c.State.Tables = append(c.State.Tables, table)
-
-	// update players
-	newPlayerData := make(map[string]int64)
-	for _, ps := range table.State.PlayerStates {
-		newPlayerData[ps.PlayerID] = ps.Bankroll
-	}
-
-	// find existing players
-	existingPlayerData := make(map[string]int64)
-	for _, player := range c.State.Players {
-		if bankroll, exist := newPlayerData[player.PlayerID]; exist {
-			existingPlayerData[player.PlayerID] = bankroll
-		}
-	}
-
-	// remove existing player data from new player data
-	for playerID := range existingPlayerData {
-		delete(newPlayerData, playerID)
-	}
-
-	// update existing player data
-	if len(existingPlayerData) > 0 {
-		for i := 0; i < len(c.State.Players); i++ {
-			player := c.State.Players[i]
-			if bankroll, exist := existingPlayerData[player.PlayerID]; exist {
-				c.State.Players[i].Chips = bankroll
-				c.State.Players[i].Status = CompetitionPlayerStatus_Playing
-			}
-		}
-	}
-
-	// add new player data
-	if len(newPlayerData) > 0 {
-		newPlayerIdx := len(c.State.Players)
-		newPlayers := make([]*CompetitionPlayer, 0)
-		for playerID, bankroll := range newPlayerData {
-			player, playerCache := newDefaultCompetitionPlayerData(table.ID, playerID, bankroll)
-			newPlayers = append(newPlayers, &player)
-			playerCache.PlayerIdx = newPlayerIdx
-			playerCacheHandler(playerCache)
-			newPlayerIdx++
-
-		}
-		c.State.Players = append(c.State.Players, newPlayers...)
-	}
-}
-
-func (c *Competition) Start() {
-	if c.Meta.Blind.FinalBuyInLevel <= 0 {
-		c.State.Status = CompetitionStateStatus_StoppedBuyin
-	} else {
-		c.State.Status = CompetitionStateStatus_DelayedBuyin
-	}
-
-	if c.Meta.Mode == CompetitionMode_CT {
-		c.State.StartAt = time.Now().Unix()
-		c.State.EndAt = c.State.StartAt + int64((time.Duration(c.Meta.MaxDuration) * time.Minute).Seconds())
-	}
-}
-
-func (c *Competition) DeleteTable(targetIdx int) {
-	c.State.Tables = append(c.State.Tables[:targetIdx], c.State.Tables[targetIdx+1:]...)
-}
-
-func (c *Competition) DeletePlayer(targetIdx int) {
-	c.State.Players = append(c.State.Players[:targetIdx], c.State.Players[targetIdx+1:]...)
-}
-
-func (c *Competition) PlayerJoin(tableID, playerID string, playerIdx int, redeemChips int64, isBuyIn bool, buyInPlayerCacheHandler func(PlayerCache), reBuyPlayerCacheHandler func(int)) {
-	if isBuyIn {
-		player, playerCache := newDefaultCompetitionPlayerData(tableID, playerID, redeemChips)
-		if c.Meta.Mode == CompetitionMode_MTT && c.State.Status == CompetitionStateStatus_Registering {
-			// MTT 且尚未開賽: 玩家狀態為等待拆併桌中
-			player.Status = CompetitionPlayerStatus_WaitingTableBalancing
-		}
-		c.State.Players = append(c.State.Players, &player)
-		playerCache.PlayerIdx = len(c.State.Players) - 1
-		buyInPlayerCacheHandler(playerCache)
-	} else {
-		// 若是 IsReBuying 則更新相關數據，否則是拆併桌移動到新桌
-		c.State.Players[playerIdx].CurrentTableID = tableID
-		if c.State.Players[playerIdx].IsReBuying {
-			// ReBuy logic
-			c.State.Players[playerIdx].Chips = redeemChips
-			c.State.Players[playerIdx].ReBuyTimes++
-			c.State.Players[playerIdx].IsReBuying = false
-			c.State.Players[playerIdx].ReBuyEndAt = UnsetValue
-			reBuyPlayerCacheHandler(c.State.Players[playerIdx].ReBuyTimes)
-		}
-	}
-}
-
-func (c *Competition) PlayerAddon(tableID, playerID string, playerIdx int, redeemChips int64) {
-	c.State.Players[playerIdx].CurrentTableID = tableID
-	c.State.Players[playerIdx].Chips += redeemChips
-	c.State.Players[playerIdx].AddonTimes++
-}
-
 // Competition Getters
 func (c Competition) GetJSON() (string, error) {
 	encoded, err := json.Marshal(c)
@@ -308,7 +176,12 @@ func (c Competition) CanStart() bool {
 
 	currentPlayerCount := 0
 	for _, table := range c.State.Tables {
-		currentPlayerCount += len(table.State.PlayerStates)
+		// currentPlayerCount += len(table.State.PlayerStates)
+		for _, player := range table.State.PlayerStates {
+			if player.IsIn && player.Bankroll > 0 {
+				currentPlayerCount++
+			}
+		}
 	}
 
 	if currentPlayerCount >= c.Meta.MinPlayerCount {
