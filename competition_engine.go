@@ -258,6 +258,8 @@ func (ce *competitionEngine) StartCompetition() error {
 					for _, table := range ce.competition.State.Tables {
 						if err := ce.tableManagerBackend.UpdateBlind(table.ID, level, ante, dealer, sb, bb); err != nil {
 							ce.emitErrorEvent("update blind", "", err)
+						} else {
+							ce.emitEvent("update blind", "")
 						}
 					}
 				}

@@ -122,6 +122,8 @@ func (ce *competitionEngine) handleCompetitionTableCreated(table *pokertable.Tab
 			// update blind
 			if err := ce.tableManagerBackend.UpdateBlind(table.ID, level, ante, dealer, sb, bb); err != nil {
 				ce.emitErrorEvent("update blind", "", err)
+			} else {
+				ce.emitEvent("update blind", "")
 			}
 		}
 	}
