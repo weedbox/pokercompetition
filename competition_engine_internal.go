@@ -114,15 +114,26 @@ func (ce *competitionEngine) handleCompetitionTableCreated(table *pokertable.Tab
 			return
 		}
 	}
+
+	// update blind
+	level, ante, dealer, sb, bb := ce.competition.CurrentBlindData()
+	for _, table := range ce.competition.State.Tables {
+		if !table.State.BlindState.IsSet() {
+			// update blind
+			if err := ce.tableManagerBackend.UpdateBlind(table.ID, level, ante, dealer, sb, bb); err != nil {
+				ce.emitErrorEvent("update blind", "", err)
+			}
+		}
+	}
 }
 
 func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tableIdx int) {
-	if table.ShouldClose() {
+	if ce.shouldCloseTable(table.State.StartAt, len(table.AlivePlayers())) {
 		ce.closeCompetitionTable(table, tableIdx)
 		return
 	}
 
-	if ce.competition.Meta.Mode == CompetitionMode_CT {
+	reopenGame := func(ce *competitionEngine, table *pokertable.Table) {
 		readyPlayersCount := 0
 		for _, p := range table.State.PlayerStates {
 			if p.IsIn && p.Bankroll > 0 {
@@ -136,6 +147,49 @@ func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tab
 			}
 			ce.emitEvent("Game Reopen:", "")
 		}
+	}
+
+	switch ce.competition.Meta.Mode {
+	case CompetitionMode_CT:
+		reopenGame(ce, table)
+	case CompetitionMode_MTT:
+		if ce.competition.IsBreaking() {
+			if !ce.setResumeFromPauseTask {
+				// resume game from breaking
+				endAt := ce.competition.State.BlindState.EndAts[ce.competition.State.BlindState.CurrentLevelIndex]
+				if err := timebank.NewTimeBank().NewTaskWithDeadline(time.Unix(endAt, 0), func(isCancelled bool) {
+					if isCancelled {
+						return
+					}
+
+					if len(ce.competition.State.Tables) > tableIdx {
+						t := ce.competition.State.Tables[tableIdx]
+						tableID := t.ID
+						if ce.shouldCloseTable(t.State.StartAt, len(t.AlivePlayers())) {
+							if err := ce.tableManagerBackend.CloseTable(tableID); err != nil {
+								ce.emitErrorEvent("resume game from breaking & close table", "", err)
+								return
+							}
+						}
+
+						autoOpenGame := t.State.Status == pokertable.TableStateStatus_TablePausing && len(t.AlivePlayers()) >= t.Meta.CompetitionMeta.TableMinPlayerCount
+						if !autoOpenGame {
+							return
+						}
+						if err := ce.tableManagerBackend.TableGameOpen(tableID); err != nil {
+							ce.emitErrorEvent("resume game from breaking & auto open next game", "", err)
+						}
+					}
+
+					ce.setResumeFromPauseTask = false
+				}); err != nil {
+					ce.emitErrorEvent("new resume game task from breaking", "", err)
+					return
+				}
+				ce.setResumeFromPauseTask = true
+			}
+		}
+		reopenGame(ce, table)
 	}
 }
 
@@ -276,7 +330,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 	}
 
 	// 根據是否達到停止買入做處理
-	if !table.State.BlindState.IsFinalBuyInLevel() {
+	if !ce.competition.State.BlindState.IsFinalBuyInLevel() {
 		// 延遲買入: 處理可補碼玩家
 		reBuyEndAt := time.Now().Add(time.Second * time.Duration(ce.competition.Meta.ReBuySetting.WaitingTime)).Unix()
 		reBuyPlayerIDs := make([]string, 0)
@@ -345,7 +399,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 
 	// 處理淘汰玩家
 	// 列出淘汰玩家
-	knockoutPlayerRankings := ce.GetSortedKnockoutPlayerRankings(ce.competition.ID, table.State.PlayerStates, ce.competition.Meta.ReBuySetting.MaxTime, table.State.BlindState.IsFinalBuyInLevel())
+	knockoutPlayerRankings := ce.GetSortedKnockoutPlayerRankings(ce.competition.ID, table.State.PlayerStates, ce.competition.Meta.ReBuySetting.MaxTime, ce.competition.State.BlindState.IsFinalBuyInLevel())
 	knockoutPlayerIDs := make([]string, 0)
 	for knockoutPlayerIDIdx := len(knockoutPlayerRankings) - 1; knockoutPlayerIDIdx >= 0; knockoutPlayerIDIdx-- {
 		knockoutPlayerID := knockoutPlayerRankings[knockoutPlayerIDIdx]
@@ -382,7 +436,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 		}
 
 		// 結束桌
-		if table.ShouldClose() {
+		if ce.shouldCloseTable(table.State.StartAt, len(table.AlivePlayers())) {
 			if err := ce.tableManagerBackend.CloseTable(table.ID); err != nil {
 				ce.emitErrorEvent("Knockout Players -> CloseTable", "", err)
 			}
@@ -405,7 +459,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 		}
 
 		// 拆併桌更新賽事狀態
-		ce.seatManagerUpdateCompetitionStatus(ce.competition.ID, table.State.BlindState.IsFinalBuyInLevel())
+		ce.seatManagerUpdateCompetitionStatus(ce.competition.ID, ce.competition.State.BlindState.IsFinalBuyInLevel())
 
 		// 拆併桌更新桌次狀態
 		isSuspend, err := ce.seatManagerUpdateTable(ce.competition.ID, table, alivePlayerIDs)
@@ -430,4 +484,14 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 			}
 		}
 	}
+}
+
+/*
+	ShouldClose 計算桌次是否已達到結束條件
+	  - 結束條件 1: 達到結束時間
+	  - 結束條件 2: 停止買入後且存活玩家小於最小開打數
+*/
+func (ce *competitionEngine) shouldCloseTable(tableStartAt int64, tableAlivePlayerCount int) bool {
+	tableEndAt := time.Unix(tableStartAt, 0).Add(time.Second * time.Duration(ce.competition.Meta.MaxDuration)).Unix()
+	return time.Now().Unix() > tableEndAt || (ce.competition.State.BlindState.IsFinalBuyInLevel() && tableAlivePlayerCount < ce.competition.Meta.TableMinPlayerCount)
 }

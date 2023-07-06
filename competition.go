@@ -66,14 +66,15 @@ type CompetitionMeta struct {
 }
 
 type CompetitionState struct {
-	OpenAt    int64                  `json:"open_at"`    // 賽事建立時間 (可報名、尚未開打)
-	DisableAt int64                  `json:"disable_at"` // 賽事未開打前，賽局可見時間 (Seconds)
-	StartAt   int64                  `json:"start_at"`   // 賽事開打時間 (可報名、開打) (Seconds)
-	EndAt     int64                  `json:"end_at"`     // 賽事結束時間 (Seconds)
-	Players   []*CompetitionPlayer   `json:"players"`    // 參與過賽事玩家陣列
-	Status    CompetitionStateStatus `json:"status"`     // 賽事狀態
-	Tables    []*pokertable.Table    `json:"tables"`     // 多桌
-	Rankings  []*CompetitionRank     `json:"rankings"`   // 玩家排名 (陣列 Index 即是排名 rank - 1, ex: index 0 -> 第一名, index 1 -> 第二名...)
+	OpenAt     int64                  `json:"open_at"`     // 賽事建立時間 (可報名、尚未開打)
+	DisableAt  int64                  `json:"disable_at"`  // 賽事未開打前，賽局可見時間 (Seconds)
+	StartAt    int64                  `json:"start_at"`    // 賽事開打時間 (可報名、開打) (Seconds)
+	EndAt      int64                  `json:"end_at"`      // 賽事結束時間 (Seconds)
+	BlindState *BlindState            `json:"blind_state"` // 盲注狀態
+	Players    []*CompetitionPlayer   `json:"players"`     // 參與過賽事玩家陣列
+	Status     CompetitionStateStatus `json:"status"`      // 賽事狀態
+	Tables     []*pokertable.Table    `json:"tables"`      // 多桌
+	Rankings   []*CompetitionRank     `json:"rankings"`    // 玩家排名 (陣列 Index 即是排名 rank - 1, ex: index 0 -> 第一名, index 1 -> 第二名...)
 }
 
 type CompetitionRank struct {
@@ -141,6 +142,12 @@ type BlindLevel struct {
 	Duration int   `json:"duration"` // 等級持續時間 (Seconds)
 }
 
+type BlindState struct {
+	FinalBuyInLevelIndex int     `json:"final_buy_in_level_idx"` // 最後買入盲注等級索引值
+	CurrentLevelIndex    int     `json:"current_level_index"`    // 現在盲注等級級別索引值
+	EndAts               []int64 `json:"end_ats"`                // 每個等級結束時間 (Seconds)
+}
+
 type BuyInSetting struct {
 	IsFree    bool `json:"is_free"`    // 是否免費參賽
 	MinTicket int  `json:"min_ticket"` // 最小票數
@@ -176,7 +183,6 @@ func (c Competition) CanStart() bool {
 
 	currentPlayerCount := 0
 	for _, table := range c.State.Tables {
-		// currentPlayerCount += len(table.State.PlayerStates)
 		for _, player := range table.State.PlayerStates {
 			if player.IsIn && player.Bankroll > 0 {
 				currentPlayerCount++
@@ -220,4 +226,31 @@ func (c Competition) FindPlayerIdx(predicate func(*CompetitionPlayer) bool) int 
 		}
 	}
 	return UnsetValue
+}
+
+func (c Competition) CurrentBlindLevel() BlindLevel {
+	return c.Meta.Blind.Levels[c.State.BlindState.CurrentLevelIndex]
+}
+
+func (c Competition) CurrentBlindData() (int, int64, int64, int64, int64) {
+	bl := c.CurrentBlindLevel()
+	dealer := int64(0)
+	if c.Meta.Blind.DealerBlindTime > 0 {
+		dealer = bl.Ante * (int64(c.Meta.Blind.DealerBlindTime) - 1)
+	}
+	return bl.Level, bl.Ante, dealer, bl.SB, bl.BB
+}
+
+func (c Competition) IsBreaking() bool {
+	return c.CurrentBlindLevel().Level == -1
+}
+
+// BlindState Getters
+func (bs BlindState) IsFinalBuyInLevel() bool {
+	// 沒有預設 FinalBuyInLevelIndex 代表不能補碼，永遠都是停止買入階段
+	if bs.FinalBuyInLevelIndex == UnsetValue {
+		return true
+	}
+
+	return bs.CurrentLevelIndex > bs.FinalBuyInLevelIndex
 }

@@ -16,23 +16,23 @@ type ActionProbability struct {
 }
 
 var (
-	actionProbabilities = []ActionProbability{
-		{Action: "check", Weight: 0.0},
-		{Action: "call", Weight: 0.3},
-		{Action: "fold", Weight: 0.0},
-		{Action: "allin", Weight: 0.25},
-		{Action: "raise", Weight: 0.35},
-		{Action: "bet", Weight: 0.1},
-	}
-
 	// actionProbabilities = []ActionProbability{
-	// 	{Action: "check", Weight: 0.1},
+	// 	{Action: "check", Weight: 0.0},
 	// 	{Action: "call", Weight: 0.3},
-	// 	{Action: "fold", Weight: 0.2},
-	// 	{Action: "allin", Weight: 0.05},
-	// 	{Action: "raise", Weight: 0.25},
+	// 	{Action: "fold", Weight: 0.0},
+	// 	{Action: "allin", Weight: 0.25},
+	// 	{Action: "raise", Weight: 0.35},
 	// 	{Action: "bet", Weight: 0.1},
 	// }
+
+	actionProbabilities = []ActionProbability{
+		{Action: "check", Weight: 0.1},
+		{Action: "call", Weight: 0.3},
+		{Action: "fold", Weight: 0.2},
+		{Action: "allin", Weight: 0.05},
+		{Action: "raise", Weight: 0.25},
+		{Action: "bet", Weight: 0.1},
+	}
 )
 
 type botRunner struct {

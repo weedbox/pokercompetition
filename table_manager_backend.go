@@ -16,6 +16,7 @@ type TableManagerBackend interface {
 	StartTableGame(tableID string) error
 	TableGameOpen(tableID string) error
 	BalanceTable(tableID string) error
+	UpdateBlind(tableID string, level int, ante, dealer, sb, bb int64) error
 
 	// TODO: test only, should remove this
 	UpdateTable(table *pokertable.Table)
@@ -87,6 +88,10 @@ func (tbm *tableManagerBackend) TableGameOpen(tableID string) error {
 
 func (tbm *tableManagerBackend) BalanceTable(tableID string) error {
 	return tbm.manager.BalanceTable(tableID)
+}
+
+func (tbm *tableManagerBackend) UpdateBlind(tableID string, level int, ante, dealer, sb, bb int64) error {
+	return tbm.manager.UpdateBlind(tableID, level, ante, dealer, sb, bb)
 }
 
 func (tbm *tableManagerBackend) UpdateTable(table *pokertable.Table) {

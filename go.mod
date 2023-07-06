@@ -6,8 +6,8 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/stretchr/testify v1.8.4
 	github.com/thoas/go-funk v0.9.3
-	github.com/weedbox/pokerface v0.0.0-20230703112811-1f48fac858b3
-	github.com/weedbox/pokertable v0.0.0-20230703121548-ece2180a3658
+	github.com/weedbox/pokerface v0.0.0-20230705025037-89ff0e2d6e09
+	github.com/weedbox/pokertable v0.0.0-20230706053536-e7f20ae42690
 	github.com/weedbox/pokertablebalancer v0.0.0-20230615080923-51d19f6291c7
 	github.com/weedbox/timebank v0.0.0-20230626195305-39f7a14ece16
 )
@@ -19,4 +19,7 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
-replace github.com/weedbox/pokertable => /Users/jeffreyyang/Desktop/work/repo/cyberpoker/pokertable
+// replace (
+// 	github.com/weedbox/pokertable => /Users/jeffreyyang/Desktop/work/repo/cyberpoker/pokertable
+// 	github.com/weedbox/pokertablebalancer => /Users/jeffreyyang/Desktop/work/repo/cyberpoker/pokertablebalancer
+// )

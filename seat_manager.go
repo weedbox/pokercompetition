@@ -29,7 +29,6 @@ func (ce *competitionEngine) seatManagerJoinPlayer(competitionID string, playerI
 	if ce.seatManager == nil {
 		return
 	}
-
 	c := ce.seatManager.GetCompetition(competitionID)
 
 	for _, pId := range playerIDs {

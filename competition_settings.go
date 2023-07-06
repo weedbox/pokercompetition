@@ -40,22 +40,6 @@ func NewPokerTableSetting(competitionID string, competitionMeta CompetitionMeta,
 			TableMinPlayerCount: competitionMeta.TableMinPlayerCount,
 			MinChipUnit:         competitionMeta.MinChipUnit,
 			ActionTime:          competitionMeta.ActionTime,
-			Blind: pokertable.Blind{
-				ID:              competitionMeta.Blind.ID,
-				Name:            competitionMeta.Blind.Name,
-				InitialLevel:    competitionMeta.Blind.InitialLevel,
-				FinalBuyInLevel: competitionMeta.Blind.FinalBuyInLevel,
-				DealerBlindTime: competitionMeta.Blind.DealerBlindTime,
-				Levels: funk.Map(competitionMeta.Blind.Levels, func(bl BlindLevel) pokertable.BlindLevel {
-					return pokertable.BlindLevel{
-						Level:    bl.Level,
-						SB:       bl.SB,
-						BB:       bl.BB,
-						Ante:     bl.Ante,
-						Duration: bl.Duration,
-					}
-				}).([]pokertable.BlindLevel),
-			},
 		},
 		JoinPlayers: funk.Map(tableSetting.JoinPlayers, func(joinPlayer JoinPlayer) pokertable.JoinPlayer {
 			return pokertable.JoinPlayer{

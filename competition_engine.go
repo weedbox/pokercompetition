@@ -63,6 +63,7 @@ type competitionEngine struct {
 	onCompetitionUpdated       func(*Competition)
 	onCompetitionErrorUpdated  func(*Competition, error)
 	onCompetitionPlayerUpdated func(*CompetitionPlayer)
+	setResumeFromPauseTask     bool
 }
 
 func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
@@ -72,6 +73,7 @@ func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
 		onCompetitionUpdated:       func(*Competition) {},
 		onCompetitionErrorUpdated:  func(*Competition, error) {},
 		onCompetitionPlayerUpdated: func(*CompetitionPlayer) {},
+		setResumeFromPauseTask:     false,
 	}
 
 	for _, opt := range opts {
@@ -128,6 +130,10 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 	}
 
 	// create competition instance
+	endAts := make([]int64, 0)
+	for i := 0; i < len(competitionSetting.Meta.Blind.Levels); i++ {
+		endAts = append(endAts, 0)
+	}
 	ce.competition = &Competition{
 		ID:   uuid.New().String(),
 		Meta: competitionSetting.Meta,
@@ -140,6 +146,11 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 			Status:    CompetitionStateStatus_Registering,
 			Tables:    make([]*pokertable.Table, 0),
 			Rankings:  make([]*CompetitionRank, 0),
+			BlindState: &BlindState{
+				FinalBuyInLevelIndex: UnsetValue,
+				CurrentLevelIndex:    UnsetValue,
+				EndAts:               endAts,
+			},
 		},
 	}
 
@@ -165,9 +176,6 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 				return nil, err
 			}
 		}
-	case CompetitionMode_MTT:
-		// 啟動拆併桌機制
-		ce.activateSeatManager(ce.competition.ID, ce.competition.Meta)
 	}
 
 	// auto startCompetition when StartAt is reached
@@ -216,6 +224,47 @@ func (ce *competitionEngine) StartCompetition() error {
 		ce.competition.State.EndAt = ce.competition.State.StartAt + int64((time.Duration(ce.competition.Meta.MaxDuration) * time.Minute).Seconds())
 	}
 
+	// 初始化盲注
+	for idx, levelState := range ce.competition.Meta.Blind.Levels {
+		if levelState.Level == ce.competition.Meta.Blind.InitialLevel {
+			ce.competition.State.BlindState.CurrentLevelIndex = idx
+		}
+		if levelState.Level == ce.competition.Meta.Blind.FinalBuyInLevel {
+			ce.competition.State.BlindState.FinalBuyInLevelIndex = idx
+		}
+	}
+
+	blindStartAt := ce.competition.State.StartAt
+	for i := (ce.competition.State.BlindState.CurrentLevelIndex); i < len(ce.competition.Meta.Blind.Levels); i++ {
+		if i == ce.competition.State.BlindState.CurrentLevelIndex {
+			ce.competition.State.BlindState.EndAts[i] = blindStartAt
+		} else {
+			ce.competition.State.BlindState.EndAts[i] = ce.competition.State.BlindState.EndAts[i-1]
+		}
+		blindPassedSeconds := int64(ce.competition.Meta.Blind.Levels[i].Duration)
+		ce.competition.State.BlindState.EndAts[i] += blindPassedSeconds
+
+		// update blind to all tables
+		go func(ce *competitionEngine, levelEndAt int64) {
+			levelEndTime := time.Unix(levelEndAt, 0)
+			timebank.NewTimeBank().NewTaskWithDeadline(levelEndTime, func(isCancelled bool) {
+				if isCancelled {
+					return
+				}
+
+				if ce.competition.State.BlindState.CurrentLevelIndex+1 < len(ce.competition.Meta.Blind.Levels) {
+					ce.competition.State.BlindState.CurrentLevelIndex++
+					level, ante, dealer, sb, bb := ce.competition.CurrentBlindData()
+					for _, table := range ce.competition.State.Tables {
+						if err := ce.tableManagerBackend.UpdateBlind(table.ID, level, ante, dealer, sb, bb); err != nil {
+							ce.emitErrorEvent("update blind", "", err)
+						}
+					}
+				}
+			})
+		}(ce, ce.competition.State.BlindState.EndAts[i])
+	}
+
 	switch ce.competition.Meta.Mode {
 	case CompetitionMode_CT:
 		// AutoEndTable (Final BuyIn Level & Table Is Pause)
@@ -245,6 +294,8 @@ func (ce *competitionEngine) StartCompetition() error {
 			return err
 		}
 	case CompetitionMode_MTT:
+		// 啟動拆併桌機制
+		ce.activateSeatManager(ce.competition.ID, ce.competition.Meta)
 		// 拆併桌加入玩家
 		playerIDs := funk.Map(ce.competition.State.Players, func(player *CompetitionPlayer) string {
 			return player.PlayerID
@@ -321,8 +372,8 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 		ce.competition.State.Players = append(ce.competition.State.Players, &player)
 		playerCache.PlayerIdx = len(ce.competition.State.Players) - 1
 		ce.insertPlayerCache(ce.competition.ID, joinPlayer.PlayerID, playerCache)
-		ce.emitEvent("PlayerJoin -> Buy In", joinPlayer.PlayerID)
-		ce.emitPlayerEvent("PlayerJoin -> Buy In", &player)
+		ce.emitEvent("PlayerBuyIn -> Buy In", joinPlayer.PlayerID)
+		ce.emitPlayerEvent("PlayerBuyIn -> Buy In", &player)
 	} else {
 		// ReBuy logic
 		ce.competition.State.Players[playerIdx].Chips = joinPlayer.RedeemChips
@@ -334,8 +385,8 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 		} else {
 			return ErrCompetitionPlayerNotFound
 		}
-		ce.emitEvent("PlayerJoin -> Re Buy", joinPlayer.PlayerID)
-		ce.emitPlayerEvent("PlayerJoin -> Re Buy", ce.competition.State.Players[playerIdx])
+		ce.emitEvent("PlayerBuyIn -> Re Buy", joinPlayer.PlayerID)
+		ce.emitPlayerEvent("PlayerBuyIn -> Re Buy", ce.competition.State.Players[playerIdx])
 	}
 
 	switch ce.competition.Meta.Mode {
@@ -349,8 +400,10 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 			ce.emitErrorEvent("PlayerBuyIn -> PlayerReserve", joinPlayer.PlayerID, err)
 		}
 	case CompetitionMode_MTT:
-		// MTT 一律丟到拆併桌程式重新配桌
-		ce.seatManagerJoinPlayer(ce.competition.ID, []string{joinPlayer.PlayerID})
+		// 比賽開打後 MTT 一律丟到拆併桌程式重新配桌
+		if ce.competition.State.Status == CompetitionStateStatus_DelayedBuyIn {
+			ce.seatManagerJoinPlayer(ce.competition.ID, []string{joinPlayer.PlayerID})
+		}
 	}
 
 	return nil
