@@ -3,6 +3,7 @@ package actor
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/weedbox/pokercompetition"
@@ -10,18 +11,26 @@ import (
 )
 
 func DebugPrintTableGameOpenedShort(t pokertable.Table) {
-	fmt.Printf("---------- [%s] 第 (%d) 手開局 ----------\n", t.ID, t.State.GameCount)
-	fmt.Println("[Game Players]")
+	playerIDs := make([]string, 0)
 	for _, playerIdx := range t.State.GamePlayerIndexes {
-		player := t.State.PlayerStates[playerIdx]
-		seat := "X"
-		if player.Seat != -1 {
-			seat = strconv.Itoa(player.Seat)
-		}
-		fmt.Printf("seat: %s [%v], player: %s, bankroll: %d, between bb-dealer? %v\n", seat, player.Positions, player.PlayerID, player.Bankroll, player.IsBetweenDealerBB)
+		playerIDs = append(playerIDs, t.State.PlayerStates[playerIdx].PlayerID)
 	}
-
-	fmt.Println()
+	logString := fmt.Sprintf("---------- [%s] 第 (%d) 手開局 [%d 人 (%s)] ----------", t.ID, t.State.GameCount, len(t.State.GamePlayerIndexes), strings.Join(playerIDs, ","))
+	// blindLevel := "中場休息"
+	// if t.State.BlindState.Level != -1 {
+	// 	blindLevel = strconv.Itoa(t.State.BlindState.Level)
+	// }
+	// logString += fmt.Sprintf("[Blind] level: %s, ante: %d, dealer: %d, sb: %d, bb: %d\n", blindLevel, t.State.BlindState.Ante, t.State.BlindState.Dealer, t.State.BlindState.SB, t.State.BlindState.BB)
+	// logString += "\n[Game Players]\n"
+	// for _, playerIdx := range t.State.GamePlayerIndexes {
+	// 	player := t.State.PlayerStates[playerIdx]
+	// 	seat := "X"
+	// 	if player.Seat != -1 {
+	// 		seat = strconv.Itoa(player.Seat)
+	// 	}
+	// 	logString += fmt.Sprintf("seat: %s [%v], bankroll: %d, player: %s\n", seat, player.Positions, player.Bankroll, player.PlayerID)
+	// }
+	fmt.Println(logString)
 }
 
 func DebugPrintTableGameSettledShort(t pokertable.Table, extra string) {
@@ -56,7 +65,7 @@ func DebugPrintTableGameOpened(t pokertable.Table) {
 		if player.Seat != -1 {
 			seat = strconv.Itoa(player.Seat)
 		}
-		fmt.Printf("seat: %s [%v], participated: %s, player: %s\n", seat, player.Positions, boolToString(player.IsParticipated), player.PlayerID)
+		fmt.Printf("seat: %s [%v], in: %s, participated: %s, player: %s\n", seat, player.Positions, boolToString(player.IsIn), boolToString(player.IsParticipated), player.PlayerID)
 	}
 
 	if t.State.CurrentDealerSeat != -1 {

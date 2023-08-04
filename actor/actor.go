@@ -49,7 +49,9 @@ func (a *actor) UpdateTableState(tableInfo *pokertable.Table) error {
 	a.tableInfo = tableInfo
 	err := a.runner.UpdateTableState(tableInfo)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Printf("[%s] Error: %+v\n", tableInfo.ID, err)
+		json, _ := tableInfo.GetJSON()
+		fmt.Println(json)
 	}
 
 	return nil

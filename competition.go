@@ -252,5 +252,5 @@ func (bs BlindState) IsFinalBuyInLevel() bool {
 		return true
 	}
 
-	return bs.CurrentLevelIndex > bs.FinalBuyInLevelIndex
+	return bs.CurrentLevelIndex >= bs.FinalBuyInLevelIndex
 }

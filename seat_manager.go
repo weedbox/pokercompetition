@@ -1,7 +1,8 @@
 package pokercompetition
 
 import (
-	"github.com/thoas/go-funk"
+	"fmt"
+
 	"github.com/weedbox/pokertable"
 	"github.com/weedbox/pokertablebalancer/psae"
 )
@@ -36,7 +37,7 @@ func (ce *competitionEngine) seatManagerJoinPlayer(competitionID string, playerI
 	}
 }
 
-func (ce *competitionEngine) seatManagerUpdateTable(competitionID string, table *pokertable.Table, alivePlayerIDs []string) (bool, error) {
+func (ce *competitionEngine) seatManagerUpdateTable(competitionID string, table *pokertable.Table, alivePlayerIDs []string, currUGSeat, totalAvailableSeats int) (bool, error) {
 	if ce.seatManager == nil {
 		return false, nil
 	}
@@ -48,29 +49,8 @@ func (ce *competitionEngine) seatManagerUpdateTable(competitionID string, table 
 		return false, nil
 	}
 
-	// utgIndex 預設是 dealerIndex
-	targetPlayerIdx := table.State.GamePlayerIndexes[0]
-	if table.State.CurrentBBSeat != UnsetValue {
-		for _, playerIdx := range table.State.GamePlayerIndexes {
-			if funk.Contains(table.State.PlayerStates[playerIdx].Positions, pokertable.Position_BB) {
-				targetPlayerIdx = playerIdx
-				break
-			}
-		}
-	}
-
-	currUGSeat := table.State.PlayerStates[targetPlayerIdx].Seat + 1
-	if currUGSeat == table.Meta.CompetitionMeta.TableMaxSeatCount {
-		currUGSeat = 0
-	}
-
-	tableSeats := 0
-	for _, playerIdx := range table.State.GamePlayerIndexes {
-		tableSeats += 1 << table.State.PlayerStates[playerIdx].Seat
-	}
-
 	ts.LastGameID = table.State.GameState.GameID
-	ts.AvailableSeats = ce.calcAvailableSeats(tableSeats, ts.TotalSeats, table.State.CurrentDealerSeat, currUGSeat)
+	ts.AvailableSeats = ce.calcAvailableSeats(totalAvailableSeats, ts.TotalSeats, table.State.CurrentDealerSeat, currUGSeat)
 
 	// 更新玩家列表
 	ts.Players = make(map[string]*psae.Player)
@@ -135,6 +115,6 @@ func (ce *competitionEngine) calcAvailableSeats(seats int, totalSeats int, deale
 			availableSeats++
 		}
 	}
-
+	fmt.Println("[DEBUG#MTT#calcAvailableSeats] availableSeats:", availableSeats)
 	return availableSeats
 }

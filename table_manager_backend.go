@@ -1,6 +1,10 @@
 package pokercompetition
 
-import "github.com/weedbox/pokertable"
+import (
+	"encoding/json"
+
+	"github.com/weedbox/pokertable"
+)
 
 type TableManagerBackend interface {
 	// Events
@@ -52,7 +56,18 @@ func (tmb *tableManagerBackend) CreateTable(setting pokertable.TableSetting) (*p
 	}
 
 	te.OnTableUpdated(func(t *pokertable.Table) {
-		tmb.onTableUpdated(t)
+		data, err := json.Marshal(t)
+		if err != nil {
+			return
+		}
+
+		var cloneTable pokertable.Table
+		err = json.Unmarshal([]byte(data), &cloneTable)
+		if err != nil {
+			return
+		}
+
+		tmb.onTableUpdated(&cloneTable)
 	})
 
 	return table, nil
