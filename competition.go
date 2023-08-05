@@ -15,13 +15,12 @@ type CompetitionRule string
 
 const (
 	// CompetitionStateStatus
-	// CompetitionStateStatus_Uncreated     CompetitionStateStatus = "uncreated"     // 賽事尚未建立
-	// CompetitionStateStatus_Unregistering CompetitionStateStatus = "unregistering" // 賽事已建立 (但不可報名)
-	CompetitionStateStatus_Registering  CompetitionStateStatus = "registering"   // 賽事已建立 (可報名參賽)
-	CompetitionStateStatus_DelayedBuyIn CompetitionStateStatus = "delayed_buyin" // 賽事已建立 (延遲買入)
-	CompetitionStateStatus_StoppedBuyIn CompetitionStateStatus = "stopped_buyin" // 賽事已建立 (停止買入)
-	CompetitionStateStatus_End          CompetitionStateStatus = "end"           // 賽事已結束
-	CompetitionStateStatus_Restoring    CompetitionStateStatus = "restoring"     // 賽事資料轉移中 (Graceful Shutdown Use)
+	CompetitionStateStatus_PreRegistering CompetitionStateStatus = "pre-registering" // 賽事已建立 (但不可報名)
+	CompetitionStateStatus_Registering    CompetitionStateStatus = "registering"     // 賽事已建立 (可報名參賽)
+	CompetitionStateStatus_DelayedBuyIn   CompetitionStateStatus = "delayed_buyin"   // 賽事已建立 (延遲買入)
+	CompetitionStateStatus_StoppedBuyIn   CompetitionStateStatus = "stopped_buyin"   // 賽事已建立 (停止買入)
+	CompetitionStateStatus_End            CompetitionStateStatus = "end"             // 賽事已結束
+	CompetitionStateStatus_Restoring      CompetitionStateStatus = "restoring"       // 賽事資料轉移中 (Graceful Shutdown Use)
 
 	// CompetitionPlayerStatus
 	CompetitionPlayerStatus_WaitingTableBalancing CompetitionPlayerStatus = "waiting_table_balancing" // 等待拆併桌中
@@ -49,8 +48,6 @@ type Competition struct {
 
 type CompetitionMeta struct {
 	Blind               Blind           `json:"blind"`                  // 盲注資訊
-	Ticket              Ticket          `json:"ticket"`                 // 票券資訊
-	Scene               string          `json:"scene"`                  // 場景
 	MaxDuration         int             `json:"max_duration"`           // 比賽時間總長 (Seconds)
 	MinPlayerCount      int             `json:"min_player_count"`       // 最小參賽人數
 	MaxPlayerCount      int             `json:"max_player_count"`       // 最大參賽人數
@@ -58,7 +55,6 @@ type CompetitionMeta struct {
 	TableMinPlayerCount int             `json:"table_min_player_count"` // 每桌最小開打數
 	Rule                CompetitionRule `json:"rule"`                   // 德州撲克規則, 常牌(default), 短牌(short_deck), 奧瑪哈(omaha)
 	Mode                CompetitionMode `json:"mode"`                   // 賽事模式 (CT, MTT, Cash)
-	BuyInSetting        BuyInSetting    `json:"buy_in_setting"`         // BuyIn 設定
 	ReBuySetting        ReBuySetting    `json:"re_buy_setting"`         // ReBuy 設定
 	AddonSetting        AddonSetting    `json:"addon_setting"`          // Addon 設定
 	ActionTime          int             `json:"action_time"`            // 思考時間 (Seconds)
@@ -120,14 +116,8 @@ type CompetitionPlayer struct {
 	TotalCheckTimes       int   `json:"total_check_times"`        // 過牌總次數
 }
 
-type Ticket struct {
-	ID   string `json:"id"`   // ID
-	Name string `json:"name"` // 名稱
-}
-
 type Blind struct {
 	ID              string       `json:"id"`                 // ID
-	Name            string       `json:"name"`               // 名稱
 	InitialLevel    int          `json:"initial_level"`      // 起始盲注級別
 	FinalBuyInLevel int          `json:"final_buy_in_level"` // 最後買入盲注等級
 	DealerBlindTime int          `json:"dealer_blind_time"`  // Dealer 位置要收取的前注倍數 (短牌用)
@@ -148,15 +138,7 @@ type BlindState struct {
 	EndAts               []int64 `json:"end_ats"`                // 每個等級結束時間 (Seconds)
 }
 
-type BuyInSetting struct {
-	IsFree    bool `json:"is_free"`    // 是否免費參賽
-	MinTicket int  `json:"min_ticket"` // 最小票數
-	MaxTicket int  `json:"max_ticket"` // 最大票數
-}
-
 type ReBuySetting struct {
-	MinTicket   int `json:"min_ticket"`   // 最小票數
-	MaxTicket   int `json:"max_ticket"`   // 最大票數
 	MaxTime     int `json:"max_time"`     // 最大次數
 	WaitingTime int `json:"waiting_time"` // 玩家可補碼時間 (Seconds)
 }

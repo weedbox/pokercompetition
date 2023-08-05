@@ -3,7 +3,6 @@ package pokercompetition
 import (
 	"errors"
 	"fmt"
-	"math/rand"
 	"sync"
 	"time"
 
@@ -548,24 +547,9 @@ AutoCreateTable 拆併桌自動開桌
   - 適用時機: 拆併桌自動觸發
 */
 func (ce *competitionEngine) AutoCreateTable(competitionID string) (*pokertablebalancer.CreateTableResp, error) {
-	randomString := func(size int) string {
-		source := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890"
-		sourceRune := []rune(source)
-		builder := make([]rune, size)
-		for i := range builder {
-			builder[i] = sourceRune[rand.Intn(len(sourceRune))]
-		}
-		return string(builder)
-	}
-
-	count := len(ce.competition.State.Tables)
-	code := fmt.Sprintf("%05d", count+1)
 	tableSetting := TableSetting{
-		ShortID:        randomString(6),
-		Code:           code,
-		Name:           code,
-		InvitationCode: "",
-		JoinPlayers:    []JoinPlayer{},
+		TableID:     uuid.New().String(),
+		JoinPlayers: []JoinPlayer{},
 	}
 	tableID, err := ce.addCompetitionTable(tableSetting, CompetitionPlayerStatus_WaitingTableBalancing)
 	if err != nil {

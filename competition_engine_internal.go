@@ -190,7 +190,7 @@ func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tab
 							}
 						}
 
-						autoOpenGame := t.State.Status == pokertable.TableStateStatus_TablePausing && len(t.AlivePlayers()) >= t.Meta.CompetitionMeta.TableMinPlayerCount
+						autoOpenGame := t.State.Status == pokertable.TableStateStatus_TablePausing && len(t.AlivePlayers()) >= t.Meta.TableMinPlayerCount
 						if !autoOpenGame {
 							return
 						}
@@ -502,7 +502,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 		}
 
 		currUGSeat = table.State.PlayerStates[targetPlayerIdx].Seat + 1
-		if currUGSeat == table.Meta.CompetitionMeta.TableMaxSeatCount {
+		if currUGSeat == table.Meta.TableMaxSeatCount {
 			currUGSeat = 0
 		}
 

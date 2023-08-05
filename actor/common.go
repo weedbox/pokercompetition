@@ -14,7 +14,6 @@ func NewCTCompetitionSetting() pokercompetition.CompetitionSetting {
 		Meta: pokercompetition.CompetitionMeta{
 			Blind: pokercompetition.Blind{
 				ID:              uuid.New().String(),
-				Name:            "20 min FAST",
 				InitialLevel:    1,
 				FinalBuyInLevel: 2,
 				DealerBlindTime: 1,
@@ -42,24 +41,12 @@ func NewCTCompetitionSetting() pokercompetition.CompetitionSetting {
 					},
 				},
 			},
-			Ticket: pokercompetition.Ticket{
-				ID:   uuid.New().String(),
-				Name: "CT 3300 20 min",
-			},
-			Scene:          "Scene 1",
 			MaxDuration:    15,
 			MinPlayerCount: 3,
 			MaxPlayerCount: 9,
 			Rule:           pokercompetition.CompetitionRule_Default,
 			Mode:           pokercompetition.CompetitionMode_CT,
-			BuyInSetting: pokercompetition.BuyInSetting{
-				IsFree:    false,
-				MinTicket: 1,
-				MaxTicket: 2,
-			},
 			ReBuySetting: pokercompetition.ReBuySetting{
-				MinTicket:   1,
-				MaxTicket:   2,
 				MaxTime:     6,
 				WaitingTime: 3,
 			},
@@ -77,11 +64,8 @@ func NewCTCompetitionSetting() pokercompetition.CompetitionSetting {
 		DisableAt: time.Now().Add(time.Hour * 24).Unix(),
 		TableSettings: []pokercompetition.TableSetting{
 			{
-				ShortID:        "ABC123",
-				Code:           "0001",
-				Name:           "20 min - 0001",
-				InvitationCode: "welcome to play",
-				JoinPlayers:    []pokercompetition.JoinPlayer{},
+				TableID:     uuid.New().String(),
+				JoinPlayers: []pokercompetition.JoinPlayer{},
 			},
 		},
 	}
@@ -92,7 +76,6 @@ func NewMTTCompetitionSetting() pokercompetition.CompetitionSetting {
 		Meta: pokercompetition.CompetitionMeta{
 			Blind: pokercompetition.Blind{
 				ID:              uuid.New().String(),
-				Name:            "30 min MTT",
 				InitialLevel:    1,
 				FinalBuyInLevel: 2,
 				DealerBlindTime: 1,
@@ -120,24 +103,12 @@ func NewMTTCompetitionSetting() pokercompetition.CompetitionSetting {
 					},
 				},
 			},
-			Ticket: pokercompetition.Ticket{
-				ID:   uuid.New().String(),
-				Name: "MTT 3300 30 min",
-			},
-			Scene:          "Scene 1",
 			MaxDuration:    999999,
 			MinPlayerCount: 2,
 			MaxPlayerCount: 9,
 			Rule:           pokercompetition.CompetitionRule_Default,
 			Mode:           pokercompetition.CompetitionMode_MTT,
-			BuyInSetting: pokercompetition.BuyInSetting{
-				IsFree:    false,
-				MinTicket: 1,
-				MaxTicket: 1,
-			},
 			ReBuySetting: pokercompetition.ReBuySetting{
-				MinTicket:   1,
-				MaxTicket:   1,
 				MaxTime:     6,
 				WaitingTime: 1,
 			},
