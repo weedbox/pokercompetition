@@ -154,7 +154,7 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 		endAts = append(endAts, 0)
 	}
 	ce.competition = &Competition{
-		ID:   uuid.New().String(),
+		ID:   competitionSetting.CompetitionID,
 		Meta: competitionSetting.Meta,
 		State: &CompetitionState{
 			OpenAt:    time.Now().Unix(),

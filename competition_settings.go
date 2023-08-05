@@ -7,6 +7,7 @@ import (
 )
 
 type CompetitionSetting struct {
+	CompetitionID string          `json:"competition_id"`
 	Meta          CompetitionMeta `json:"meta"`
 	StartAt       int64           `json:"start_game_at"`
 	DisableAt     int64           `json:"disable_game_at"`

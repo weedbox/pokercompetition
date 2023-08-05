@@ -11,6 +11,7 @@ import (
 
 func NewCTCompetitionSetting() pokercompetition.CompetitionSetting {
 	return pokercompetition.CompetitionSetting{
+		CompetitionID: uuid.New().String(),
 		Meta: pokercompetition.CompetitionMeta{
 			Blind: pokercompetition.Blind{
 				ID:              uuid.New().String(),
@@ -73,6 +74,7 @@ func NewCTCompetitionSetting() pokercompetition.CompetitionSetting {
 
 func NewMTTCompetitionSetting() pokercompetition.CompetitionSetting {
 	return pokercompetition.CompetitionSetting{
+		CompetitionID: uuid.New().String(),
 		Meta: pokercompetition.CompetitionMeta{
 			Blind: pokercompetition.Blind{
 				ID:              uuid.New().String(),

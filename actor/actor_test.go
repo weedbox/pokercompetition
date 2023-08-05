@@ -136,9 +136,7 @@ func TestActor_CT(t *testing.T) {
 		assert.Nil(t, err, fmt.Sprintf("%s buy in competition failed", joinPlayer.PlayerID))
 		logData = append(logData, makeLog(fmt.Sprintf("[Competition][%d] %s join competition", competitionEngine.GetCompetition().UpdateSerial, joinPlayer.PlayerID), competition.GetJSON))
 		t.Logf("%s buy in", joinPlayer.PlayerID)
-
 		time.Sleep(time.Millisecond * 300)
-
 		err = tableEngine.PlayerJoin(joinPlayer.PlayerID)
 		assert.Nil(t, err, fmt.Sprintf("%s join table failed", joinPlayer.PlayerID))
 		t.Logf("%s is joined", joinPlayer.PlayerID)
