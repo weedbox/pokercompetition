@@ -62,7 +62,7 @@ func TestActor_ObserverRunner_PlayerAct(t *testing.T) {
 				t.Log("GameClosed", table.State.GameState.GameID)
 
 				if len(table.AlivePlayers()) == 1 {
-					tableEngine.CloseTable()
+					// tableEngine.CloseTable()
 					wg.Done()
 					return
 				}
@@ -122,6 +122,7 @@ func TestActor_ObserverRunner_PlayerAct(t *testing.T) {
 	}
 
 	// Start game
+	tableEngine.UpdateBlind(1, 0, 0, 10, 20)
 	err = tableEngine.StartTableGame()
 	assert.Nil(t, err)
 

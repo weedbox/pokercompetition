@@ -1,6 +1,7 @@
 package actor
 
 import (
+	"fmt"
 	"sync"
 	"testing"
 
@@ -24,7 +25,7 @@ func TestActor_BotRunner_Humanize(t *testing.T) {
 			TableMaxSeatCount:   9,
 			TableMinPlayerCount: 2,
 			MinChipUnit:         10,
-			ActionTime:          10,
+			ActionTime:          1,
 		},
 	})
 	assert.Nil(t, err, "create table failed")
@@ -86,11 +87,12 @@ func TestActor_BotRunner_Humanize(t *testing.T) {
 
 	// Add player to table
 	for _, p := range players {
-		err := tableEngine.PlayerJoin(p.PlayerID)
-		assert.Nil(t, err)
+		assert.Nil(t, tableEngine.PlayerReserve(p), fmt.Sprintf("%s reserve error", p.PlayerID))
+		assert.Nil(t, tableEngine.PlayerJoin(p.PlayerID), fmt.Sprintf("%s join error", p.PlayerID))
 	}
 
 	// Start game
+	tableEngine.UpdateBlind(1, 0, 0, 10, 20)
 	err = tableEngine.StartTableGame()
 	assert.Nil(t, err)
 
