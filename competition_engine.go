@@ -33,9 +33,9 @@ type CompetitionEngine interface {
 	OnTableClosed(fn func(*pokertable.Table))  // TODO: test only, delete it later on
 
 	// Events
-	OnCompetitionUpdated(fn func(*Competition))             // 賽事更新事件監聽器
-	OnCompetitionErrorUpdated(fn func(*Competition, error)) // 賽事錯誤更新事件監聽器
-	OnCompetitionPlayerUpdated(fn func(*CompetitionPlayer)) // 賽事玩家更新事件監聽器
+	OnCompetitionUpdated(fn func(*Competition))                     // 賽事更新事件監聽器
+	OnCompetitionErrorUpdated(fn func(*Competition, error))         // 賽事錯誤更新事件監聽器
+	OnCompetitionPlayerUpdated(fn func(string, *CompetitionPlayer)) // 賽事玩家更新事件監聽器
 
 	// Competition Actions
 	SetSeatManager(seatManager pokertablebalancer.SeatManager)                     // 設定拆併桌管理器
@@ -63,7 +63,7 @@ type competitionEngine struct {
 	tableManagerBackend          TableManagerBackend
 	onCompetitionUpdated         func(*Competition)
 	onCompetitionErrorUpdated    func(*Competition, error)
-	onCompetitionPlayerUpdated   func(*CompetitionPlayer)
+	onCompetitionPlayerUpdated   func(string, *CompetitionPlayer)
 	setResumeFromPauseTask       bool
 	tableBlindLevelUpdateChecker map[string]map[int]bool // key: table_id, value: (k,v): level, is_update -> use sync.Map
 
@@ -76,7 +76,7 @@ func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
 		playerCaches:                 sync.Map{},
 		onCompetitionUpdated:         func(*Competition) {},
 		onCompetitionErrorUpdated:    func(*Competition, error) {},
-		onCompetitionPlayerUpdated:   func(*CompetitionPlayer) {},
+		onCompetitionPlayerUpdated:   func(string, *CompetitionPlayer) {},
 		setResumeFromPauseTask:       false,
 		tableBlindLevelUpdateChecker: make(map[string]map[int]bool),
 
@@ -119,7 +119,7 @@ func (ce *competitionEngine) OnCompetitionErrorUpdated(fn func(*Competition, err
 	ce.onCompetitionErrorUpdated = fn
 }
 
-func (ce *competitionEngine) OnCompetitionPlayerUpdated(fn func(*CompetitionPlayer)) {
+func (ce *competitionEngine) OnCompetitionPlayerUpdated(fn func(string, *CompetitionPlayer)) {
 	ce.onCompetitionPlayerUpdated = fn
 }
 

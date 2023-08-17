@@ -70,7 +70,7 @@ func TestActor_CT(t *testing.T) {
 			return
 		}
 	})
-	competitionEngine.OnCompetitionPlayerUpdated(func(cp *pokercompetition.CompetitionPlayer) {
+	competitionEngine.OnCompetitionPlayerUpdated(func(cID string, cp *pokercompetition.CompetitionPlayer) {
 		json, err := jsonStringfy(cp)
 		assert.Nil(t, err, "json.Marshal CompetitionPlayer failed")
 		logData = append(logData, fmt.Sprintf("========== [CompetitionPlayer] ==========\n%s", json))
@@ -237,7 +237,7 @@ func TestActor_MTT(t *testing.T) {
 	}
 
 	// Mapping player & table
-	competitionEngine.OnCompetitionPlayerUpdated(func(cp *pokercompetition.CompetitionPlayer) {
+	competitionEngine.OnCompetitionPlayerUpdated(func(cID string, cp *pokercompetition.CompetitionPlayer) {
 		// t.Logf("[CompetitionPlayer] [%s] %s", cp.CurrentTableID, cp.PlayerID)
 		json, err := jsonStringfy(cp)
 		assert.Nil(t, err, "json.Marshal CompetitionPlayer failed")
