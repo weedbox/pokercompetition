@@ -1,7 +1,6 @@
 package pokercompetition
 
 import (
-	"github.com/google/uuid"
 	"github.com/thoas/go-funk"
 	"github.com/weedbox/pokertable"
 )
@@ -26,7 +25,7 @@ type JoinPlayer struct {
 
 func NewPokerTableSetting(competitionID string, competitionMeta CompetitionMeta, tableSetting TableSetting) pokertable.TableSetting {
 	return pokertable.TableSetting{
-		TableID: uuid.New().String(),
+		TableID: tableSetting.TableID,
 		Meta: pokertable.TableMeta{
 			CompetitionID:       competitionID,
 			Rule:                string(competitionMeta.Rule),

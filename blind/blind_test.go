@@ -16,7 +16,6 @@ func Test_Blind_Start(t *testing.T) {
 	// apply options
 	options := &BlindOptions{
 		ID:              uuid.New().String(),
-		Name:            "Test",
 		InitialLevel:    1,
 		FinalBuyInLevel: 3,
 		Levels: []BlindLevel{
@@ -89,7 +88,6 @@ func Test_Blind_BeforeFinalBuyIn(t *testing.T) {
 	// apply options
 	options := &BlindOptions{
 		ID:              uuid.New().String(),
-		Name:            "Test",
 		InitialLevel:    1,
 		FinalBuyInLevel: 3,
 		Levels: []BlindLevel{
@@ -167,7 +165,6 @@ func Test_Blind_FinalBuyIn(t *testing.T) {
 	// apply options
 	options := &BlindOptions{
 		ID:              uuid.New().String(),
-		Name:            "Test",
 		InitialLevel:    1,
 		FinalBuyInLevel: 3,
 		Levels: []BlindLevel{
@@ -244,7 +241,6 @@ func Test_Blind_LevelDuration(t *testing.T) {
 	// apply options
 	options := &BlindOptions{
 		ID:              uuid.New().String(),
-		Name:            "Test",
 		InitialLevel:    1,
 		FinalBuyInLevel: 3,
 		Levels: []BlindLevel{
@@ -290,7 +286,6 @@ func Test_Blind_BreakingLevel(t *testing.T) {
 	// apply options
 	options := &BlindOptions{
 		ID:              uuid.New().String(),
-		Name:            "Test",
 		InitialLevel:    1,
 		FinalBuyInLevel: 3,
 		Levels: []BlindLevel{

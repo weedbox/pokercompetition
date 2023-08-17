@@ -10,27 +10,6 @@ import (
 	"github.com/weedbox/timebank"
 )
 
-func (ce *competitionEngine) emitEvent(eventName string, playerID string) {
-	// refresh competition
-	ce.competition.UpdateAt = time.Now().Unix()
-	ce.competition.UpdateSerial++
-
-	// emit event
-	// fmt.Printf("->[Competition][#%d][%s] emit Event: %s\n", ce.competition.UpdateSerial, playerID, eventName)
-	ce.onCompetitionUpdated(ce.competition)
-}
-
-func (ce *competitionEngine) emitErrorEvent(eventName string, playerID string, err error) {
-	fmt.Printf("->[Competition][#%d][%s] emit ERROR Event: %s, Error: %v\n", ce.competition.UpdateSerial, playerID, eventName, err)
-	ce.onCompetitionErrorUpdated(ce.competition, err)
-}
-
-func (ce *competitionEngine) emitPlayerEvent(eventName string, player *CompetitionPlayer) {
-	// emit event
-	// fmt.Printf("->[CompetitionPlayer][%s] emit Event: %s\n", eventName, fmt.Sprintf("[%s][%s]: %s", player.PlayerID, player.CurrentTableID, player.Status))
-	ce.onCompetitionPlayerUpdated(ce.competition.ID, player)
-}
-
 func (ce *competitionEngine) newDefaultCompetitionPlayerData(tableID, playerID string, redeemChips int64, playerStatus CompetitionPlayerStatus) (CompetitionPlayer, PlayerCache) {
 	joinAt := time.Now().Unix()
 	playerCache := PlayerCache{
@@ -85,7 +64,6 @@ func (ce *competitionEngine) updateTable(table *pokertable.Table) {
 	// 處理因 table status 產生的變化
 	tableStatusHandlerMap := map[pokertable.TableStateStatus]func(*pokertable.Table, int){
 		pokertable.TableStateStatus_TableCreated:     ce.handleCompetitionTableCreated,
-		pokertable.TableStateStatus_TableBalancing:   ce.handleCompetitionTableBalanced,
 		pokertable.TableStateStatus_TablePausing:     ce.updatePauseCompetition,
 		pokertable.TableStateStatus_TableClosed:      ce.closeCompetitionTable,
 		pokertable.TableStateStatus_TableGameSettled: ce.settleCompetitionTable,
@@ -110,32 +88,11 @@ func (ce *competitionEngine) handleCompetitionTableCreated(table *pokertable.Tab
 			return
 		}
 
-		ce.autoUpdateBlind(table.ID)
+		ce.updateTableBlind(table.ID)
 
 		if err := ce.tableManagerBackend.StartTableGame(table.ID); err != nil {
 			ce.emitErrorEvent("CT Auto StartTableGame", "", err)
 			return
-		}
-	}
-}
-
-func (ce *competitionEngine) handleCompetitionTableBalanced(table *pokertable.Table, tableIdx int) {
-	if table.State.StartAt == UnsetValue {
-		// ce.autoUpdateBlind(table.ID)
-		// TODO: implement it
-	}
-}
-
-func (ce *competitionEngine) autoUpdateBlind(tableID string) {
-	// update blind
-	levelUpdated := ce.tableBlindLevelUpdateChecker[tableID][ce.competition.State.BlindState.CurrentLevelIndex]
-	if !levelUpdated {
-		level, ante, dealer, sb, bb := ce.competition.CurrentBlindData()
-		if err := ce.tableManagerBackend.UpdateBlind(tableID, level, ante, dealer, sb, bb); err != nil {
-			ce.emitErrorEvent("update blind", "", err)
-		} else {
-			ce.tableBlindLevelUpdateChecker[tableID][ce.competition.State.BlindState.CurrentLevelIndex] = true
-			ce.emitEvent(fmt.Sprintf("[1] table %s blind level is updated to %d", tableID, level), "")
 		}
 	}
 }
@@ -224,14 +181,9 @@ func (ce *competitionEngine) addCompetitionTable(tableSetting TableSetting, play
 	// TODO: test only
 	ce.onTableCreated(table)
 
-	// update update table blind checker
-	ce.tableBlindLevelUpdateChecker[table.ID] = make(map[int]bool)
-	for levelIdx := range ce.competition.Meta.Blind.Levels {
-		ce.tableBlindLevelUpdateChecker[table.ID][levelIdx] = false
-	}
-
 	// add table
 	ce.competition.State.Tables = append(ce.competition.State.Tables, table)
+	ce.emitCompetitionStateEvent(CompetitionStateEvent_TableUpdated)
 
 	// update players
 	newPlayerData := make(map[string]int64)
@@ -300,6 +252,7 @@ func (ce *competitionEngine) settleCompetition() {
 				PlayerID:   playerID,
 				FinalChips: rankData.Chips,
 			}
+			ce.emitCompetitionStateFinalPlayerRankEvent(playerID, rankData.Rank)
 		}
 	}
 
@@ -311,6 +264,7 @@ func (ce *competitionEngine) settleCompetition() {
 
 	// Emit event
 	ce.emitEvent("settleCompetition", "")
+	ce.emitCompetitionStateEvent(CompetitionStateEvent_Closed)
 
 	// clear cache
 	ce.deletePlayerCachesByCompetition(ce.competition.ID)
@@ -341,6 +295,7 @@ func (ce *competitionEngine) closeCompetitionTable(table *pokertable.Table, tabl
 	// competition close table
 	ce.deleteTable(tableIdx)
 	ce.emitEvent("closeCompetitionTable", "")
+	ce.emitCompetitionStateEvent(CompetitionStateEvent_TableUpdated)
 
 	if len(ce.competition.State.Tables) == 0 {
 		ce.settleCompetition()
@@ -359,6 +314,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 		if rankData, exist := playerRankingData[player.PlayerID]; exist {
 			ce.competition.State.Players[playerIdx].Rank = rankData.Rank
 			ce.competition.State.Players[playerIdx].Chips = rankData.Chips
+			ce.emitPlayerEvent("table-settlement", ce.competition.State.Players[playerIdx])
 		}
 	}
 
@@ -419,9 +375,6 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 		}
 	} else {
 		// 停止買入
-		// // 更新賽事狀態: 停止買入
-		// ce.competition.State.Status = CompetitionStateStatus_StoppedBuyIn
-
 		// 初始化排名陣列
 		if len(ce.competition.State.Rankings) == 0 {
 			for i := 0; i < len(ce.competition.State.Players); i++ {
@@ -445,6 +398,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 					PlayerID:   knockoutPlayerID,
 					FinalChips: 0,
 				}
+				ce.emitCompetitionStateFinalPlayerRankEvent(knockoutPlayerID, rankIdx+1)
 				break
 			}
 		}
@@ -458,6 +412,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 		ce.emitPlayerEvent("knockout", ce.competition.State.Players[playerCache.PlayerIdx])
 	}
 	ce.emitEvent("Table Settlement", "")
+	ce.emitCompetitionStateEvent(CompetitionStateEvent_TableGameSettled)
 
 	// 桌次處理
 	switch ce.competition.Meta.Mode {
@@ -543,4 +498,11 @@ ShouldClose 計算桌次是否已達到結束條件
 func (ce *competitionEngine) shouldCloseTable(tableStartAt int64, tableAlivePlayerCount int) bool {
 	tableEndAt := time.Unix(tableStartAt, 0).Add(time.Second * time.Duration(ce.competition.Meta.MaxDuration)).Unix()
 	return time.Now().Unix() > tableEndAt || (ce.competition.State.BlindState.IsFinalBuyInLevel() && tableAlivePlayerCount < ce.competition.Meta.TableMinPlayerCount)
+}
+
+func (ce *competitionEngine) updateTableBlind(tableID string) {
+	level, ante, dealer, sb, bb := ce.competition.CurrentBlindData()
+	if err := ce.tableManagerBackend.UpdateBlind(tableID, level, ante, dealer, sb, bb); err != nil {
+		ce.emitErrorEvent("update blind", "", err)
+	}
 }
