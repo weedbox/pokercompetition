@@ -39,114 +39,114 @@ const (
 )
 
 type Competition struct {
-	ID           string            `json:"id"`            // 賽事 Unique ID
-	Meta         CompetitionMeta   `json:"meta"`          // 賽事固定資料
-	State        *CompetitionState `json:"state"`         // 賽事動態資料
-	UpdateAt     int64             `json:"update_at"`     // 更新時間 (Seconds)
-	UpdateSerial int64             `json:"update_serial"` // 更新序列號 (數字越大越晚發生)
+	ID           string            `json:"id" mapstructure:"id"`                       // 賽事 Unique ID
+	Meta         CompetitionMeta   `json:"meta" mapstructure:"meta"`                   // 賽事固定資料
+	State        *CompetitionState `json:"state" mapstructure:"state"`                 // 賽事動態資料
+	UpdateAt     int64             `json:"update_at" mapstructure:"update_at"`         // 更新時間 (Seconds)
+	UpdateSerial int64             `json:"update_serial" mapstructure:"update_serial"` // 更新序列號 (數字越大越晚發生)
 }
 
 type CompetitionMeta struct {
-	Blind               Blind           `json:"blind"`                  // 盲注資訊
-	MaxDuration         int             `json:"max_duration"`           // 比賽時間總長 (Seconds)
-	MinPlayerCount      int             `json:"min_player_count"`       // 最小參賽人數
-	MaxPlayerCount      int             `json:"max_player_count"`       // 最大參賽人數
-	TableMaxSeatCount   int             `json:"table_max_seat_count"`   // 每桌人數上限
-	TableMinPlayerCount int             `json:"table_min_player_count"` // 每桌最小開打數
-	Rule                CompetitionRule `json:"rule"`                   // 德州撲克規則, 常牌(default), 短牌(short_deck), 奧瑪哈(omaha)
-	Mode                CompetitionMode `json:"mode"`                   // 賽事模式 (CT, MTT, Cash)
-	ReBuySetting        ReBuySetting    `json:"re_buy_setting"`         // ReBuy 設定
-	AddonSetting        AddonSetting    `json:"addon_setting"`          // Addon 設定
-	ActionTime          int             `json:"action_time"`            // 思考時間 (Seconds)
-	MinChipUnit         int64           `json:"min_chip_unit"`          // 最小單位籌碼量
+	Blind               Blind           `json:"blind" mapstructure:"blind"`                                   // 盲注資訊
+	MaxDuration         int             `json:"max_duration" mapstructure:"max_duration"`                     // 比賽時間總長 (Seconds)
+	MinPlayerCount      int             `json:"min_player_count" mapstructure:"min_player_count"`             // 最小參賽人數
+	MaxPlayerCount      int             `json:"max_player_count" mapstructure:"max_player_count"`             // 最大參賽人數
+	TableMaxSeatCount   int             `json:"table_max_seat_count" mapstructure:"table_max_seat_count"`     // 每桌人數上限
+	TableMinPlayerCount int             `json:"table_min_player_count" mapstructure:"table_min_player_count"` // 每桌最小開打數
+	Rule                CompetitionRule `json:"rule" mapstructure:"rule"`                                     // 德州撲克規則, 常牌(default), 短牌(short_deck), 奧瑪哈(omaha)
+	Mode                CompetitionMode `json:"mode" mapstructure:"mode"`                                     // 賽事模式 (CT, MTT, Cash)
+	ReBuySetting        ReBuySetting    `json:"re_buy_setting" mapstructure:"re_buy_setting"`                 // ReBuy 設定
+	AddonSetting        AddonSetting    `json:"addon_setting" mapstructure:"addon_setting"`                   // Addon 設定
+	ActionTime          int             `json:"action_time" mapstructure:"action_time"`                       // 思考時間 (Seconds)
+	MinChipUnit         int64           `json:"min_chip_unit" mapstructure:"min_chip_unit"`                   // 最小單位籌碼量
 }
 
 type CompetitionState struct {
-	OpenAt     int64                  `json:"open_at"`     // 賽事建立時間 (可報名、尚未開打)
-	DisableAt  int64                  `json:"disable_at"`  // 賽事未開打前，賽局可見時間 (Seconds)
-	StartAt    int64                  `json:"start_at"`    // 賽事開打時間 (可報名、開打) (Seconds)
-	EndAt      int64                  `json:"end_at"`      // 賽事結束時間 (Seconds)
-	BlindState *BlindState            `json:"blind_state"` // 盲注狀態
-	Players    []*CompetitionPlayer   `json:"players"`     // 參與過賽事玩家陣列
-	Status     CompetitionStateStatus `json:"status"`      // 賽事狀態
-	Tables     []*pokertable.Table    `json:"tables"`      // 多桌
-	Rankings   []*CompetitionRank     `json:"rankings"`    // 玩家排名 (陣列 Index 即是排名 rank - 1, ex: index 0 -> 第一名, index 1 -> 第二名...)
+	OpenAt     int64                  `json:"open_at" mapstructure:"open_at"`         // 賽事建立時間 (可報名、尚未開打)
+	DisableAt  int64                  `json:"disable_at" mapstructure:"disable_at"`   // 賽事未開打前，賽局可見時間 (Seconds)
+	StartAt    int64                  `json:"start_at" mapstructure:"start_at"`       // 賽事開打時間 (可報名、開打) (Seconds)
+	EndAt      int64                  `json:"end_at" mapstructure:"end_at"`           // 賽事結束時間 (Seconds)
+	BlindState *BlindState            `json:"blind_state" mapstructure:"blind_state"` // 盲注狀態
+	Players    []*CompetitionPlayer   `json:"players" mapstructure:"players"`         // 參與過賽事玩家陣列
+	Status     CompetitionStateStatus `json:"status" mapstructure:"status"`           // 賽事狀態
+	Tables     []*pokertable.Table    `json:"tables" mapstructure:"tables"`           // 多桌
+	Rankings   []*CompetitionRank     `json:"rankings" mapstructure:"rankings"`       // 玩家排名 (陣列 Index 即是排名 rank - 1, ex: index 0 -> 第一名, index 1 -> 第二名...)
 }
 
 type CompetitionRank struct {
-	PlayerID   string `json:"player_id"`   // 玩家 ID
-	FinalChips int64  `json:"final_chips"` // 玩家最後籌碼數
+	PlayerID   string `json:"player_id" mapstructure:"player_id"`     // 玩家 ID
+	FinalChips int64  `json:"final_chips" mapstructure:"final_chips"` // 玩家最後籌碼數
 }
 
 type CompetitionPlayer struct {
-	PlayerID       string `json:"player_id"` // 玩家 ID
-	CurrentTableID string `json:"table_id"`  // 當前桌次 ID
-	JoinAt         int64  `json:"join_at"`   // 加入時間 (Seconds)
+	PlayerID       string `json:"player_id" mapstructure:"player_id"` // 玩家 ID
+	CurrentTableID string `json:"table_id" mapstructure:"table_id"`   // 當前桌次 ID
+	JoinAt         int64  `json:"join_at" mapstructure:"join_at"`     // 加入時間 (Seconds)
 
 	// current info
-	Status     CompetitionPlayerStatus `json:"status"`        // 參與玩家狀態
-	Rank       int                     `json:"rank"`          // 當前桌次排名
-	Chips      int64                   `json:"chips"`         // 當前籌碼
-	IsReBuying bool                    `json:"is_re_buying"`  // 是否正在補碼
-	ReBuyEndAt int64                   `json:"re_buy_end_at"` // 最後補碼時間 (Seconds)
-	ReBuyTimes int                     `json:"re_buy_times"`  // 補碼次數
-	AddonTimes int                     `json:"addon_times"`   // 增購次數
+	Status     CompetitionPlayerStatus `json:"status" mapstructure:"status"`               // 參與玩家狀態
+	Rank       int                     `json:"rank" mapstructure:"rank"`                   // 當前桌次排名
+	Chips      int64                   `json:"chips" mapstructure:"chips"`                 // 當前籌碼
+	IsReBuying bool                    `json:"is_re_buying" mapstructure:"is_re_buying"`   // 是否正在補碼
+	ReBuyEndAt int64                   `json:"re_buy_end_at" mapstructure:"re_buy_end_at"` // 最後補碼時間 (Seconds)
+	ReBuyTimes int                     `json:"re_buy_times" mapstructure:"re_buy_times"`   // 補碼次數
+	AddonTimes int                     `json:"addon_times" mapstructure:"addon_times"`     // 增購次數
 
 	// statistics info
 	// best
-	BestWinningPotChips int64    `json:"best_winning_pot_chips"` // 贏得最大底池籌碼數
-	BestWinningCombo    []string `json:"best_winning_combo"`     // 身為贏家時最大的牌型組合
+	BestWinningPotChips int64    `json:"best_winning_pot_chips" mapstructure:"best_winning_pot_chips"` // 贏得最大底池籌碼數
+	BestWinningCombo    []string `json:"best_winning_combo" mapstructure:"best_winning_combo"`         // 身為贏家時最大的牌型組合
 
 	// accumulated info
 	// competition/table
-	TotalRedeemChips int64 `json:"total_redeem_chips"` // 累積兌換籌碼
-	TotalGameCounts  int64 `json:"total_game_counts"`  // 總共玩幾手牌
+	TotalRedeemChips int64 `json:"total_redeem_chips" mapstructure:"total_redeem_chips"` // 累積兌換籌碼
+	TotalGameCounts  int64 `json:"total_game_counts" mapstructure:"total_game_counts"`   // 總共玩幾手牌
 
 	// game: round & actions
-	TotalWalkTimes        int64 `json:"total_walk_times"`         // Preflop 除了大盲以外的人全部 Fold，而贏得籌碼的次數
-	TotalVPIPTimes        int   `json:"total_vpip_times"`         // 入池總次數
-	TotalFoldTimes        int   `json:"total_fold_times"`         // 棄牌總次數
-	TotalPreflopFoldTimes int   `json:"total_preflop_fold_times"` // Preflop 棄牌總次數
-	TotalFlopFoldTimes    int   `json:"total_flop_fold_times"`    // Flop 棄牌總次數
-	TotalTurnFoldTimes    int   `json:"total_turn_fold_times"`    // Turn 棄牌總次數
-	TotalRiverFoldTimes   int   `json:"total_river_fold_times"`   // River 棄牌總次數
-	TotalActionTimes      int   `json:"total_action_times"`       // 下注動作總次數
-	TotalRaiseTimes       int   `json:"total_raise_times"`        // 加注/入池總次數(AllIn&Raise、Raise、Bet)
-	TotalCallTimes        int   `json:"total_call_times"`         // 跟注總次數
-	TotalCheckTimes       int   `json:"total_check_times"`        // 過牌總次數
+	TotalWalkTimes        int64 `json:"total_walk_times" mapstructure:"total_walk_times"`                 // Preflop 除了大盲以外的人全部 Fold，而贏得籌碼的次數
+	TotalVPIPTimes        int   `json:"total_vpip_times" mapstructure:"total_vpip_times"`                 // 入池總次數
+	TotalFoldTimes        int   `json:"total_fold_times" mapstructure:"total_fold_times"`                 // 棄牌總次數
+	TotalPreflopFoldTimes int   `json:"total_preflop_fold_times" mapstructure:"total_preflop_fold_times"` // Preflop 棄牌總次數
+	TotalFlopFoldTimes    int   `json:"total_flop_fold_times" mapstructure:"total_flop_fold_times"`       // Flop 棄牌總次數
+	TotalTurnFoldTimes    int   `json:"total_turn_fold_times" mapstructure:"total_turn_fold_times"`       // Turn 棄牌總次數
+	TotalRiverFoldTimes   int   `json:"total_river_fold_times" mapstructure:"total_river_fold_times"`     // River 棄牌總次數
+	TotalActionTimes      int   `json:"total_action_times" mapstructure:"total_action_times"`             // 下注動作總次數
+	TotalRaiseTimes       int   `json:"total_raise_times" mapstructure:"total_raise_times"`               // 加注/入池總次數(AllIn&Raise、Raise、Bet)
+	TotalCallTimes        int   `json:"total_call_times" mapstructure:"total_call_times"`                 // 跟注總次數
+	TotalCheckTimes       int   `json:"total_check_times" mapstructure:"total_check_times"`               // 過牌總次數
 }
 
 type Blind struct {
-	ID              string       `json:"id"`                 // ID
-	InitialLevel    int          `json:"initial_level"`      // 起始盲注級別
-	FinalBuyInLevel int          `json:"final_buy_in_level"` // 最後買入盲注等級
-	DealerBlindTime int          `json:"dealer_blind_time"`  // Dealer 位置要收取的前注倍數 (短牌用)
-	Levels          []BlindLevel `json:"levels"`             // 級別資訊列表
+	ID              string       `json:"id" mapstructure:"id"`                                 // ID
+	InitialLevel    int          `json:"initial_level" mapstructure:"initial_level"`           // 起始盲注級別
+	FinalBuyInLevel int          `json:"final_buy_in_level" mapstructure:"final_buy_in_level"` // 最後買入盲注等級
+	DealerBlindTime int          `json:"dealer_blind_time" mapstructure:"dealer_blind_time"`   // Dealer 位置要收取的前注倍數 (短牌用)
+	Levels          []BlindLevel `json:"levels" mapstructure:"levels"`                         // 級別資訊列表
 }
 
 type BlindLevel struct {
-	Level    int   `json:"level"`    // 盲注等級(-1 表示中場休息)
-	SB       int64 `json:"sb"`       // 小盲籌碼量
-	BB       int64 `json:"bb"`       // 大盲籌碼量
-	Ante     int64 `json:"ante"`     // 前注籌碼量
-	Duration int   `json:"duration"` // 等級持續時間 (Seconds)
+	Level    int   `json:"level" mapstructure:"level"`       // 盲注等級(-1 表示中場休息)
+	SB       int64 `json:"sb" mapstructure:"sb"`             // 小盲籌碼量
+	BB       int64 `json:"bb" mapstructure:"bb"`             // 大盲籌碼量
+	Ante     int64 `json:"ante" mapstructure:"ante"`         // 前注籌碼量
+	Duration int   `json:"duration" mapstructure:"duration"` // 等級持續時間 (Seconds)
 }
 
 type BlindState struct {
-	FinalBuyInLevelIndex int     `json:"final_buy_in_level_idx"` // 最後買入盲注等級索引值
-	CurrentLevelIndex    int     `json:"current_level_index"`    // 現在盲注等級級別索引值
-	EndAts               []int64 `json:"end_ats"`                // 每個等級結束時間 (Seconds)
+	FinalBuyInLevelIndex int     `json:"final_buy_in_level_idx" mapstructure:"final_buy_in_level_idx"` // 最後買入盲注等級索引值
+	CurrentLevelIndex    int     `json:"current_level_index" mapstructure:"current_level_index"`       // 現在盲注等級級別索引值
+	EndAts               []int64 `json:"end_ats" mapstructure:"end_ats"`                               // 每個等級結束時間 (Seconds)
 }
 
 type ReBuySetting struct {
-	MaxTime     int `json:"max_time"`     // 最大次數
-	WaitingTime int `json:"waiting_time"` // 玩家可補碼時間 (Seconds)
+	MaxTime     int `json:"max_time" mapstructure:"max_time"`         // 最大次數
+	WaitingTime int `json:"waiting_time" mapstructure:"waiting_time"` // 玩家可補碼時間 (Seconds)
 }
 
 type AddonSetting struct {
-	IsBreakOnly bool    `json:"is_break_only"` // 是否中場休息限定
-	RedeemChips []int64 `json:"redeem_chips"`  // 可兌換籌碼數
-	MaxTime     int     `json:"max_time"`      // 最大次數
+	IsBreakOnly bool    `json:"is_break_only" mapstructure:"is_break_only"` // 是否中場休息限定
+	RedeemChips []int64 `json:"redeem_chips" mapstructure:"redeem_chips"`   // 可兌換籌碼數
+	MaxTime     int     `json:"max_time" mapstructure:"max_time"`           // 最大次數
 }
 
 // Competition Getters

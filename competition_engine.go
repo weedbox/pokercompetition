@@ -272,7 +272,6 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 	}
 
 	ce.emitEvent("CreateCompetition", "")
-	ce.emitCompetitionStateEvent("CompetitionStateEvent_Created")
 	return ce.competition, nil
 }
 
