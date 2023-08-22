@@ -27,7 +27,7 @@ type TableManagerBackend interface {
 	PlayerJoin(tableID, playerID string) error
 }
 
-func NewTableManagerBackend(manager pokertable.Manager) TableManagerBackend {
+func NewNativeTableManagerBackend(manager pokertable.Manager) TableManagerBackend {
 	backend := tableManagerBackend{
 		manager:        manager,
 		onTableUpdated: func(t *pokertable.Table) {},
@@ -45,7 +45,11 @@ func (tmb *tableManagerBackend) OnTableUpdated(fn func(table *pokertable.Table))
 }
 
 func (tmb *tableManagerBackend) CreateTable(setting pokertable.TableSetting) (*pokertable.Table, error) {
-	table, err := tmb.manager.CreateTable(setting)
+	tableUpdatedCallBack := func(t *pokertable.Table) {}
+	tableErrorUpdatedCallBack := func(t *pokertable.Table, err error) {}
+	tableStateUpdatedCallBack := func(event string, t *pokertable.Table) {}
+	tablePlayerStateUpdatedCallBack := func(competitionID, tableID string, ps *pokertable.TablePlayerState) {}
+	table, err := tmb.manager.CreateTable(setting, tableUpdatedCallBack, tableErrorUpdatedCallBack, tableStateUpdatedCallBack, tablePlayerStateUpdatedCallBack)
 	if err != nil {
 		return nil, err
 	}

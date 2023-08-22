@@ -17,7 +17,7 @@ type Manager interface {
 
 	// Competition Actions
 	SetCompetitionSeatManager(competitionID string, seatManager pokertablebalancer.SeatManager) error
-	CreateCompetition(competitionSetting CompetitionSetting) (*Competition, error)
+	CreateCompetition(competitionSetting CompetitionSetting, competitionUpdatedCallBack func(*Competition), competitionErrorUpdatedCallBack func(*Competition, error), competitionPlayerUpdatedCallBack func(string, *CompetitionPlayer), competitionFinalPlayerRankUpdatedCallBack func(string, string, int), competitionStateUpdatedCallBack func(string, *Competition)) (*Competition, error)
 	CloseCompetition(competitionID string) error
 	StartCompetition(competitionID string) error
 
@@ -59,8 +59,13 @@ func (m *manager) SetCompetitionSeatManager(competitionID string, seatManager po
 
 }
 
-func (m *manager) CreateCompetition(competitionSetting CompetitionSetting) (*Competition, error) {
+func (m *manager) CreateCompetition(competitionSetting CompetitionSetting, competitionUpdatedCallBack func(*Competition), competitionErrorUpdatedCallBack func(*Competition, error), competitionPlayerUpdatedCallBack func(string, *CompetitionPlayer), competitionFinalPlayerRankUpdatedCallBack func(string, string, int), competitionStateUpdatedCallBack func(string, *Competition)) (*Competition, error) {
 	competitionEngine := NewCompetitionEngine(WithTableManagerBackend(m.tableManagerBackend))
+	competitionEngine.OnCompetitionUpdated(competitionUpdatedCallBack)
+	competitionEngine.OnCompetitionErrorUpdated(competitionErrorUpdatedCallBack)
+	competitionEngine.OnCompetitionPlayerUpdated(competitionPlayerUpdatedCallBack)
+	competitionEngine.OnCompetitionFinalPlayerRankUpdated(competitionFinalPlayerRankUpdatedCallBack)
+	competitionEngine.OnCompetitionStateUpdated(competitionStateUpdatedCallBack)
 	competition, err := competitionEngine.CreateCompetition(competitionSetting)
 	if err != nil {
 		return nil, err
