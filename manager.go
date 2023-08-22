@@ -4,6 +4,7 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/weedbox/pokertable"
 	"github.com/weedbox/pokertablebalancer"
 )
 
@@ -20,6 +21,9 @@ type Manager interface {
 	CreateCompetition(competitionSetting CompetitionSetting, competitionUpdatedCallBack func(*Competition), competitionErrorUpdatedCallBack func(*Competition, error), competitionPlayerUpdatedCallBack func(string, *CompetitionPlayer), competitionFinalPlayerRankUpdatedCallBack func(string, string, int), competitionStateUpdatedCallBack func(string, *Competition)) (*Competition, error)
 	CloseCompetition(competitionID string) error
 	StartCompetition(competitionID string) error
+
+	// Table Action
+	UpdateTable(competitionID string, table *pokertable.Table) error
 
 	// Player Operations
 	PlayerBuyIn(competitionID string, joinPlayer JoinPlayer) error
@@ -91,6 +95,16 @@ func (m *manager) StartCompetition(competitionID string) error {
 	}
 
 	return competitionEngine.StartCompetition()
+}
+
+func (m *manager) UpdateTable(competitionID string, table *pokertable.Table) error {
+	competitionEngine, err := m.GetCompetitionEngine(competitionID)
+	if err != nil {
+		return ErrManagerCompetitionNotFound
+	}
+
+	competitionEngine.UpdateTable(table)
+	return nil
 }
 
 func (m *manager) PlayerBuyIn(competitionID string, joinPlayer JoinPlayer) error {

@@ -50,7 +50,7 @@ func (ce *competitionEngine) newDefaultCompetitionPlayerData(tableID, playerID s
 	return player, playerCache
 }
 
-func (ce *competitionEngine) updateTable(table *pokertable.Table) {
+func (ce *competitionEngine) UpdateTable(table *pokertable.Table) {
 	tableIdx := ce.competition.FindTableIdx(func(t *pokertable.Table) bool {
 		return table.ID == t.ID
 	})

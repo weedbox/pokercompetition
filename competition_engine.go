@@ -33,6 +33,7 @@ type CompetitionEngineOpt func(*competitionEngine)
 type CompetitionEngine interface {
 	OnTableCreated(fn func(*pokertable.Table)) // TODO: test only, delete it later on
 	OnTableClosed(fn func(*pokertable.Table))  // TODO: test only, delete it later on
+	UpdateTable(table *pokertable.Table)       // 桌次更新
 
 	// Events
 	OnCompetitionUpdated(fn func(*Competition))                       // 賽事更新事件監聽器
@@ -104,7 +105,7 @@ func WithTableManagerBackend(tmb TableManagerBackend) CompetitionEngineOpt {
 	return func(ce *competitionEngine) {
 		ce.tableManagerBackend = tmb
 		ce.tableManagerBackend.OnTableUpdated(func(table *pokertable.Table) {
-			ce.updateTable(table)
+			ce.UpdateTable(table)
 		})
 	}
 }
