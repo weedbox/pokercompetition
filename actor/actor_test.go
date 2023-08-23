@@ -109,6 +109,7 @@ func TestActor_CT(t *testing.T) {
 		actors = append(actors, a)
 	}
 
+	isGameSettledRecords := make(map[string]bool)
 	tableEngine.OnTableUpdated(func(table *pokertable.Table) {
 		logData = append(logData, makeLog(fmt.Sprintf("[Table][%d]", table.UpdateSerial), table.GetJSON))
 
@@ -121,6 +122,11 @@ func TestActor_CT(t *testing.T) {
 		case pokertable.TableStateStatus_TableGameOpened:
 			DebugPrintTableGameOpened(*table)
 		case pokertable.TableStateStatus_TableGameSettled:
+			if isGameSettled, ok := isGameSettledRecords[table.State.GameState.GameID]; ok && isGameSettled {
+				break
+			}
+			isGameSettledRecords[table.State.GameState.GameID] = true
+			t.Log("[Competition Status]", competition.State.Status)
 			DebugPrintTableGameSettled(*table)
 		case pokertable.TableStateStatus_TablePausing:
 			t.Logf("table [%s] is pausing. is final buy in: %+v", table.ID, competitionEngine.GetCompetition().State.BlindState.IsFinalBuyInLevel())

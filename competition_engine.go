@@ -64,6 +64,7 @@ type CompetitionEngine interface {
 type competitionEngine struct {
 	competition                         *Competition
 	playerCaches                        sync.Map // key: <competitionID.playerID>, value: PlayerCache
+	gameSettledRecords                  sync.Map // key: <gameID>, value: IsSettled
 	seatManager                         pokertablebalancer.SeatManager
 	tableManagerBackend                 TableManagerBackend
 	onCompetitionUpdated                func(*Competition)
@@ -81,6 +82,7 @@ type competitionEngine struct {
 func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
 	ce := &competitionEngine{
 		playerCaches:                        sync.Map{},
+		gameSettledRecords:                  sync.Map{},
 		onCompetitionUpdated:                func(*Competition) {},
 		onCompetitionErrorUpdated:           func(*Competition, error) {},
 		onCompetitionPlayerUpdated:          func(string, *CompetitionPlayer) {},
@@ -195,6 +197,13 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 		if ce.competition.State.BlindState.IsFinalBuyInLevel() {
 			ce.competition.State.Status = CompetitionStateStatus_StoppedBuyIn
 			ce.emitEvent("Final BuyIn", "")
+
+			// 初始化排名陣列
+			if len(ce.competition.State.Rankings) == 0 {
+				for i := 0; i < len(ce.competition.State.Players); i++ {
+					ce.competition.State.Rankings = append(ce.competition.State.Rankings, nil)
+				}
+			}
 		}
 
 		for _, table := range ce.competition.State.Tables {

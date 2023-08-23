@@ -1,8 +1,10 @@
 package pokercompetition
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/thoas/go-funk"
@@ -59,7 +61,14 @@ func (ce *competitionEngine) UpdateTable(table *pokertable.Table) {
 	}
 
 	// 更新 competition table
-	ce.competition.State.Tables[tableIdx] = table
+	var cloneTable pokertable.Table
+	if encoded, err := json.Marshal(table); err == nil {
+		json.Unmarshal(encoded, &cloneTable)
+	} else {
+		cloneTable = *table
+	}
+
+	ce.competition.State.Tables[tableIdx] = &cloneTable
 
 	// 處理因 table status 產生的變化
 	tableStatusHandlerMap := map[pokertable.TableStateStatus]func(*pokertable.Table, int){
@@ -266,8 +275,9 @@ func (ce *competitionEngine) settleCompetition() {
 	ce.emitEvent("settleCompetition", "")
 	ce.emitCompetitionStateEvent(CompetitionStateEvent_Closed)
 
-	// clear cache
+	// clear caches
 	ce.deletePlayerCachesByCompetition(ce.competition.ID)
+	ce.gameSettledRecords = sync.Map{}
 
 	if ce.competition.Meta.Mode == CompetitionMode_MTT {
 		// unregister seat manager
@@ -307,6 +317,12 @@ settleCompetitionTable 桌次結算
   - 適用時機: 每手結束
 */
 func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tableIdx int) {
+	if isGameSettled, ok := ce.gameSettledRecords.Load(table.State.GameState.GameID); ok && isGameSettled.(bool) {
+		return
+	}
+
+	ce.gameSettledRecords.Store(table.State.GameState.GameID, true)
+
 	// 桌次結算: 更新玩家桌內即時排名 & 當前後手碼量(該手有參賽者會更新排名，若沒參賽者排名為 0)
 	playerRankingData := ce.GetParticipatedPlayerTableRankingData(ce.competition.ID, table.State.PlayerStates, table.State.GamePlayerIndexes)
 	for playerIdx := 0; playerIdx < len(ce.competition.State.Players); playerIdx++ {
@@ -371,14 +387,6 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 			}); err != nil {
 				ce.emitErrorEvent("Auto Knockout ReBuy Players", "", err)
 				return
-			}
-		}
-	} else {
-		// 停止買入
-		// 初始化排名陣列
-		if len(ce.competition.State.Rankings) == 0 {
-			for i := 0; i < len(ce.competition.State.Players); i++ {
-				ce.competition.State.Rankings = append(ce.competition.State.Rankings, nil)
 			}
 		}
 	}
