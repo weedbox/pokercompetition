@@ -17,8 +17,8 @@ const (
 	// CompetitionStateStatus
 	CompetitionStateStatus_PreRegistering CompetitionStateStatus = "pre-registering" // 賽事已建立 (但不可報名)
 	CompetitionStateStatus_Registering    CompetitionStateStatus = "registering"     // 賽事已建立 (可報名參賽)
-	CompetitionStateStatus_DelayedBuyIn   CompetitionStateStatus = "delayed_buyin"   // 賽事已建立 (延遲買入)
-	CompetitionStateStatus_StoppedBuyIn   CompetitionStateStatus = "stopped_buyin"   // 賽事已建立 (停止買入)
+	CompetitionStateStatus_DelayedBuyIn   CompetitionStateStatus = "delayed_buy_in"  // 賽事已建立 (延遲買入)
+	CompetitionStateStatus_StoppedBuyIn   CompetitionStateStatus = "stopped_buy_in"  // 賽事已建立 (停止買入)
 	CompetitionStateStatus_End            CompetitionStateStatus = "end"             // 賽事已結束
 	CompetitionStateStatus_Restoring      CompetitionStateStatus = "restoring"       // 賽事資料轉移中 (Graceful Shutdown Use)
 
