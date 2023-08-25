@@ -26,6 +26,8 @@ github.com/weedbox/pokertable v0.0.0-20230825072212-25d878b58f2f h1:jxcGJovD9fCN
 github.com/weedbox/pokertable v0.0.0-20230825072212-25d878b58f2f/go.mod h1:T2pqS1U7ZDCBXxgOPLJD3chkDgJqJO82zyI7VLrnr6M=
 github.com/weedbox/pokertable v0.0.0-20230825091956-09d60af34e56 h1:OYTxlQi80CYdgyxN8tW8IWZw7e5YGvDE18Kov5NDt2g=
 github.com/weedbox/pokertable v0.0.0-20230825091956-09d60af34e56/go.mod h1:zNDQizx0YArjM0Mxlf0FxfBle34S82ftT0iGjsSVLR0=
+github.com/weedbox/pokertable v0.0.0-20230825103447-81fadadba78e h1:yhaVm7rX8jsFRL+/mMSNTf4BmjVp1OCZ70UaO3PZnds=
+github.com/weedbox/pokertable v0.0.0-20230825103447-81fadadba78e/go.mod h1:zNDQizx0YArjM0Mxlf0FxfBle34S82ftT0iGjsSVLR0=
 github.com/weedbox/pokertablebalancer v0.0.0-20230615080923-51d19f6291c7 h1:UwE2ui2Zg7z/CGKs4UKGdN57wWnNUGyY1ylX5ewEYWk=
 github.com/weedbox/pokertablebalancer v0.0.0-20230615080923-51d19f6291c7/go.mod h1:kFyYk4ZkxmEV6+nxRp+piJaxVr6MpRUF03rz5XlstLM=
 github.com/weedbox/syncsaga v0.0.0-20230821071725-a634f0872340 h1:ZHzlfkN/XnOIADtOxGUPbyislvjx0KjtTwCVuKEF1hw=

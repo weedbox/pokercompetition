@@ -22,7 +22,9 @@ type Manager interface {
 	CloseCompetition(competitionID string) error
 	StartCompetition(competitionID string) error
 
-	// Table Action
+	// Table Actions
+	GetTableEngineOptions() *pokertable.TableEngineOptions
+	SetTableEngineOptions(tableOptions *pokertable.TableEngineOptions)
 	UpdateTable(competitionID string, table *pokertable.Table) error
 
 	// Player Operations
@@ -33,12 +35,17 @@ type Manager interface {
 }
 
 type manager struct {
+	tableOptions        *pokertable.TableEngineOptions
 	competitionEngines  sync.Map
 	tableManagerBackend TableManagerBackend
 }
 
 func NewManager(tableManagerBackend TableManagerBackend) Manager {
+	tableOptions := pokertable.NewTableEngineOptions()
+	tableOptions.Interval = 6
+
 	return &manager{
+		tableOptions:        tableOptions,
 		competitionEngines:  sync.Map{},
 		tableManagerBackend: tableManagerBackend,
 	}
@@ -64,7 +71,10 @@ func (m *manager) SetCompetitionSeatManager(competitionID string, seatManager po
 }
 
 func (m *manager) CreateCompetition(competitionSetting CompetitionSetting, competitionUpdatedCallBack func(*Competition), competitionErrorUpdatedCallBack func(*Competition, error), competitionPlayerUpdatedCallBack func(string, *CompetitionPlayer), competitionFinalPlayerRankUpdatedCallBack func(string, string, int), competitionStateUpdatedCallBack func(string, *Competition)) (*Competition, error) {
-	competitionEngine := NewCompetitionEngine(WithTableManagerBackend(m.tableManagerBackend))
+	competitionEngine := NewCompetitionEngine(
+		WithTableManagerBackend(m.tableManagerBackend),
+		WithTableOptions(m.tableOptions),
+	)
 	competitionEngine.OnCompetitionUpdated(competitionUpdatedCallBack)
 	competitionEngine.OnCompetitionErrorUpdated(competitionErrorUpdatedCallBack)
 	competitionEngine.OnCompetitionPlayerUpdated(competitionPlayerUpdatedCallBack)
@@ -95,6 +105,14 @@ func (m *manager) StartCompetition(competitionID string) error {
 	}
 
 	return competitionEngine.StartCompetition()
+}
+
+func (m *manager) GetTableEngineOptions() *pokertable.TableEngineOptions {
+	return m.tableOptions
+}
+
+func (m *manager) SetTableEngineOptions(tableOptions *pokertable.TableEngineOptions) {
+	m.tableOptions = tableOptions
 }
 
 func (m *manager) UpdateTable(competitionID string, table *pokertable.Table) error {

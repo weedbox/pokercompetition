@@ -66,6 +66,7 @@ type competitionEngine struct {
 	playerCaches                        sync.Map // key: <competitionID.playerID>, value: PlayerCache
 	gameSettledRecords                  sync.Map // key: <gameID>, value: IsSettled
 	seatManager                         pokertablebalancer.SeatManager
+	tableOptions                        *pokertable.TableEngineOptions
 	tableManagerBackend                 TableManagerBackend
 	onCompetitionUpdated                func(*Competition)
 	onCompetitionErrorUpdated           func(*Competition, error)
@@ -101,6 +102,12 @@ func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
 	}
 
 	return ce
+}
+
+func WithTableOptions(opts *pokertable.TableEngineOptions) CompetitionEngineOpt {
+	return func(ce *competitionEngine) {
+		ce.tableOptions = opts
+	}
 }
 
 func WithTableManagerBackend(tmb TableManagerBackend) CompetitionEngineOpt {

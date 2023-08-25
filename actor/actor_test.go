@@ -36,6 +36,9 @@ func TestActor_CT(t *testing.T) {
 	tableManager := pokertable.NewManager()
 	tableManagerBackend := pokercompetition.NewNativeTableManagerBackend(tableManager)
 	manager := pokercompetition.NewManager(tableManagerBackend)
+	tableOptions := pokertable.NewTableEngineOptions()
+	tableOptions.Interval = 1
+	manager.SetTableEngineOptions(tableOptions)
 
 	// 建立賽事
 	competitionSetting := NewCTCompetitionSetting()

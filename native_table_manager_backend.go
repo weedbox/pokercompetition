@@ -11,7 +11,7 @@ type TableManagerBackend interface {
 	OnTableUpdated(fn func(table *pokertable.Table))
 
 	// TableManager Actions
-	CreateTable(setting pokertable.TableSetting) (*pokertable.Table, error)
+	CreateTable(options *pokertable.TableEngineOptions, setting pokertable.TableSetting) (*pokertable.Table, error)
 	CloseTable(tableID string) error
 	PlayersBatchReserve(tableID string, joinPlayers []pokertable.JoinPlayer) error
 	PlayersLeave(tableID string, playerIDs []string) error
@@ -44,7 +44,7 @@ func (ntmb *nativeTableManagerBackend) OnTableUpdated(fn func(table *pokertable.
 	ntmb.onTableUpdated = fn
 }
 
-func (ntmb *nativeTableManagerBackend) CreateTable(setting pokertable.TableSetting) (*pokertable.Table, error) {
+func (ntmb *nativeTableManagerBackend) CreateTable(options *pokertable.TableEngineOptions, setting pokertable.TableSetting) (*pokertable.Table, error) {
 	tableUpdatedCallBack := func(t *pokertable.Table) {
 		data, err := json.Marshal(t)
 		if err != nil {
@@ -62,7 +62,7 @@ func (ntmb *nativeTableManagerBackend) CreateTable(setting pokertable.TableSetti
 	tableErrorUpdatedCallBack := func(t *pokertable.Table, err error) {}
 	tableStateUpdatedCallBack := func(event string, t *pokertable.Table) {}
 	tablePlayerStateUpdatedCallBack := func(competitionID, tableID string, ps *pokertable.TablePlayerState) {}
-	table, err := ntmb.manager.CreateTable(setting, tableUpdatedCallBack, tableErrorUpdatedCallBack, tableStateUpdatedCallBack, tablePlayerStateUpdatedCallBack)
+	table, err := ntmb.manager.CreateTable(options, setting, tableUpdatedCallBack, tableErrorUpdatedCallBack, tableStateUpdatedCallBack, tablePlayerStateUpdatedCallBack)
 	if err != nil {
 		return nil, err
 	}

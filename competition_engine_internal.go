@@ -182,7 +182,7 @@ func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tab
 func (ce *competitionEngine) addCompetitionTable(tableSetting TableSetting, playerStatus CompetitionPlayerStatus) (string, error) {
 	// create table
 	setting := NewPokerTableSetting(ce.competition.ID, ce.competition.Meta, tableSetting)
-	table, err := ce.tableManagerBackend.CreateTable(setting)
+	table, err := ce.tableManagerBackend.CreateTable(ce.tableOptions, setting)
 	if err != nil {
 		return "", err
 	}
