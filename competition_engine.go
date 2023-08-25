@@ -46,7 +46,7 @@ type CompetitionEngine interface {
 	SetSeatManager(seatManager pokertablebalancer.SeatManager)                     // 設定拆併桌管理器
 	GetCompetition() *Competition                                                  // 取得賽事
 	CreateCompetition(competitionSetting CompetitionSetting) (*Competition, error) // 建立賽事
-	CloseCompetition() error                                                       // 關閉賽事
+	CloseCompetition(reason string) error                                          // 關閉賽事
 	StartCompetition() error                                                       // 開始賽事
 
 	// Player Operations
@@ -264,7 +264,7 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 				}
 
 				if len(ce.competition.State.Players) < ce.competition.Meta.MinPlayerCount {
-					ce.CloseCompetition()
+					ce.CloseCompetition(CompetitionStateEvent_AutoClosed)
 				}
 			}); err != nil {
 				return nil, err
@@ -296,8 +296,8 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 CloseCompetition 關閉賽事
   - 適用時機: 賽事出狀況需要臨時關閉賽事、未達開賽條件自動關閉賽事
 */
-func (ce *competitionEngine) CloseCompetition() error {
-	ce.settleCompetition()
+func (ce *competitionEngine) CloseCompetition(reason string) error {
+	ce.settleCompetition(reason)
 	return nil
 }
 
@@ -353,7 +353,7 @@ func (ce *competitionEngine) StartCompetition() error {
 						ce.competition.State.Rankings = append(ce.competition.State.Rankings, nil)
 					}
 				}
-				ce.CloseCompetition()
+				ce.CloseCompetition(CompetitionStateEvent_Closed)
 			}
 		}); err != nil {
 			return err
