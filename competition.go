@@ -96,6 +96,8 @@ type CompetitionPlayer struct {
 	// best
 	BestWinningPotChips int64    `json:"best_winning_pot_chips" mapstructure:"best_winning_pot_chips"` // 贏得最大底池籌碼數
 	BestWinningCombo    []string `json:"best_winning_combo" mapstructure:"best_winning_combo"`         // 身為贏家時最大的牌型組合
+	BestWinningType     string   `json:"best_winning_type" mapstructure:"best_winning_type"`           // 身為贏家時最大的牌型類型
+	BestWinningPower    int      `json:"best_winning_power" mapstructure:"best_winning_power"`         // 身為贏家時最大的牌型牌力
 
 	// accumulated info
 	// competition/table
@@ -114,6 +116,7 @@ type CompetitionPlayer struct {
 	TotalRaiseTimes       int   `json:"total_raise_times" mapstructure:"total_raise_times"`               // 加注/入池總次數(AllIn&Raise、Raise、Bet)
 	TotalCallTimes        int   `json:"total_call_times" mapstructure:"total_call_times"`                 // 跟注總次數
 	TotalCheckTimes       int   `json:"total_check_times" mapstructure:"total_check_times"`               // 過牌總次數
+	TotalProfitTimes      int   `json:"total_profit_times" mapstructure:"total_profit_times"`             // 總共贏得籌碼次數
 }
 
 type Blind struct {

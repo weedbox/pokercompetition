@@ -6,8 +6,8 @@ require (
 	github.com/google/uuid v1.3.1
 	github.com/stretchr/testify v1.8.4
 	github.com/thoas/go-funk v0.9.3
-	github.com/weedbox/pokerface v0.0.0-20230821165914-18906a6c6709
-	github.com/weedbox/pokertable v0.0.0-20230823093527-9f1965a74904
+	github.com/weedbox/pokerface v0.0.0-20230824174458-554591ffa90b
+	github.com/weedbox/pokertable v0.0.0-20230825072212-25d878b58f2f
 	github.com/weedbox/pokertablebalancer v0.0.0-20230615080923-51d19f6291c7
 	github.com/weedbox/timebank v0.0.0-20230713013837-bd7a6f808e3e
 )

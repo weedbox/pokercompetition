@@ -34,6 +34,8 @@ func (ce *competitionEngine) newDefaultCompetitionPlayerData(tableID, playerID s
 		AddonTimes:            0,
 		BestWinningPotChips:   0,
 		BestWinningCombo:      make([]string, 0),
+		BestWinningType:       "",
+		BestWinningPower:      0,
 		TotalRedeemChips:      redeemChips,
 		TotalGameCounts:       0,
 		TotalWalkTimes:        0,
@@ -323,15 +325,87 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 
 	ce.gameSettledRecords.Store(table.State.GameState.GameID, true)
 
+	// 更新玩家統計數據
+	gamePlayerPreflopFoldTimes := 0
+	for _, player := range table.State.PlayerStates {
+		if !player.IsParticipated {
+			continue
+		}
+
+		playerCache, exist := ce.getPlayerCache(ce.competition.ID, player.PlayerID)
+		if !exist {
+			continue
+		}
+
+		ce.competition.State.Players[playerCache.PlayerIdx].TotalGameCounts++
+		if player.GameStatistics.IsFold {
+			ce.competition.State.Players[playerCache.PlayerIdx].TotalFoldTimes++
+			switch player.GameStatistics.FoldRound {
+			case pokertable.GameRound_Preflop:
+				ce.competition.State.Players[playerCache.PlayerIdx].TotalPreflopFoldTimes++
+				gamePlayerPreflopFoldTimes++
+			case pokertable.GameRound_Flop:
+				ce.competition.State.Players[playerCache.PlayerIdx].TotalFlopFoldTimes++
+			case pokertable.GameRound_Turn:
+				ce.competition.State.Players[playerCache.PlayerIdx].TotalTurnFoldTimes++
+			case pokertable.GameRound_River:
+				ce.competition.State.Players[playerCache.PlayerIdx].TotalRiverFoldTimes++
+			}
+		}
+		ce.competition.State.Players[playerCache.PlayerIdx].TotalActionTimes += player.GameStatistics.ActionTimes
+		ce.competition.State.Players[playerCache.PlayerIdx].TotalRaiseTimes += player.GameStatistics.RaiseTimes
+		ce.competition.State.Players[playerCache.PlayerIdx].TotalCallTimes += player.GameStatistics.CallTimes
+		ce.competition.State.Players[playerCache.PlayerIdx].TotalCheckTimes += player.GameStatistics.CheckTimes
+	}
+
+	// 更新贏家統計數據
+	for _, playerResult := range table.State.GameState.Result.Players {
+		if playerResult.Changed <= 0 {
+			continue
+		}
+
+		winnerGameIdx := playerResult.Idx
+		tablePlayerIdx := table.State.GamePlayerIndexes[winnerGameIdx]
+		tablePlayer := table.State.PlayerStates[tablePlayerIdx]
+		playerCache, exist := ce.getPlayerCache(ce.competition.ID, tablePlayer.PlayerID)
+		if !exist {
+			continue
+		}
+
+		ce.competition.State.Players[playerCache.PlayerIdx].TotalProfitTimes++
+
+		gs := table.State.GameState
+		gsPlayer := gs.GetPlayer(winnerGameIdx)
+		if gsPlayer.VPIP {
+			ce.competition.State.Players[playerCache.PlayerIdx].TotalVPIPTimes++
+		}
+
+		if table.State.CurrentBBSeat == tablePlayer.Seat && tablePlayer.GameStatistics.ActionTimes == 0 && gamePlayerPreflopFoldTimes == len(table.State.GamePlayerIndexes)-1 {
+			ce.competition.State.Players[playerCache.PlayerIdx].TotalWalkTimes++
+		}
+
+		if playerResult.Changed > ce.competition.State.Players[playerCache.PlayerIdx].BestWinningPotChips {
+			ce.competition.State.Players[playerCache.PlayerIdx].BestWinningPotChips = playerResult.Changed
+		}
+
+		if gsPlayer.Combination.Power >= ce.competition.State.Players[playerCache.PlayerIdx].BestWinningPower {
+			ce.competition.State.Players[playerCache.PlayerIdx].BestWinningPower = gsPlayer.Combination.Power
+			ce.competition.State.Players[playerCache.PlayerIdx].BestWinningCombo = gsPlayer.Combination.Cards
+			ce.competition.State.Players[playerCache.PlayerIdx].BestWinningType = gsPlayer.Combination.Type
+		}
+	}
+
 	// 桌次結算: 更新玩家桌內即時排名 & 當前後手碼量(該手有參賽者會更新排名，若沒參賽者排名為 0)
 	playerRankingData := ce.GetParticipatedPlayerTableRankingData(ce.competition.ID, table.State.PlayerStates, table.State.GamePlayerIndexes)
-	for playerIdx := 0; playerIdx < len(ce.competition.State.Players); playerIdx++ {
-		player := ce.competition.State.Players[playerIdx]
-		if rankData, exist := playerRankingData[player.PlayerID]; exist {
-			ce.competition.State.Players[playerIdx].Rank = rankData.Rank
-			ce.competition.State.Players[playerIdx].Chips = rankData.Chips
-			ce.emitPlayerEvent("table-settlement", ce.competition.State.Players[playerIdx])
+	for playerID, rankData := range playerRankingData {
+		playerCache, exist := ce.getPlayerCache(ce.competition.ID, playerID)
+		if !exist {
+			continue
 		}
+
+		ce.competition.State.Players[playerCache.PlayerIdx].Rank = rankData.Rank
+		ce.competition.State.Players[playerCache.PlayerIdx].Chips = rankData.Chips
+		ce.emitPlayerEvent("table-settlement", ce.competition.State.Players[playerCache.PlayerIdx])
 	}
 
 	// 根據是否達到停止買入做處理
