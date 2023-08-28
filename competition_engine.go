@@ -462,6 +462,7 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 		jp := pokertable.JoinPlayer{
 			PlayerID:    joinPlayer.PlayerID,
 			RedeemChips: joinPlayer.RedeemChips,
+			Seat:        UnsetValue,
 		}
 		if err := ce.tableManagerBackend.PlayerReserve(tableID, jp); err != nil {
 			ce.emitErrorEvent("PlayerBuyIn -> PlayerReserve", joinPlayer.PlayerID, err)
