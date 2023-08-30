@@ -252,13 +252,6 @@ settleCompetition 賽事結算
 - 適用時機: 賽事結束
 */
 func (ce *competitionEngine) settleCompetition(stateEvent string) {
-	// 初始化排名陣列 (非正常狀況下關閉時後是需要結算，正常狀況下會在 final_buy_in 後才會初始化排名陣列)
-	if len(ce.competition.State.Rankings) == 0 {
-		for i := 0; i < len(ce.competition.State.Players); i++ {
-			ce.competition.State.Rankings = append(ce.competition.State.Rankings, nil)
-		}
-	}
-
 	// update final player rankings
 	settleStatuses := []CompetitionStateStatus{
 		CompetitionStateStatus_DelayedBuyIn,
@@ -266,13 +259,19 @@ func (ce *competitionEngine) settleCompetition(stateEvent string) {
 	}
 	if funk.Contains(settleStatuses, ce.competition.State.Status) {
 		finalRankings := ce.GetParticipatedPlayerCompetitionRankingData(ce.competition.ID, ce.competition.State.Players)
-		for playerID, rankData := range finalRankings {
-			rankIdx := rankData.Rank - 1
-			ce.competition.State.Rankings[rankIdx] = &CompetitionRank{
-				PlayerID:   playerID,
-				FinalChips: rankData.Chips,
-			}
-			ce.emitCompetitionStateFinalPlayerRankEvent(playerID, rankData.Rank)
+		// 名次由後面到前面 insert 至 Rankings
+		for i := len(finalRankings) - 1; i >= 0; i-- {
+			ranking := finalRankings[i]
+			ce.competition.State.Rankings = append(ce.competition.State.Rankings, &CompetitionRank{
+				PlayerID:   ranking.PlayerID,
+				FinalChips: ranking.Chips,
+			})
+			ce.emitCompetitionStateFinalPlayerRankEvent(ranking.PlayerID, ranking.Rank)
+		}
+
+		// 把名次由前至後重新排列 (Reverse competition.State.Rankings)
+		for i, j := 0, len(ce.competition.State.Rankings)-1; i < j; i, j = i+1, j-1 {
+			ce.competition.State.Rankings[i], ce.competition.State.Rankings[j] = ce.competition.State.Rankings[j], ce.competition.State.Rankings[i]
 		}
 	}
 
@@ -431,11 +430,14 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 			if !exist {
 				continue
 			}
-			if playerCache.ReBuyTimes < ce.competition.Meta.ReBuySetting.MaxTime {
-				ce.competition.State.Players[playerCache.PlayerIdx].IsReBuying = true
-				ce.competition.State.Players[playerCache.PlayerIdx].ReBuyEndAt = reBuyEndAt
-				ce.emitPlayerEvent("re-buying", ce.competition.State.Players[playerCache.PlayerIdx])
-				reBuyPlayerIDs = append(reBuyPlayerIDs, player.PlayerID)
+
+			if !ce.competition.State.Players[playerCache.PlayerIdx].IsReBuying {
+				if playerCache.ReBuyTimes < ce.competition.Meta.ReBuySetting.MaxTime {
+					ce.competition.State.Players[playerCache.PlayerIdx].IsReBuying = true
+					ce.competition.State.Players[playerCache.PlayerIdx].ReBuyEndAt = reBuyEndAt
+					ce.emitPlayerEvent("re-buying", ce.competition.State.Players[playerCache.PlayerIdx])
+					reBuyPlayerIDs = append(reBuyPlayerIDs, player.PlayerID)
+				}
 			}
 		}
 
@@ -478,21 +480,8 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 	// 列出淘汰玩家
 	knockoutPlayerRankings := ce.GetSortedKnockoutPlayerRankings(ce.competition.ID, table.State.PlayerStates, ce.competition.Meta.ReBuySetting.MaxTime, ce.competition.State.BlindState.IsFinalBuyInLevel())
 	knockoutPlayerIDs := make([]string, 0)
-	for knockoutPlayerIDIdx := len(knockoutPlayerRankings) - 1; knockoutPlayerIDIdx >= 0; knockoutPlayerIDIdx-- {
-		knockoutPlayerID := knockoutPlayerRankings[knockoutPlayerIDIdx]
+	for idx, knockoutPlayerID := range knockoutPlayerRankings {
 		knockoutPlayerIDs = append(knockoutPlayerIDs, knockoutPlayerID)
-
-		// 更新賽事排名
-		for rankIdx := len(ce.competition.State.Rankings) - 1; rankIdx >= 0; rankIdx-- {
-			if ce.competition.State.Rankings[rankIdx] == nil {
-				ce.competition.State.Rankings[rankIdx] = &CompetitionRank{
-					PlayerID:   knockoutPlayerID,
-					FinalChips: 0,
-				}
-				ce.emitCompetitionStateFinalPlayerRankEvent(knockoutPlayerID, rankIdx+1)
-				break
-			}
-		}
 
 		// 更新玩家狀態
 		playerCache, exist := ce.getPlayerCache(ce.competition.ID, knockoutPlayerID)
@@ -501,6 +490,14 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 		}
 		ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_Knockout
 		ce.emitPlayerEvent("knockout", ce.competition.State.Players[playerCache.PlayerIdx])
+
+		// 更新賽事排名
+		ce.competition.State.Rankings = append(ce.competition.State.Rankings, &CompetitionRank{
+			PlayerID:   knockoutPlayerID,
+			FinalChips: 0,
+		})
+		rank := ce.competition.PlayingPlayerCount() + (len(knockoutPlayerRankings) - idx)
+		ce.emitCompetitionStateFinalPlayerRankEvent(knockoutPlayerID, rank)
 	}
 	ce.emitEvent("Table Settlement", "")
 	ce.emitCompetitionStateEvent(CompetitionStateEvent_TableGameSettled)

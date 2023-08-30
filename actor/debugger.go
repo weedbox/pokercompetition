@@ -189,9 +189,10 @@ func DebugPrintCompetitionEnded(c pokercompetition.Competition) {
 	fmt.Println("---------- 最後排名 ----------")
 	for idx, rank := range c.State.Rankings {
 		if rank == nil {
-			continue
+			fmt.Printf("[%d] null\n", idx+1)
+		} else {
+			fmt.Printf("[%d] %s: %d\n", idx+1, rank.PlayerID, rank.FinalChips)
 		}
-		fmt.Printf("[%d] %s: %d\n", idx+1, rank.PlayerID, rank.FinalChips)
 	}
 
 	fmt.Println()

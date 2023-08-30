@@ -32,7 +32,7 @@ func (ce *competitionEngine) emitErrorEvent(eventName string, playerID string, e
 
 func (ce *competitionEngine) emitPlayerEvent(eventName string, player *CompetitionPlayer) {
 	// emit event
-	// fmt.Printf("->[CompetitionPlayer][%s] emit Event: %s\n", eventName, fmt.Sprintf("[%s][%s]: %s", player.PlayerID, player.CurrentTableID, player.Status))
+	fmt.Printf("->[CompetitionPlayer][%s] emit Event: %s\n", eventName, fmt.Sprintf("[%s][%s]: %s", player.PlayerID, player.CurrentTableID, player.Status))
 	ce.onCompetitionPlayerUpdated(ce.competition.ID, player)
 }
 

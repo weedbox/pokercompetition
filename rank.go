@@ -14,11 +14,12 @@ type RankData struct {
 }
 
 /*
-	GetParticipatedPlayerTableRankingData 計算有參與該手玩家該桌即時排名
-	- Algorithm:
-	    1. Bankroll 由大到小排名
-		2. 如果 Bankroll 相同則用加入時間排序  (早加入者名次高)
-	- @return 該桌玩家排名資料 Map, key: player id, value: RankData
+GetParticipatedPlayerTableRankingData 計算有參與該手玩家該桌即時排名
+- Algorithm:
+ 1. Bankroll 由大到小排名
+ 2. 如果 Bankroll 相同則用加入時間排序  (早加入者名次高)
+
+- @return 該桌玩家排名資料 Map, key: player id, value: RankData
 */
 func (ce *competitionEngine) GetParticipatedPlayerTableRankingData(competitionID string, tablePlayers []*pokertable.TablePlayerState, gamePlayerIndexes []int) map[string]RankData {
 	playingPlayers := make([]pokertable.TablePlayerState, 0)
@@ -67,8 +68,8 @@ func (ce *competitionEngine) GetParticipatedPlayerTableRankingData(competitionID
 }
 
 /*
-	GetSortedFinalKnockoutPlayerRankings 停止買入後被淘汰玩家的排名 (越早入桌者，排名越前面 index 越大)
-	  - @return SortedFinalKnockoutPlayerIDs 排序過後的淘汰玩家 ID 陣列
+GetSortedFinalKnockoutPlayerRankings 停止買入後被淘汰玩家的排名 (越早入桌者，排名越前面，但 index 越小 aka. 排名後面者陣列 index 越小)
+  - @return SortedFinalKnockoutPlayerIDs 排序過後的淘汰玩家 ID 陣列
 */
 func (ce *competitionEngine) GetSortedKnockoutPlayerRankings(competitionID string, players []*pokertable.TablePlayerState, maxReBuyTimes int, isFinalBuyInLevel bool) []string {
 	sortedFinalKnockoutPlayers := make([]pokertable.TablePlayerState, 0)
@@ -97,7 +98,7 @@ func (ce *competitionEngine) GetSortedKnockoutPlayerRankings(competitionID strin
 		playerCacheI, iExist := ce.getPlayerCache(competitionID, players[i].PlayerID)
 		playerCacheJ, jExist := ce.getPlayerCache(competitionID, players[j].PlayerID)
 		if iExist && jExist {
-			return playerCacheI.JoinAt < playerCacheJ.JoinAt
+			return playerCacheI.JoinAt > playerCacheJ.JoinAt
 		}
 		return true
 	})
@@ -108,13 +109,14 @@ func (ce *competitionEngine) GetSortedKnockoutPlayerRankings(competitionID strin
 }
 
 /*
-	GetParticipatedPlayerCompetitionRankingData 計算賽事所有沒有被淘汰玩家最終排名
-	- Algorithm:
-	    1. Chips 由大到小排名
-		2. 如果 Chips 相同則用加入時間排序  (早加入者名次高)
-	- @return 該桌玩家排名資料 Map, key: player id, value: RankData
+GetParticipatedPlayerCompetitionRankingData 計算賽事所有沒有被淘汰玩家最終排名
+- Algorithm:
+ 1. Chips 由大到小排名
+ 2. 如果 Chips 相同則用加入時間排序  (早加入者名次高)
+
+- @return 該桌玩家排名資料陣列 (名次 1 to N)
 */
-func (ce *competitionEngine) GetParticipatedPlayerCompetitionRankingData(competitionID string, players []*CompetitionPlayer) map[string]RankData {
+func (ce *competitionEngine) GetParticipatedPlayerCompetitionRankingData(competitionID string, players []*CompetitionPlayer) []RankData {
 	playingPlayers := make([]CompetitionPlayer, 0)
 	for _, player := range players {
 		if player.Status != CompetitionPlayerStatus_Knockout {
@@ -135,15 +137,15 @@ func (ce *competitionEngine) GetParticipatedPlayerCompetitionRankingData(competi
 
 	// build RankingData
 	rank := 1
-	rankingData := make(map[string]RankData)
+	rankingData := make([]RankData, 0)
 
 	// add playing player ranks
 	for _, playingPlayer := range playingPlayers {
-		rankingData[playingPlayer.PlayerID] = RankData{
+		rankingData = append(rankingData, RankData{
 			PlayerID: playingPlayer.PlayerID,
 			Rank:     rank,
 			Chips:    playingPlayer.Chips,
-		}
+		})
 		rank++
 	}
 

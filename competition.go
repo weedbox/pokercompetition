@@ -70,7 +70,7 @@ type CompetitionState struct {
 	Players    []*CompetitionPlayer   `json:"players" mapstructure:"players"`         // 參與過賽事玩家陣列
 	Status     CompetitionStateStatus `json:"status" mapstructure:"status"`           // 賽事狀態
 	Tables     []*pokertable.Table    `json:"tables" mapstructure:"tables"`           // 多桌
-	Rankings   []*CompetitionRank     `json:"rankings" mapstructure:"rankings"`       // 玩家排名 (陣列 Index 即是排名 rank - 1, ex: index 0 -> 第一名, index 1 -> 第二名...)
+	Rankings   []*CompetitionRank     `json:"rankings" mapstructure:"rankings"`       // 停止買入後玩家排名 (陣列 Index 即是排名 rank - 1, ex: index 0 -> 第一名, index 1 -> 第二名...)
 }
 
 type CompetitionRank struct {

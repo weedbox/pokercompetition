@@ -204,13 +204,6 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 		if ce.competition.State.BlindState.IsFinalBuyInLevel() {
 			ce.competition.State.Status = CompetitionStateStatus_StoppedBuyIn
 			ce.emitEvent("Final BuyIn", "")
-
-			// 初始化排名陣列
-			if len(ce.competition.State.Rankings) == 0 {
-				for i := 0; i < len(ce.competition.State.Players); i++ {
-					ce.competition.State.Rankings = append(ce.competition.State.Rankings, nil)
-				}
-			}
 		}
 
 		for _, table := range ce.competition.State.Tables {
