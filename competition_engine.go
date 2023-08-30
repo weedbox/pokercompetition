@@ -294,7 +294,7 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 
 /*
 CloseCompetition 關閉賽事
-  - 適用時機: 賽事出狀況需要臨時關閉賽事、未達開賽條件自動關閉賽事
+  - 適用時機: 賽事出狀況需要臨時關閉賽事、未達開賽條件自動關閉賽事、正常結束賽事
 */
 func (ce *competitionEngine) CloseCompetition(reason string) error {
 	ce.settleCompetition(reason)
@@ -318,7 +318,7 @@ func (ce *competitionEngine) StartCompetition() error {
 		ce.competition.State.StartAt = time.Now().Unix()
 	}
 	// TODO: decide mtt 是否需要設定 EndAt?
-	ce.competition.State.EndAt = ce.competition.State.StartAt + int64((time.Duration(ce.competition.Meta.MaxDuration) * time.Minute).Seconds())
+	ce.competition.State.EndAt = ce.competition.State.StartAt + int64((time.Duration(ce.competition.Meta.MaxDuration) * time.Second).Seconds())
 
 	// 初始化盲注
 	bs, err := ce.blind.Start()
@@ -347,12 +347,6 @@ func (ce *competitionEngine) StartCompetition() error {
 			}
 
 			if len(ce.competition.State.Tables[0].AlivePlayers()) < 2 {
-				// 初始化排名陣列
-				if len(ce.competition.State.Rankings) == 0 {
-					for i := 0; i < len(ce.competition.State.Players); i++ {
-						ce.competition.State.Rankings = append(ce.competition.State.Rankings, nil)
-					}
-				}
 				ce.CloseCompetition(CompetitionStateEvent_Closed)
 			}
 		}); err != nil {

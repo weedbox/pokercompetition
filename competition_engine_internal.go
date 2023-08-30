@@ -139,6 +139,7 @@ func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tab
 			return
 		}
 
+		// TODO: checkout resume from breaking logic
 		if ce.competition.IsBreaking() {
 			if !ce.setResumeFromPauseTask {
 				// resume game from breaking
@@ -151,6 +152,7 @@ func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tab
 					if len(ce.competition.State.Tables) > tableIdx {
 						t := ce.competition.State.Tables[tableIdx]
 						tableID := t.ID
+						// TODO: close table check might not be necessary
 						if ce.shouldCloseTable(t.State.StartAt, len(t.AlivePlayers())) {
 							if err := ce.tableManagerBackend.CloseTable(tableID); err != nil {
 								ce.emitErrorEvent("resume game from breaking & close table", "", err)
@@ -250,6 +252,13 @@ settleCompetition 賽事結算
 - 適用時機: 賽事結束
 */
 func (ce *competitionEngine) settleCompetition(stateEvent string) {
+	// 初始化排名陣列 (非正常狀況下關閉時後是需要結算，正常狀況下會在 final_buy_in 後才會初始化排名陣列)
+	if len(ce.competition.State.Rankings) == 0 {
+		for i := 0; i < len(ce.competition.State.Players); i++ {
+			ce.competition.State.Rankings = append(ce.competition.State.Rankings, nil)
+		}
+	}
+
 	// update final player rankings
 	settleStatuses := []CompetitionStateStatus{
 		CompetitionStateStatus_DelayedBuyIn,
@@ -310,7 +319,7 @@ func (ce *competitionEngine) closeCompetitionTable(table *pokertable.Table, tabl
 	ce.emitCompetitionStateEvent(CompetitionStateEvent_TableUpdated)
 
 	if len(ce.competition.State.Tables) == 0 {
-		ce.settleCompetition(CompetitionStateEvent_Closed)
+		ce.CloseCompetition(CompetitionStateEvent_Closed)
 	}
 }
 
