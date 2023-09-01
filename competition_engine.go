@@ -198,6 +198,10 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 	}
 	ce.blind.ApplyOptions(options)
 	ce.blind.OnBlindStateUpdated(func(bs *pokerblind.BlindState) {
+		if ce.competition.State.Status == CompetitionStateStatus_End {
+			return
+		}
+
 		ce.competition.State.BlindState.CurrentLevelIndex = bs.Status.CurrentLevelIndex
 
 		// 更新賽事狀態: 停止買入
