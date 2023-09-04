@@ -283,6 +283,7 @@ func (ce *competitionEngine) settleCompetition(endCompetitionStatus CompetitionS
 
 	// Emit event
 	ce.emitEvent("settleCompetition", "")
+	ce.emitCompetitionStateEvent(CompetitionStateEvent_Settled)
 
 	// clear caches
 	ce.deletePlayerCachesByCompetition(ce.competition.ID)
