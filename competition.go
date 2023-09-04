@@ -21,7 +21,7 @@ const (
 	CompetitionStateStatus_StoppedBuyIn   CompetitionStateStatus = "stopped_buy_in"  // 賽事已建立 (停止買入)
 	CompetitionStateStatus_End            CompetitionStateStatus = "end"             // 賽事已結束 (正常結束)
 	CompetitionStateStatus_AutoEnd        CompetitionStateStatus = "auto_end"        // 賽事已結束 (開賽未成功自動關閉)
-	CompetitionStateStatus_ForceEnd       CompetitionStateStatus = "Force_end"       // 賽事已結束 (其他原因強制關閉)
+	CompetitionStateStatus_ForceEnd       CompetitionStateStatus = "force_end"       // 賽事已結束 (其他原因強制關閉)
 	CompetitionStateStatus_Restoring      CompetitionStateStatus = "restoring"       // 賽事資料轉移中 (Graceful Shutdown Use)
 
 	// CompetitionPlayerStatus
