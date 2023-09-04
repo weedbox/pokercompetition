@@ -343,7 +343,15 @@ func (ce *competitionEngine) StartCompetition() error {
 				return
 			}
 
-			if len(ce.competition.State.Tables[0].AlivePlayers()) < 2 {
+			endStatus := []CompetitionStateStatus{
+				CompetitionStateStatus_End,
+				CompetitionStateStatus_AutoEnd,
+				CompetitionStateStatus_ForceEnd,
+			}
+			if funk.Contains(endStatus, ce.competition.State.Status) {
+				return
+			}
+			if len(ce.competition.State.Tables) > 0 && len(ce.competition.State.Tables[0].AlivePlayers()) < 2 {
 				ce.CloseCompetition(CompetitionStateStatus_End)
 			}
 		}); err != nil {
