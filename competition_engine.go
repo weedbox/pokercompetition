@@ -260,8 +260,10 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 					return
 				}
 
-				if len(ce.competition.State.Players) < ce.competition.Meta.MinPlayerCount {
-					ce.CloseCompetition(CompetitionStateStatus_AutoEnd)
+				if ce.competition.State.Status == CompetitionStateStatus_Registering {
+					if len(ce.competition.State.Players) < ce.competition.Meta.MinPlayerCount {
+						ce.CloseCompetition(CompetitionStateStatus_AutoEnd)
+					}
 				}
 			}); err != nil {
 				return nil, err

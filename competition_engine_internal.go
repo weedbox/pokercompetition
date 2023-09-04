@@ -149,6 +149,15 @@ func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tab
 						return
 					}
 
+					endStatus := []CompetitionStateStatus{
+						CompetitionStateStatus_End,
+						CompetitionStateStatus_AutoEnd,
+						CompetitionStateStatus_ForceEnd,
+					}
+					if funk.Contains(endStatus, ce.competition.State.Status) {
+						return
+					}
+
 					if len(ce.competition.State.Tables) > tableIdx {
 						t := ce.competition.State.Tables[tableIdx]
 						tableID := t.ID
@@ -280,6 +289,9 @@ func (ce *competitionEngine) settleCompetition(endCompetitionStatus CompetitionS
 	if ce.competition.Meta.Mode == CompetitionMode_MTT {
 		ce.competition.State.EndAt = time.Now().Unix()
 	}
+
+	// close blind
+	ce.blind.End()
 
 	// Emit event
 	ce.emitEvent("settleCompetition", "")

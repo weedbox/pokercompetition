@@ -23,6 +23,7 @@ type Blind interface {
 	PrintState() error
 	ApplyOptions(options *BlindOptions) *BlindState
 	Start() (*BlindState, error)
+	End()
 }
 
 type blind struct {
@@ -30,12 +31,14 @@ type blind struct {
 	bs           *BlindState
 	stateUpdater func(*BlindState)
 	errorUpdater func(*BlindState, error)
+	isEnd        bool
 }
 
 func NewBlind() Blind {
 	return &blind{
 		stateUpdater: func(bs *BlindState) {},
 		errorUpdater: func(*BlindState, error) {},
+		isEnd:        false,
 	}
 }
 
@@ -95,6 +98,7 @@ func (b *blind) Start() (*BlindState, error) {
 
 	startAt := time.Now()
 	b.bs.StartedAt = startAt.Unix()
+	b.isEnd = false
 
 	for idx, bl := range b.bs.Meta.Levels {
 		if bl.Level == b.bs.Meta.InitialLevel {
@@ -121,10 +125,18 @@ func (b *blind) Start() (*BlindState, error) {
 	return b.bs, nil
 }
 
+func (b *blind) End() {
+	b.isEnd = true
+}
+
 func (b *blind) updateLevel(endAt int64) {
 	levelEndTime := time.Unix(endAt, 0)
 	if err := timebank.NewTimeBank().NewTaskWithDeadline(levelEndTime, func(isCancelled bool) {
 		if isCancelled {
+			return
+		}
+
+		if b.isEnd {
 			return
 		}
 
