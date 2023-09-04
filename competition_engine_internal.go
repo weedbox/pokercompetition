@@ -251,7 +251,7 @@ func (ce *competitionEngine) addCompetitionTable(tableSetting TableSetting, play
 settleCompetition 賽事結算
 - 適用時機: 賽事結束
 */
-func (ce *competitionEngine) settleCompetition(stateEvent string) {
+func (ce *competitionEngine) settleCompetition(endCompetitionStatus CompetitionStateStatus) {
 	// update final player rankings
 	settleStatuses := []CompetitionStateStatus{
 		CompetitionStateStatus_DelayedBuyIn,
@@ -276,14 +276,13 @@ func (ce *competitionEngine) settleCompetition(stateEvent string) {
 	}
 
 	// close competition
-	ce.competition.State.Status = CompetitionStateStatus_End
+	ce.competition.State.Status = endCompetitionStatus
 	if ce.competition.Meta.Mode == CompetitionMode_MTT {
 		ce.competition.State.EndAt = time.Now().Unix()
 	}
 
 	// Emit event
 	ce.emitEvent("settleCompetition", "")
-	ce.emitCompetitionStateEvent(stateEvent)
 
 	// clear caches
 	ce.deletePlayerCachesByCompetition(ce.competition.ID)
@@ -318,7 +317,7 @@ func (ce *competitionEngine) closeCompetitionTable(table *pokertable.Table, tabl
 	ce.emitCompetitionStateEvent(CompetitionStateEvent_TableUpdated)
 
 	if len(ce.competition.State.Tables) == 0 {
-		ce.CloseCompetition(CompetitionStateEvent_Closed)
+		ce.CloseCompetition(CompetitionStateStatus_End)
 	}
 }
 

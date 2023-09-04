@@ -19,7 +19,7 @@ type Manager interface {
 	// Competition Actions
 	SetCompetitionSeatManager(competitionID string, seatManager pokertablebalancer.SeatManager) error
 	CreateCompetition(competitionSetting CompetitionSetting, competitionUpdatedCallBack func(*Competition), competitionErrorUpdatedCallBack func(*Competition, error), competitionPlayerUpdatedCallBack func(string, *CompetitionPlayer), competitionFinalPlayerRankUpdatedCallBack func(string, string, int), competitionStateUpdatedCallBack func(string, *Competition)) (*Competition, error)
-	CloseCompetition(competitionID string, reason string) error
+	CloseCompetition(competitionID string, endStatus CompetitionStateStatus) error
 	StartCompetition(competitionID string) error
 
 	// Table Actions
@@ -89,13 +89,13 @@ func (m *manager) CreateCompetition(competitionSetting CompetitionSetting, compe
 	return competition, nil
 }
 
-func (m *manager) CloseCompetition(competitionID string, reason string) error {
+func (m *manager) CloseCompetition(competitionID string, endStatus CompetitionStateStatus) error {
 	competitionEngine, err := m.GetCompetitionEngine(competitionID)
 	if err != nil {
 		return ErrManagerCompetitionNotFound
 	}
 
-	return competitionEngine.CloseCompetition(reason)
+	return competitionEngine.CloseCompetition(endStatus)
 }
 
 func (m *manager) StartCompetition(competitionID string) error {

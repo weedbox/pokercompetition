@@ -8,9 +8,6 @@ import (
 const (
 	CompetitionStateEvent_BlindUpdated     = "BlindUpdated"
 	CompetitionStateEvent_Started          = "Started"
-	CompetitionStateEvent_Closed           = "Closed"
-	CompetitionStateEvent_AutoClosed       = "AutoClosed"  // 開賽未成功自動關閉
-	CompetitionStateEvent_ForceClosed      = "ForceClosed" // 其他原因強制關閉
 	CompetitionStateEvent_TableUpdated     = "TableUpdated"
 	CompetitionStateEvent_TableGameSettled = "TableGameSettled"
 )
