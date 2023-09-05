@@ -408,7 +408,7 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 		}
 
 		if ce.competition.Meta.Mode == CompetitionMode_CT {
-			if ce.competition.State.Players[playerIdx].ReBuyEndAt > time.Now().Unix() {
+			if time.Now().Unix() > ce.competition.State.Players[playerIdx].ReBuyEndAt {
 				return ErrCompetitionReBuyRejected
 			}
 		}
