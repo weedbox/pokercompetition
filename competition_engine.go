@@ -19,6 +19,7 @@ var (
 	ErrCompetitionInvalidCreateSetting = errors.New("competition: invalid create competition setting")
 	ErrCompetitionLeaveRejected        = errors.New("competition: not allowed to leave")
 	ErrCompetitionRefundRejected       = errors.New("competition: not allowed to refund")
+	ErrCompetitionQuitRejected         = errors.New("competition: not allowed to quit")
 	ErrCompetitionNoRedeemChips        = errors.New("competition: not redeem any chips")
 	ErrCompetitionAddonRejected        = errors.New("competition: not allowed to addon")
 	ErrCompetitionReBuyRejected        = errors.New("competition: not allowed to re-buy")
@@ -54,6 +55,7 @@ type CompetitionEngine interface {
 	PlayerAddon(tableID string, joinPlayer JoinPlayer) error // 玩家增購
 	PlayerRefund(playerID string) error                      // 玩家退賽
 	PlayerLeave(tableID, playerID string) error              // 玩家離桌結算 (現金桌)
+	PlayerQuit(tableID, playerID string) error               // 玩家棄賽淘汰
 
 	// SeatManager Api Implementations
 	AutoCreateTable(competitionID string) (*pokertablebalancer.CreateTableResp, error)                                       // 拆併桌自動開桌
@@ -62,6 +64,7 @@ type CompetitionEngine interface {
 }
 
 type competitionEngine struct {
+	mu                                  sync.RWMutex
 	competition                         *Competition
 	playerCaches                        sync.Map // key: <competitionID.playerID>, value: PlayerCache
 	gameSettledRecords                  sync.Map // key: <gameID>, value: IsSettled
@@ -375,6 +378,9 @@ func (ce *competitionEngine) StartCompetition() error {
 }
 
 func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
+	ce.mu.Lock()
+	defer ce.mu.Unlock()
+
 	// validate join player data
 	if joinPlayer.RedeemChips <= 0 {
 		return ErrCompetitionNoRedeemChips
@@ -479,6 +485,9 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 }
 
 func (ce *competitionEngine) PlayerAddon(tableID string, joinPlayer JoinPlayer) error {
+	ce.mu.Lock()
+	defer ce.mu.Unlock()
+
 	// validate join player data
 	if joinPlayer.RedeemChips <= 0 {
 		return ErrCompetitionNoRedeemChips
@@ -517,6 +526,9 @@ func (ce *competitionEngine) PlayerAddon(tableID string, joinPlayer JoinPlayer) 
 }
 
 func (ce *competitionEngine) PlayerRefund(playerID string) error {
+	ce.mu.Lock()
+	defer ce.mu.Unlock()
+
 	// validate refund conditions
 	playerIdx := ce.competition.FindPlayerIdx(func(player *CompetitionPlayer) bool {
 		return player.PlayerID == playerID
@@ -573,6 +585,57 @@ func (ce *competitionEngine) PlayerLeave(tableID, playerID string) error {
 	ce.deletePlayerCache(ce.competition.ID, playerID)
 
 	ce.emitEvent("PlayerLeave", playerID)
+	return nil
+}
+
+func (ce *competitionEngine) PlayerQuit(tableID, playerID string) error {
+	ce.mu.Lock()
+	defer ce.mu.Unlock()
+
+	// validate quit conditions
+	playerIdx := ce.competition.FindPlayerIdx(func(player *CompetitionPlayer) bool {
+		return player.PlayerID == playerID
+	})
+	if playerIdx == UnsetValue {
+		return ErrCompetitionQuitRejected
+	}
+
+	tableIdx := ce.competition.FindTableIdx(func(t *pokertable.Table) bool {
+		return tableID == t.ID
+	})
+	if tableIdx == UnsetValue {
+		return ErrCompetitionQuitRejected
+	}
+
+	ce.competition.State.Players[playerIdx].Status = CompetitionPlayerStatus_Knockout
+	ce.competition.State.Players[playerIdx].IsReBuying = false
+	ce.competition.State.Players[playerIdx].ReBuyEndAt = UnsetValue
+	ce.emitPlayerEvent("quit knockout", ce.competition.State.Players[playerIdx])
+
+	if ce.competition.State.BlindState.IsFinalBuyInLevel() {
+		// 更新賽事排名
+		ce.competition.State.Rankings = append(ce.competition.State.Rankings, &CompetitionRank{
+			PlayerID:   playerID,
+			FinalChips: 0,
+		})
+		rank := ce.competition.PlayingPlayerCount() + 1
+		ce.emitCompetitionStateFinalPlayerRankEvent(playerID, rank)
+	}
+	ce.emitEvent("Player Quit", "")
+	ce.emitCompetitionStateEvent(CompetitionStateEvent_KnockoutPlayers)
+
+	if err := ce.tableManagerBackend.PlayersLeave(tableID, []string{playerID}); err != nil {
+		ce.emitErrorEvent("Player Quit Knockout Players -> PlayersLeave", playerID, err)
+	}
+
+	// 結束桌
+	table := ce.competition.State.Tables[tableIdx]
+	if ce.competition.Meta.Mode == CompetitionMode_CT && ce.shouldCloseTable(table.State.StartAt, len(table.AlivePlayers())) {
+		if err := ce.tableManagerBackend.CloseTable(tableID); err != nil {
+			ce.emitErrorEvent("Player Quit Knockout Players -> CloseTable", "", err)
+		}
+	}
+
 	return nil
 }
 

@@ -32,6 +32,7 @@ type Manager interface {
 	PlayerAddon(competitionID string, tableID string, joinPlayer JoinPlayer) error
 	PlayerRefund(competitionID string, playerID string) error
 	PlayerLeave(competitionID string, tableID, playerID string) error
+	PlayerQuit(competitionID string, tableID, playerID string) error
 }
 
 type manager struct {
@@ -159,4 +160,13 @@ func (m *manager) PlayerLeave(competitionID string, tableID, playerID string) er
 	}
 
 	return competitionEngine.PlayerLeave(tableID, playerID)
+}
+
+func (m *manager) PlayerQuit(competitionID string, tableID, playerID string) error {
+	competitionEngine, err := m.GetCompetitionEngine(competitionID)
+	if err != nil {
+		return ErrManagerCompetitionNotFound
+	}
+
+	return competitionEngine.PlayerQuit(tableID, playerID)
 }

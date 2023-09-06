@@ -68,14 +68,15 @@ func (ce *competitionEngine) GetParticipatedPlayerTableRankingData(competitionID
 }
 
 /*
-GetSortedFinalKnockoutPlayerRankings 停止買入後被淘汰玩家的排名 (越早入桌者，排名越前面，但 index 越小 aka. 排名後面者陣列 index 越小)
+GetSortedTableSettlementKnockoutPlayerRankings 桌次結算後預計被淘汰玩家的排名 (越早入桌者，排名越前面，但 index 越小 aka. 排名後面者陣列 index 越小)
   - @return SortedFinalKnockoutPlayerIDs 排序過後的淘汰玩家 ID 陣列
 */
-func (ce *competitionEngine) GetSortedKnockoutPlayerRankings(competitionID string, players []*pokertable.TablePlayerState, maxReBuyTimes int, isFinalBuyInLevel bool) []string {
+func (ce *competitionEngine) GetSortedTableSettlementKnockoutPlayerRankings(tablePlayers []*pokertable.TablePlayerState) []string {
+	competitionID := ce.competition.ID
 	sortedFinalKnockoutPlayers := make([]pokertable.TablePlayerState, 0)
 
 	// 找出可能的淘汰者們
-	for _, p := range players {
+	for _, p := range tablePlayers {
 		// 有籌碼就略過
 		if p.Bankroll > 0 {
 			continue
@@ -84,9 +85,9 @@ func (ce *competitionEngine) GetSortedKnockoutPlayerRankings(competitionID strin
 		// 延遲買入階段 & 還有補碼次數就略過
 		allowToReBuy := false
 		if playerCache, exist := ce.getPlayerCache(competitionID, p.PlayerID); exist {
-			allowToReBuy = playerCache.ReBuyTimes < maxReBuyTimes
+			allowToReBuy = playerCache.ReBuyTimes < ce.competition.Meta.ReBuySetting.MaxTime
 		}
-		if !isFinalBuyInLevel && allowToReBuy {
+		if !ce.competition.State.BlindState.IsFinalBuyInLevel() && allowToReBuy {
 			continue
 		}
 
@@ -95,8 +96,8 @@ func (ce *competitionEngine) GetSortedKnockoutPlayerRankings(competitionID strin
 
 	// 依加入時間晚到早排序
 	sort.Slice(sortedFinalKnockoutPlayers, func(i int, j int) bool {
-		playerCacheI, iExist := ce.getPlayerCache(competitionID, players[i].PlayerID)
-		playerCacheJ, jExist := ce.getPlayerCache(competitionID, players[j].PlayerID)
+		playerCacheI, iExist := ce.getPlayerCache(competitionID, sortedFinalKnockoutPlayers[i].PlayerID)
+		playerCacheJ, jExist := ce.getPlayerCache(competitionID, sortedFinalKnockoutPlayers[j].PlayerID)
 		if iExist && jExist {
 			return playerCacheI.JoinAt > playerCacheJ.JoinAt
 		}
@@ -106,6 +107,28 @@ func (ce *competitionEngine) GetSortedKnockoutPlayerRankings(competitionID strin
 	return funk.Map(sortedFinalKnockoutPlayers, func(p pokertable.TablePlayerState) string {
 		return p.PlayerID
 	}).([]string)
+}
+
+/*
+GetSortedReBuyKnockoutPlayerRankings 超過 ReBuy 時間後預計被淘汰玩家的排名 (越早入桌者，排名越前面，但 index 越小 aka. 排名後面者陣列 index 越小)
+  - @return SortedFinalKnockoutPlayerIDs 排序過後的淘汰玩家 ID 陣列
+*/
+func (ce *competitionEngine) GetSortedReBuyKnockoutPlayerRankings(knockoutPlayerIDs []string) []string {
+	competitionID := ce.competition.ID
+	sortedFinalKnockoutPlayers := make([]string, len(knockoutPlayerIDs))
+	copy(sortedFinalKnockoutPlayers, knockoutPlayerIDs)
+
+	// 依加入時間晚到早排序
+	sort.Slice(sortedFinalKnockoutPlayers, func(i int, j int) bool {
+		playerCacheI, iExist := ce.getPlayerCache(competitionID, sortedFinalKnockoutPlayers[i])
+		playerCacheJ, jExist := ce.getPlayerCache(competitionID, sortedFinalKnockoutPlayers[j])
+		if iExist && jExist {
+			return playerCacheI.JoinAt > playerCacheJ.JoinAt
+		}
+		return true
+	})
+
+	return sortedFinalKnockoutPlayers
 }
 
 /*

@@ -154,6 +154,11 @@ type AddonSetting struct {
 	MaxTime     int     `json:"max_time" mapstructure:"max_time"`           // 最大次數
 }
 
+// Competition Setters
+func (c *Competition) AsPlayer() {
+	c.State.Tables = nil
+}
+
 // Competition Getters
 func (c Competition) GetJSON() (string, error) {
 	encoded, err := json.Marshal(c)

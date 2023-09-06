@@ -461,7 +461,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 					return
 				}
 
-				knockoutPlayerIDs := make([]string, 0, len(reBuyPlayerIDs))
+				knockoutPlayerIDs := make([]string, 0)
 				for _, playerID := range reBuyPlayerIDs {
 					playerCache, exist := ce.getPlayerCache(ce.competition.ID, playerID)
 					if !exist {
@@ -473,12 +473,34 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 						ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_Knockout
 						ce.competition.State.Players[playerCache.PlayerIdx].IsReBuying = false
 						ce.competition.State.Players[playerCache.PlayerIdx].ReBuyEndAt = UnsetValue
+						ce.emitPlayerEvent("re buy knockout", ce.competition.State.Players[playerCache.PlayerIdx])
 					}
 				}
 
 				if len(knockoutPlayerIDs) > 0 {
+					knockoutPlayerRankings := ce.GetSortedReBuyKnockoutPlayerRankings(knockoutPlayerIDs)
+
+					for idx, knockoutPlayerID := range knockoutPlayerRankings {
+						// 更新賽事排名
+						ce.competition.State.Rankings = append(ce.competition.State.Rankings, &CompetitionRank{
+							PlayerID:   knockoutPlayerID,
+							FinalChips: 0,
+						})
+						rank := ce.competition.PlayingPlayerCount() + (len(knockoutPlayerRankings) - idx)
+						ce.emitCompetitionStateFinalPlayerRankEvent(knockoutPlayerID, rank)
+					}
+					ce.emitEvent("Re Buy Knockout", "")
+					ce.emitCompetitionStateEvent(CompetitionStateEvent_KnockoutPlayers)
+
 					if err := ce.tableManagerBackend.PlayersLeave(table.ID, knockoutPlayerIDs); err != nil {
 						ce.emitErrorEvent("Knockout Players -> PlayersLeave", strings.Join(knockoutPlayerIDs, ","), err)
+					}
+
+					// 結束桌
+					if ce.shouldCloseTable(table.State.StartAt, len(table.AlivePlayers())) {
+						if err := ce.tableManagerBackend.CloseTable(table.ID); err != nil {
+							ce.emitErrorEvent("Re Buy Knockout Players -> CloseTable", "", err)
+						}
 					}
 				}
 			}); err != nil {
@@ -490,7 +512,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 
 	// 處理淘汰玩家
 	// 列出淘汰玩家
-	knockoutPlayerRankings := ce.GetSortedKnockoutPlayerRankings(ce.competition.ID, table.State.PlayerStates, ce.competition.Meta.ReBuySetting.MaxTime, ce.competition.State.BlindState.IsFinalBuyInLevel())
+	knockoutPlayerRankings := ce.GetSortedTableSettlementKnockoutPlayerRankings(table.State.PlayerStates)
 	knockoutPlayerIDs := make([]string, 0)
 	for idx, knockoutPlayerID := range knockoutPlayerRankings {
 		knockoutPlayerIDs = append(knockoutPlayerIDs, knockoutPlayerID)
@@ -501,7 +523,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 			continue
 		}
 		ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_Knockout
-		ce.emitPlayerEvent("knockout", ce.competition.State.Players[playerCache.PlayerIdx])
+		ce.emitPlayerEvent("table settlement knockout", ce.competition.State.Players[playerCache.PlayerIdx])
 
 		// 更新賽事排名
 		ce.competition.State.Rankings = append(ce.competition.State.Rankings, &CompetitionRank{
@@ -520,14 +542,14 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 		// TableEngine Player Leave
 		if len(knockoutPlayerIDs) > 0 {
 			if err := ce.tableManagerBackend.PlayersLeave(table.ID, knockoutPlayerIDs); err != nil {
-				ce.emitErrorEvent("Knockout Players -> PlayersLeave", strings.Join(knockoutPlayerIDs, ","), err)
+				ce.emitErrorEvent("Table Settlement Knockout Players -> PlayersLeave", strings.Join(knockoutPlayerIDs, ","), err)
 			}
 		}
 
 		// 結束桌
 		if ce.shouldCloseTable(table.State.StartAt, len(table.AlivePlayers())) {
 			if err := ce.tableManagerBackend.CloseTable(table.ID); err != nil {
-				ce.emitErrorEvent("Knockout Players -> CloseTable", "", err)
+				ce.emitErrorEvent("Table Settlement Knockout Players -> CloseTable", "", err)
 			}
 		}
 	case CompetitionMode_MTT:

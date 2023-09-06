@@ -49,7 +49,7 @@ func NewCTCompetitionSetting() pokercompetition.CompetitionSetting {
 			Mode:           pokercompetition.CompetitionMode_CT,
 			ReBuySetting: pokercompetition.ReBuySetting{
 				MaxTime:     6,
-				WaitingTime: 3,
+				WaitingTime: 1,
 			},
 			AddonSetting: pokercompetition.AddonSetting{
 				IsBreakOnly: true,
