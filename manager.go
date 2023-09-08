@@ -25,6 +25,7 @@ type Manager interface {
 	GetTableEngineOptions() *pokertable.TableEngineOptions
 	SetTableEngineOptions(tableOptions *pokertable.TableEngineOptions)
 	UpdateTable(competitionID string, table *pokertable.Table) error
+	UpdateReserveTablePlayerState(competitionID string, playerState *pokertable.TablePlayerState) error
 
 	// Player Operations
 	PlayerBuyIn(competitionID string, joinPlayer JoinPlayer) error
@@ -119,6 +120,16 @@ func (m *manager) UpdateTable(competitionID string, table *pokertable.Table) err
 	}
 
 	competitionEngine.UpdateTable(table)
+	return nil
+}
+
+func (m *manager) UpdateReserveTablePlayerState(competitionID string, playerState *pokertable.TablePlayerState) error {
+	competitionEngine, err := m.GetCompetitionEngine(competitionID)
+	if err != nil {
+		return ErrManagerCompetitionNotFound
+	}
+
+	competitionEngine.UpdateReserveTablePlayerState(playerState)
 	return nil
 }
 

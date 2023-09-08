@@ -65,7 +65,7 @@ func (ntmb *nativeTableManagerBackend) CreateTable(options *pokertable.TableEngi
 
 		ntmb.onTableUpdated(&cloneTable)
 	}
-	options.OnTablePlayerReserved = func(playerState *pokertable.TablePlayerState) {
+	options.OnTablePlayerReserved = func(competitionID string, playerState *pokertable.TablePlayerState) {
 		data, err := json.Marshal(playerState)
 		if err != nil {
 			return

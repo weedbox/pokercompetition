@@ -28,6 +28,7 @@ func (ce *competitionEngine) newDefaultCompetitionPlayerData(tableID, playerID s
 	player := CompetitionPlayer{
 		PlayerID:              playerID,
 		CurrentTableID:        tableID,
+		CurrentSeat:           UnsetValue,
 		JoinAt:                joinAt,
 		Status:                playerStatus,
 		Rank:                  UnsetValue,
@@ -59,7 +60,7 @@ func (ce *competitionEngine) newDefaultCompetitionPlayerData(tableID, playerID s
 	return player, playerCache
 }
 
-func (ce *competitionEngine) UpdateTablePlayerState(playerState *pokertable.TablePlayerState) {
+func (ce *competitionEngine) UpdateReserveTablePlayerState(playerState *pokertable.TablePlayerState) {
 	// 更新玩家狀態
 	playerCache, exist := ce.getPlayerCache(ce.competition.ID, playerState.PlayerID)
 	if !exist {
@@ -67,6 +68,7 @@ func (ce *competitionEngine) UpdateTablePlayerState(playerState *pokertable.Tabl
 	}
 
 	ce.competition.State.Players[playerCache.PlayerIdx].CurrentSeat = playerState.Seat
+	ce.emitPlayerEvent("[UpdateReserveTablePlayerState] player table seat updated", ce.competition.State.Players[playerCache.PlayerIdx])
 }
 
 func (ce *competitionEngine) UpdateTable(table *pokertable.Table) {
@@ -364,29 +366,13 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 			}
 		}
 	case CompetitionMode_MTT:
-		// 拆併桌更新桌次狀態
-		// Preparing seat changes
-		if table.State.SeatChanges != nil {
-			sc := match.NewSeatChanges()
-			for _, player := range table.State.PlayerStates {
-				if player.Bankroll == 0 {
-					sc.Seats[player.Seat] = "left"
-				}
-			}
-			sc.Dealer = table.State.SeatChanges.NewDealer
-			sc.SB = table.State.SeatChanges.NewSB
-			sc.BB = table.State.SeatChanges.NewBB
-
-			ce.matchTableBackend.UpdateTable(table.ID, sc)
-		} else {
-			ce.emitErrorEvent(fmt.Sprintf("[%s] MTT Match Update Table SeatChanges is nil", table.ID), "", errors.New("nil seat change state is not allowed when settling mtt table"))
-		}
-
 		zeroChipPlayerIDs := make([]string, 0)
 		alivePlayerIDs := make([]string, 0)
+		leftPlayerSeats := make(map[int]string)
 		for _, p := range table.State.PlayerStates {
 			if p.Bankroll <= 0 {
 				zeroChipPlayerIDs = append(zeroChipPlayerIDs, p.PlayerID)
+				leftPlayerSeats[p.Seat] = "left"
 			} else {
 				alivePlayerIDs = append(alivePlayerIDs, p.PlayerID)
 			}
@@ -396,6 +382,19 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 			if err := ce.tableManagerBackend.PlayersLeave(table.ID, zeroChipPlayerIDs); err != nil {
 				ce.emitErrorEvent(fmt.Sprintf("[%s][%d] Clean 0 chip Players -> PlayersLeave", table.ID, table.State.GameCount), strings.Join(zeroChipPlayerIDs, ","), err)
 			}
+		}
+
+		// 拆併桌更新桌次狀態
+		// Preparing seat changes
+		if table.State.SeatChanges != nil {
+			sc := match.NewSeatChanges()
+			sc.Dealer = table.State.SeatChanges.NewDealer
+			sc.SB = table.State.SeatChanges.NewSB
+			sc.BB = table.State.SeatChanges.NewBB
+			sc.Seats = leftPlayerSeats
+			ce.matchTableBackend.UpdateTable(table.ID, sc)
+		} else {
+			ce.emitErrorEvent(fmt.Sprintf("[%s] MTT Match Update Table SeatChanges is nil", table.ID), "", errors.New("nil seat change state is not allowed when settling mtt table"))
 		}
 
 		fmt.Printf("---------- [%s][%s] 第 (%d) 手結算, 停止買入: %+v, [離開 %d 人 (%s), 活著: %d 人 (%s)] ----------\n",
@@ -429,6 +428,7 @@ func (ce *competitionEngine) handleKnockoutPlayers(table *pokertable.Table) []st
 			continue
 		}
 		ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_Knockout
+		ce.competition.State.Players[playerCache.PlayerIdx].CurrentSeat = UnsetValue
 		ce.emitPlayerEvent("table settlement knockout", ce.competition.State.Players[playerCache.PlayerIdx])
 
 		// 更新賽事排名
@@ -491,6 +491,7 @@ func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
 					ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_Knockout
 					ce.competition.State.Players[playerCache.PlayerIdx].IsReBuying = false
 					ce.competition.State.Players[playerCache.PlayerIdx].ReBuyEndAt = UnsetValue
+					ce.competition.State.Players[playerCache.PlayerIdx].CurrentSeat = UnsetValue
 					ce.emitPlayerEvent("re buy knockout", ce.competition.State.Players[playerCache.PlayerIdx])
 				}
 			}

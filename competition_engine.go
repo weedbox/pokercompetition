@@ -37,7 +37,8 @@ type CompetitionEngine interface {
 	OnTableClosed(fn func(*pokertable.Table))  // TODO: test only, delete it later on
 
 	// Others
-	UpdateTable(table *pokertable.Table) // 桌次更新
+	UpdateTable(table *pokertable.Table)                                    // 桌次更新
+	UpdateReserveTablePlayerState(playerState *pokertable.TablePlayerState) // 更新 Reserve 桌次玩家狀態
 
 	// Events
 	OnCompetitionUpdated(fn func(*Competition))                       // 賽事更新事件監聽器
@@ -155,7 +156,7 @@ func WithTableManagerBackend(tmb TableManagerBackend) CompetitionEngineOpt {
 			ce.UpdateTable(table)
 		})
 		ce.tableManagerBackend.OnTablePlayerReserved(func(playerState *pokertable.TablePlayerState) {
-			ce.UpdateTablePlayerState(playerState)
+			ce.UpdateReserveTablePlayerState(playerState)
 		})
 	}
 }
