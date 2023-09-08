@@ -10,6 +10,8 @@ import (
 	"github.com/weedbox/pokertable"
 )
 
+const TimeFormat_DDMMYYYYhhmmss = "2006-01-02 15:04:05"
+
 func DebugPrintTableGameOpenedShort(t pokertable.Table) {
 	playerIDs := make([]string, 0)
 	for _, playerIdx := range t.State.GamePlayerIndexes {
@@ -43,7 +45,7 @@ func DebugPrintTableGameSettledShort(t pokertable.Table, extra string) {
 
 func DebugPrintTableGameOpened(t pokertable.Table) {
 	timeString := func(timestamp int64) string {
-		return time.Unix(timestamp, 0).Format("2006-01-02 15:04:00.000")
+		return time.Unix(timestamp, 0).Format(TimeFormat_DDMMYYYYhhmmss)
 	}
 
 	boolToString := func(value bool) string {
@@ -128,7 +130,7 @@ func DebugPrintTableGameOpened(t pokertable.Table) {
 
 func DebugPrintTableGameSettled(t pokertable.Table) {
 	timeString := func(timestamp int64) string {
-		return time.Unix(timestamp, 0).Format("2006-01-02 15:04:00.000")
+		return time.Unix(timestamp, 0).Format(TimeFormat_DDMMYYYYhhmmss)
 	}
 
 	playerIDMapper := func(t pokertable.Table, gameStatePlayerIdx int) string {
@@ -160,13 +162,20 @@ func DebugPrintTableGameSettled(t pokertable.Table) {
 	for _, player := range t.State.PlayerStates {
 		fmt.Printf("%s: seat: %d[%+v], bankroll: %d\n", player.PlayerID, player.Seat, player.Positions, player.Bankroll)
 	}
+
+	fmt.Println("---------- Seat Change ----------")
+	if t.State.SeatChanges != nil {
+		fmt.Printf("New Dealer: %d, New BB: %d, New SB: %d\n", t.State.SeatChanges.NewDealer, t.State.SeatChanges.NewSB, t.State.SeatChanges.NewBB)
+	} else {
+		fmt.Println("Seat Changes is nil")
+	}
 }
 
 func DebugPrintCompetitionEnded(c pokercompetition.Competition) {
 	fmt.Println("---------- 賽事已結束 ----------")
 
 	timeString := func(timestamp int64) string {
-		return time.Unix(timestamp, 0).Format("2006-01-02 15:04:0")
+		return time.Unix(timestamp, 0).Format(TimeFormat_DDMMYYYYhhmmss)
 	}
 
 	fmt.Println("[賽事建立時間] ", timeString(c.State.OpenAt))

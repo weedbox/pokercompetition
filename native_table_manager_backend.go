@@ -9,6 +9,7 @@ import (
 type TableManagerBackend interface {
 	// Events
 	OnTableUpdated(fn func(table *pokertable.Table))
+	OnTablePlayerReserved(fn func(table *pokertable.TablePlayerState))
 
 	// TableManager Actions
 	CreateTable(options *pokertable.TableEngineOptions, setting pokertable.TableSetting) (*pokertable.Table, error)
@@ -36,16 +37,21 @@ func NewNativeTableManagerBackend(manager pokertable.Manager) TableManagerBacken
 }
 
 type nativeTableManagerBackend struct {
-	manager        pokertable.Manager
-	onTableUpdated func(table *pokertable.Table)
+	manager               pokertable.Manager
+	onTableUpdated        func(table *pokertable.Table)
+	onTablePlayerReserved func(playerState *pokertable.TablePlayerState)
 }
 
 func (ntmb *nativeTableManagerBackend) OnTableUpdated(fn func(table *pokertable.Table)) {
 	ntmb.onTableUpdated = fn
 }
 
+func (ntmb *nativeTableManagerBackend) OnTablePlayerReserved(fn func(playerState *pokertable.TablePlayerState)) {
+	ntmb.onTablePlayerReserved = fn
+}
+
 func (ntmb *nativeTableManagerBackend) CreateTable(options *pokertable.TableEngineOptions, setting pokertable.TableSetting) (*pokertable.Table, error) {
-	tableUpdatedCallBack := func(t *pokertable.Table) {
+	options.OnTableUpdated = func(t *pokertable.Table) {
 		data, err := json.Marshal(t)
 		if err != nil {
 			return
@@ -59,10 +65,22 @@ func (ntmb *nativeTableManagerBackend) CreateTable(options *pokertable.TableEngi
 
 		ntmb.onTableUpdated(&cloneTable)
 	}
-	tableErrorUpdatedCallBack := func(t *pokertable.Table, err error) {}
-	tableStateUpdatedCallBack := func(event string, t *pokertable.Table) {}
-	tablePlayerStateUpdatedCallBack := func(competitionID, tableID string, ps *pokertable.TablePlayerState) {}
-	table, err := ntmb.manager.CreateTable(options, setting, tableUpdatedCallBack, tableErrorUpdatedCallBack, tableStateUpdatedCallBack, tablePlayerStateUpdatedCallBack)
+	options.OnTablePlayerReserved = func(playerState *pokertable.TablePlayerState) {
+		data, err := json.Marshal(playerState)
+		if err != nil {
+			return
+		}
+
+		var clonePlayerState pokertable.TablePlayerState
+		err = json.Unmarshal([]byte(data), &clonePlayerState)
+		if err != nil {
+			return
+		}
+
+		ntmb.onTablePlayerReserved(&clonePlayerState)
+	}
+
+	table, err := ntmb.manager.CreateTable(options, setting)
 	if err != nil {
 		return nil, err
 	}

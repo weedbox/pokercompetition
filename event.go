@@ -20,7 +20,7 @@ func (ce *competitionEngine) emitEvent(eventName string, playerID string) {
 	ce.competition.UpdateSerial++
 
 	// emit event
-	fmt.Printf("->[Competition][#%d][%s] emit Event: %s\n", ce.competition.UpdateSerial, playerID, eventName)
+	// fmt.Printf("->[Competition][#%d][%s] emit Event: %s\n", ce.competition.UpdateSerial, playerID, eventName)
 	ce.onCompetitionUpdated(ce.competition)
 }
 
@@ -31,7 +31,7 @@ func (ce *competitionEngine) emitErrorEvent(eventName string, playerID string, e
 
 func (ce *competitionEngine) emitPlayerEvent(eventName string, player *CompetitionPlayer) {
 	// emit event
-	fmt.Printf("->[CompetitionPlayer][%s] emit Event: %s\n", eventName, fmt.Sprintf("[%s][%s]: %s", player.PlayerID, player.CurrentTableID, player.Status))
+	// fmt.Printf("->[CompetitionPlayer][%s] emit Event: %s\n", eventName, fmt.Sprintf("[%s][%s]: %s", player.PlayerID, player.CurrentTableID, player.Status))
 	ce.onCompetitionPlayerUpdated(ce.competition.ID, player)
 }
 

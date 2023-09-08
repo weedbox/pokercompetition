@@ -124,6 +124,7 @@ func NewMTTCompetitionSetting() pokercompetition.CompetitionSetting {
 			TableMinPlayerCount: 2,
 			MinChipUnit:         10,
 		},
+		// StartAt: time.Now().Add(time.Second * 2).Unix(),
 		StartAt:       -1,
 		DisableAt:     time.Now().Add(time.Hour * 24).Unix(),
 		TableSettings: []pokercompetition.TableSetting{},

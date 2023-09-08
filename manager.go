@@ -4,8 +4,8 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/weedbox/pokerface/match"
 	"github.com/weedbox/pokertable"
-	"github.com/weedbox/pokertablebalancer"
 )
 
 var (
@@ -17,8 +17,7 @@ type Manager interface {
 	GetCompetitionEngine(competitionID string) (CompetitionEngine, error)
 
 	// Competition Actions
-	SetCompetitionSeatManager(competitionID string, seatManager pokertablebalancer.SeatManager) error
-	CreateCompetition(competitionSetting CompetitionSetting, competitionUpdatedCallBack func(*Competition), competitionErrorUpdatedCallBack func(*Competition, error), competitionPlayerUpdatedCallBack func(string, *CompetitionPlayer), competitionFinalPlayerRankUpdatedCallBack func(string, string, int), competitionStateUpdatedCallBack func(string, *Competition)) (*Competition, error)
+	CreateCompetition(competitionSetting CompetitionSetting, options *CompetitionEngineOptions) (*Competition, error)
 	CloseCompetition(competitionID string, endStatus CompetitionStateStatus) error
 	StartCompetition(competitionID string) error
 
@@ -39,9 +38,10 @@ type manager struct {
 	tableOptions        *pokertable.TableEngineOptions
 	competitionEngines  sync.Map
 	tableManagerBackend TableManagerBackend
+	qm                  match.QueueManager
 }
 
-func NewManager(tableManagerBackend TableManagerBackend) Manager {
+func NewManager(tableManagerBackend TableManagerBackend, qm match.QueueManager) Manager {
 	tableOptions := pokertable.NewTableEngineOptions()
 	tableOptions.Interval = 6
 
@@ -49,6 +49,7 @@ func NewManager(tableManagerBackend TableManagerBackend) Manager {
 		tableOptions:        tableOptions,
 		competitionEngines:  sync.Map{},
 		tableManagerBackend: tableManagerBackend,
+		qm:                  qm,
 	}
 }
 
@@ -60,27 +61,17 @@ func (m *manager) GetCompetitionEngine(competitionID string) (CompetitionEngine,
 	return competitionEngine.(CompetitionEngine), nil
 }
 
-func (m *manager) SetCompetitionSeatManager(competitionID string, seatManager pokertablebalancer.SeatManager) error {
-	competitionEngine, err := m.GetCompetitionEngine(competitionID)
-	if err != nil {
-		return ErrManagerCompetitionNotFound
-	}
-
-	competitionEngine.SetSeatManager(seatManager)
-	return nil
-
-}
-
-func (m *manager) CreateCompetition(competitionSetting CompetitionSetting, competitionUpdatedCallBack func(*Competition), competitionErrorUpdatedCallBack func(*Competition, error), competitionPlayerUpdatedCallBack func(string, *CompetitionPlayer), competitionFinalPlayerRankUpdatedCallBack func(string, string, int), competitionStateUpdatedCallBack func(string, *Competition)) (*Competition, error) {
+func (m *manager) CreateCompetition(competitionSetting CompetitionSetting, options *CompetitionEngineOptions) (*Competition, error) {
 	competitionEngine := NewCompetitionEngine(
 		WithTableManagerBackend(m.tableManagerBackend),
 		WithTableOptions(m.tableOptions),
+		WithQueueManagerOptions(m.qm),
 	)
-	competitionEngine.OnCompetitionUpdated(competitionUpdatedCallBack)
-	competitionEngine.OnCompetitionErrorUpdated(competitionErrorUpdatedCallBack)
-	competitionEngine.OnCompetitionPlayerUpdated(competitionPlayerUpdatedCallBack)
-	competitionEngine.OnCompetitionFinalPlayerRankUpdated(competitionFinalPlayerRankUpdatedCallBack)
-	competitionEngine.OnCompetitionStateUpdated(competitionStateUpdatedCallBack)
+	competitionEngine.OnCompetitionUpdated(options.OnCompetitionUpdated)
+	competitionEngine.OnCompetitionErrorUpdated(options.OnCompetitionErrorUpdated)
+	competitionEngine.OnCompetitionPlayerUpdated(options.OnCompetitionPlayerUpdated)
+	competitionEngine.OnCompetitionFinalPlayerRankUpdated(options.OnCompetitionFinalPlayerRankUpdated)
+	competitionEngine.OnCompetitionStateUpdated(options.OnCompetitionStateUpdated)
 	competition, err := competitionEngine.CreateCompetition(competitionSetting)
 	if err != nil {
 		return nil, err
@@ -96,7 +87,12 @@ func (m *manager) CloseCompetition(competitionID string, endStatus CompetitionSt
 		return ErrManagerCompetitionNotFound
 	}
 
-	return competitionEngine.CloseCompetition(endStatus)
+	if err := competitionEngine.CloseCompetition(endStatus); err != nil {
+		return err
+	}
+
+	m.competitionEngines.Delete(competitionID)
+	return nil
 }
 
 func (m *manager) StartCompetition(competitionID string) error {

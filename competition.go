@@ -83,6 +83,7 @@ type CompetitionRank struct {
 type CompetitionPlayer struct {
 	PlayerID       string `json:"player_id" mapstructure:"player_id"` // 玩家 ID
 	CurrentTableID string `json:"table_id" mapstructure:"table_id"`   // 當前桌次 ID
+	CurrentSeat    int    `json:"seat" mapstructure:"seat"`           // 當前座位
 	JoinAt         int64  `json:"join_at" mapstructure:"join_at"`     // 加入時間 (Seconds)
 
 	// current info
