@@ -116,14 +116,14 @@ func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
 		ce.matchTableBackend = NewNativeMatchTableBackend(ce)
 	}
 
-	if ce.qm == nil {
-		ce.qm = match.NewNativeQueueManager()
-		err := ce.qm.Connect()
-		if err != nil {
-			fmt.Println(err)
-			return nil
-		}
-	}
+	// if ce.qm == nil {
+	// 	ce.qm = match.NewNativeQueueManager()
+	// 	err := ce.qm.Connect()
+	// 	if err != nil {
+	// 		fmt.Println(err)
+	// 		return nil
+	// 	}
+	// }
 
 	// match instance
 	if ce.match == nil {
@@ -136,7 +136,7 @@ func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
 		ce.match = match.NewMatch(
 			opts,
 			match.WithTableBackend(ce.matchTableBackend),
-			match.WithQueueManager(ce.qm),
+			// match.WithQueueManager(ce.qm),
 		)
 	}
 
