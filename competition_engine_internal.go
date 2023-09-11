@@ -132,7 +132,7 @@ func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tab
 				readyPlayersCount++
 			}
 		}
-		if ce.competition.State.Status == CompetitionStateStatus_DelayedBuyIn && readyPlayersCount > ce.competition.Meta.TableMinPlayerCount {
+		if ce.competition.State.Status == CompetitionStateStatus_DelayedBuyIn && readyPlayersCount >= ce.competition.Meta.TableMinPlayerCount {
 			if err := ce.tableManagerBackend.TableGameOpen(table.ID); err != nil {
 				ce.emitErrorEvent("Game Reopen", "", err)
 				return
