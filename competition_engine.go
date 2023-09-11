@@ -116,15 +116,6 @@ func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
 		ce.matchTableBackend = NewNativeMatchTableBackend(ce)
 	}
 
-	// if ce.qm == nil {
-	// 	ce.qm = match.NewNativeQueueManager()
-	// 	err := ce.qm.Connect()
-	// 	if err != nil {
-	// 		fmt.Println(err)
-	// 		return nil
-	// 	}
-	// }
-
 	// match instance
 	if ce.match == nil {
 		// Initializing match
@@ -136,7 +127,6 @@ func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
 		ce.match = match.NewMatch(
 			opts,
 			match.WithTableBackend(ce.matchTableBackend),
-			// match.WithQueueManager(ce.qm),
 		)
 	}
 
@@ -740,6 +730,7 @@ func (ce *competitionEngine) MatchTableReservePlayer(tableID, playerID string, s
 	playerCache.TableID = tableID
 	ce.competition.State.Players[playerCache.PlayerIdx].CurrentTableID = tableID
 	ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_Playing
+	ce.competition.State.Players[playerCache.PlayerIdx].CurrentSeat = seat
 	ce.emitPlayerEvent("[MatchTableReservePlayer] reserve table", ce.competition.State.Players[playerCache.PlayerIdx])
 
 	jp := pokertable.JoinPlayer{
@@ -754,8 +745,6 @@ func (ce *competitionEngine) MatchTableReservePlayer(tableID, playerID string, s
 		return err
 	}
 
-	// TODO: test only
-	// go ce.tableManagerBackend.PlayerJoin(tableID, jp.PlayerID)
 	return nil
 }
 
@@ -784,6 +773,7 @@ func (ce *competitionEngine) MatchTableReservePlayerDone(tableID string) error {
 		playerCache.TableID = tableID
 		ce.competition.State.Players[playerIdx].CurrentTableID = tableID
 		ce.competition.State.Players[playerIdx].Status = CompetitionPlayerStatus_Playing
+		ce.competition.State.Players[playerCache.PlayerIdx].CurrentSeat = seat
 		ce.emitPlayerEvent("[MatchTableReservePlayer] wait balance table", ce.competition.State.Players[playerCache.PlayerIdx])
 
 		jp := pokertable.JoinPlayer{
@@ -799,11 +789,6 @@ func (ce *competitionEngine) MatchTableReservePlayerDone(tableID string) error {
 		ce.emitErrorEvent("PlayersBatchReserve", "", err)
 		return err
 	}
-
-	// TODO: test only
-	// for _, joinPlayer := range joinPlayers {
-	// 	go ce.tableManagerBackend.PlayerJoin(tableID, joinPlayer.PlayerID)
-	// }
 
 	// clear queue
 	ce.tablePlayerWaitingQueue[tableID] = make(map[int]int)
