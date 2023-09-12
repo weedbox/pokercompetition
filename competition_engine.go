@@ -28,6 +28,7 @@ var (
 	ErrCompetitionExceedAddonLimit     = errors.New("competition: exceed addon limit")
 	ErrCompetitionPlayerNotFound       = errors.New("competition: player not found")
 	ErrCompetitionTableNotFound        = errors.New("competition: table not found")
+	ErrMatchInitFailed                 = errors.New("competition: failed to init match")
 )
 
 type CompetitionEngineOpt func(*competitionEngine)
@@ -109,25 +110,6 @@ func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
 
 	for _, opt := range opts {
 		opt(ce)
-	}
-
-	// Table backend of match
-	if ce.matchTableBackend == nil {
-		ce.matchTableBackend = NewNativeMatchTableBackend(ce)
-	}
-
-	// match instance
-	if ce.match == nil {
-		// Initializing match
-		opts := match.NewOptions()
-		defaultOpts := competition.NewOptions()
-		opts.WaitingPeriod = defaultOpts.TableAllocationPeriod
-		opts.MaxTables = -1
-		opts.MaxSeats = defaultOpts.Table.MaxSeats
-		ce.match = match.NewMatch(
-			opts,
-			match.WithTableBackend(ce.matchTableBackend),
-		)
 	}
 
 	return ce
@@ -265,6 +247,37 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 			}); err != nil {
 				return nil, err
 			}
+		}
+	case CompetitionMode_MTT:
+		// Table backend of match
+		if ce.matchTableBackend == nil {
+			ce.matchTableBackend = NewNativeMatchTableBackend(ce)
+		}
+
+		if ce.match == nil {
+			// Initializing match
+			opts := match.NewOptions()
+			defaultOpts := competition.NewOptions()
+			opts.WaitingPeriod = defaultOpts.TableAllocationPeriod
+			opts.MaxTables = -1
+			opts.MaxSeats = defaultOpts.Table.MaxSeats
+
+			if ce.qm == nil {
+				ce.match = match.NewMatch(
+					opts,
+					match.WithTableBackend(ce.matchTableBackend),
+				)
+			} else {
+				ce.match = match.NewMatch(
+					opts,
+					match.WithTableBackend(ce.matchTableBackend),
+					match.WithQueueManager(ce.qm),
+				)
+			}
+		}
+
+		if ce.match == nil {
+			return nil, ErrMatchInitFailed
 		}
 	}
 
