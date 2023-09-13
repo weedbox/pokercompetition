@@ -91,7 +91,7 @@ func TestActor_CT(t *testing.T) {
 	joinPlayers := funk.Map(playerIDs, func(playerID string) pokercompetition.JoinPlayer {
 		return pokercompetition.JoinPlayer{
 			PlayerID:    playerID,
-			RedeemChips: 6000,
+			RedeemChips: 3000,
 		}
 	}).([]pokercompetition.JoinPlayer)
 

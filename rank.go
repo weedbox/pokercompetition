@@ -84,10 +84,16 @@ func (ce *competitionEngine) GetSortedTableSettlementKnockoutPlayerRankings(tabl
 
 		// 延遲買入階段 & 還有補碼次數就略過
 		allowToReBuy := false
+		isAlreadyKnockout := false
 		if playerCache, exist := ce.getPlayerCache(competitionID, p.PlayerID); exist {
 			allowToReBuy = playerCache.ReBuyTimes < ce.competition.Meta.ReBuySetting.MaxTime
+			isAlreadyKnockout = ce.competition.State.Players[playerCache.PlayerIdx].Status == CompetitionPlayerStatus_Knockout
 		}
 		if !ce.competition.State.BlindState.IsFinalBuyInLevel() && allowToReBuy {
+			continue
+		}
+
+		if isAlreadyKnockout {
 			continue
 		}
 
@@ -113,22 +119,26 @@ func (ce *competitionEngine) GetSortedTableSettlementKnockoutPlayerRankings(tabl
 GetSortedReBuyKnockoutPlayerRankings 超過 ReBuy 時間後預計被淘汰玩家的排名 (越早入桌者，排名越前面，但 index 越小 aka. 排名後面者陣列 index 越小)
   - @return SortedFinalKnockoutPlayerIDs 排序過後的淘汰玩家 ID 陣列
 */
-func (ce *competitionEngine) GetSortedReBuyKnockoutPlayerRankings(knockoutPlayerIDs []string) []string {
-	competitionID := ce.competition.ID
-	sortedFinalKnockoutPlayers := make([]string, len(knockoutPlayerIDs))
-	copy(sortedFinalKnockoutPlayers, knockoutPlayerIDs)
+func (ce *competitionEngine) GetSortedReBuyKnockoutPlayerRankings() []string {
+	sortedFinalKnockoutPlayers := make([]CompetitionPlayer, 0)
+
+	// 找出可能的淘汰者們
+	for _, p := range ce.competition.State.Players {
+		if p.Chips == 0 && p.Status == CompetitionPlayerStatus_ReBuyWaiting {
+			sortedFinalKnockoutPlayers = append(sortedFinalKnockoutPlayers, *p)
+		}
+	}
 
 	// 依加入時間晚到早排序
 	sort.Slice(sortedFinalKnockoutPlayers, func(i int, j int) bool {
-		playerCacheI, iExist := ce.getPlayerCache(competitionID, sortedFinalKnockoutPlayers[i])
-		playerCacheJ, jExist := ce.getPlayerCache(competitionID, sortedFinalKnockoutPlayers[j])
-		if iExist && jExist {
-			return playerCacheI.JoinAt > playerCacheJ.JoinAt
-		}
-		return true
+		return sortedFinalKnockoutPlayers[i].JoinAt > sortedFinalKnockoutPlayers[j].JoinAt
 	})
 
-	return sortedFinalKnockoutPlayers
+	playerIDs := make([]string, 0)
+	for _, p := range sortedFinalKnockoutPlayers {
+		playerIDs = append(playerIDs, p.PlayerID)
+	}
+	return playerIDs
 }
 
 /*
@@ -142,7 +152,7 @@ GetParticipatedPlayerCompetitionRankingData 計算賽事所有沒有被淘汰玩
 func (ce *competitionEngine) GetParticipatedPlayerCompetitionRankingData(competitionID string, players []*CompetitionPlayer) []RankData {
 	playingPlayers := make([]CompetitionPlayer, 0)
 	for _, player := range players {
-		if player.Status != CompetitionPlayerStatus_Knockout {
+		if player.Status == CompetitionPlayerStatus_Playing {
 			playingPlayers = append(playingPlayers, *player)
 		}
 	}

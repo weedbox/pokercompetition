@@ -327,7 +327,11 @@ func (ce *competitionEngine) StartCompetition() error {
 		ce.competition.State.StartAt = time.Now().Unix()
 	}
 	// TODO: decide mtt 是否需要設定 EndAt?
-	ce.competition.State.EndAt = ce.competition.State.StartAt + int64((time.Duration(ce.competition.Meta.MaxDuration) * time.Second).Seconds())
+	if ce.competition.Meta.Mode == CompetitionMode_CT {
+		ce.competition.State.EndAt = ce.competition.State.StartAt + int64((time.Duration(ce.competition.Meta.MaxDuration) * time.Second).Seconds())
+	} else if ce.competition.Meta.Mode == CompetitionMode_MTT {
+		ce.competition.State.EndAt = -1
+	}
 
 	// 初始化盲注
 	bs, err := ce.blind.Start()
@@ -621,7 +625,7 @@ func (ce *competitionEngine) PlayerQuit(tableID, playerID string) error {
 		return ErrCompetitionQuitRejected
 	}
 
-	ce.competition.State.Players[playerIdx].Status = CompetitionPlayerStatus_Knockout
+	ce.competition.State.Players[playerIdx].Status = CompetitionPlayerStatus_ReBuyWaiting
 	ce.competition.State.Players[playerIdx].IsReBuying = false
 	ce.competition.State.Players[playerIdx].ReBuyEndAt = UnsetValue
 	ce.emitPlayerEvent("quit knockout", ce.competition.State.Players[playerIdx])

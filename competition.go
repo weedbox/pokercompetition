@@ -2,6 +2,7 @@ package pokercompetition
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/thoas/go-funk"
@@ -27,6 +28,7 @@ const (
 	// CompetitionPlayerStatus
 	CompetitionPlayerStatus_WaitingTableBalancing CompetitionPlayerStatus = "waiting_table_balancing" // 等待拆併桌中
 	CompetitionPlayerStatus_Playing               CompetitionPlayerStatus = "playing"                 // 比賽中
+	CompetitionPlayerStatus_ReBuyWaiting          CompetitionPlayerStatus = "re_buy_waiting"          // 等待補碼中 (已不再桌次內)
 	CompetitionPlayerStatus_Knockout              CompetitionPlayerStatus = "knockout"                // 已淘汰
 
 	// CompetitionMode
@@ -199,7 +201,7 @@ func (c Competition) CanStart() bool {
 
 func (c Competition) PlayingPlayerCount() int {
 	return len(funk.Filter(c.State.Players, func(player *CompetitionPlayer) bool {
-		return (player.Status != CompetitionPlayerStatus_Knockout)
+		return (player.Status == CompetitionPlayerStatus_Playing)
 	}).([]*CompetitionPlayer))
 }
 
@@ -222,6 +224,10 @@ func (c Competition) FindPlayerIdx(predicate func(*CompetitionPlayer) bool) int 
 }
 
 func (c Competition) CurrentBlindLevel() BlindLevel {
+	if c.State.BlindState.CurrentLevelIndex < 0 {
+		fmt.Println("[DEBUG#ERROR] Invalid CurrentBlindLevel")
+		return BlindLevel{}
+	}
 	return c.Meta.Blind.Levels[c.State.BlindState.CurrentLevelIndex]
 }
 

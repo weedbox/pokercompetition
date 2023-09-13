@@ -463,6 +463,7 @@ func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
 
 		if !ce.competition.State.Players[playerCache.PlayerIdx].IsReBuying {
 			if playerCache.ReBuyTimes < ce.competition.Meta.ReBuySetting.MaxTime {
+				ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_ReBuyWaiting
 				ce.competition.State.Players[playerCache.PlayerIdx].IsReBuying = true
 				ce.competition.State.Players[playerCache.PlayerIdx].ReBuyEndAt = reBuyEndAt
 				ce.emitPlayerEvent("re-buying", ce.competition.State.Players[playerCache.PlayerIdx])
@@ -479,7 +480,7 @@ func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
 				return
 			}
 
-			knockoutPlayerIDs := make([]string, 0)
+			leavePlayerIDs := make([]string, 0)
 			for _, playerID := range reBuyPlayerIDs {
 				playerCache, exist := ce.getPlayerCache(ce.competition.ID, playerID)
 				if !exist {
@@ -487,39 +488,18 @@ func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
 					continue
 				}
 				if ce.competition.State.Players[playerCache.PlayerIdx].Chips <= 0 {
-					knockoutPlayerIDs = append(knockoutPlayerIDs, playerID)
-					ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_Knockout
+					leavePlayerIDs = append(leavePlayerIDs, playerID)
+					ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_ReBuyWaiting
 					ce.competition.State.Players[playerCache.PlayerIdx].IsReBuying = false
 					ce.competition.State.Players[playerCache.PlayerIdx].ReBuyEndAt = UnsetValue
 					ce.competition.State.Players[playerCache.PlayerIdx].CurrentSeat = UnsetValue
-					ce.emitPlayerEvent("re buy knockout", ce.competition.State.Players[playerCache.PlayerIdx])
+					ce.emitPlayerEvent("re buy leave", ce.competition.State.Players[playerCache.PlayerIdx])
 				}
 			}
 
-			if len(knockoutPlayerIDs) > 0 {
-				knockoutPlayerRankings := ce.GetSortedReBuyKnockoutPlayerRankings(knockoutPlayerIDs)
-
-				for idx, knockoutPlayerID := range knockoutPlayerRankings {
-					// 更新賽事排名
-					ce.competition.State.Rankings = append(ce.competition.State.Rankings, &CompetitionRank{
-						PlayerID:   knockoutPlayerID,
-						FinalChips: 0,
-					})
-					rank := ce.competition.PlayingPlayerCount() + (len(knockoutPlayerRankings) - idx)
-					ce.emitCompetitionStateFinalPlayerRankEvent(knockoutPlayerID, rank)
-				}
-				ce.emitEvent("Re Buy Knockout", "")
-				ce.emitCompetitionStateEvent(CompetitionStateEvent_KnockoutPlayers)
-
-				if err := ce.tableManagerBackend.PlayersLeave(table.ID, knockoutPlayerIDs); err != nil {
-					ce.emitErrorEvent("Knockout Players -> PlayersLeave", strings.Join(knockoutPlayerIDs, ","), err)
-				}
-
-				// 結束桌
-				if ce.shouldCloseTable(table.State.StartAt, len(table.AlivePlayers())) {
-					if err := ce.tableManagerBackend.CloseTable(table.ID); err != nil {
-						ce.emitErrorEvent("Re Buy Knockout Players -> CloseTable", "", err)
-					}
+			if len(leavePlayerIDs) > 0 {
+				if err := ce.tableManagerBackend.PlayersLeave(table.ID, leavePlayerIDs); err != nil {
+					ce.emitErrorEvent("Knockout Players -> PlayersLeave", strings.Join(leavePlayerIDs, ","), err)
 				}
 			}
 		}); err != nil {
@@ -688,12 +668,33 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 
 		// 更新賽事狀態: 停止買入
 		if ce.competition.State.BlindState.IsFinalBuyInLevel() {
+			if ce.competition.State.Status == CompetitionStateStatus_StoppedBuyIn {
+				return
+			}
+
 			ce.competition.State.Status = CompetitionStateStatus_StoppedBuyIn
 			ce.emitEvent("Final BuyIn", "")
 
 			// MTT 在停止買入階段，停止拆併桌機制
 			if ce.competition.Meta.Mode == CompetitionMode_MTT {
 				ce.match.DisableRegistration()
+			}
+
+			// 淘汰沒資格玩家
+			if ce.competition.Meta.Mode == CompetitionMode_CT {
+				knockoutPlayerRankings := ce.GetSortedReBuyKnockoutPlayerRankings()
+
+				for idx, knockoutPlayerID := range knockoutPlayerRankings {
+					// 更新賽事排名
+					ce.competition.State.Rankings = append(ce.competition.State.Rankings, &CompetitionRank{
+						PlayerID:   knockoutPlayerID,
+						FinalChips: 0,
+					})
+					rank := ce.competition.PlayingPlayerCount() + (len(knockoutPlayerRankings) - idx)
+					ce.emitCompetitionStateFinalPlayerRankEvent(knockoutPlayerID, rank)
+				}
+				ce.emitEvent("Final BuyIn Knockout Players", "")
+				ce.emitCompetitionStateEvent(CompetitionStateEvent_KnockoutPlayers)
 			}
 		}
 
