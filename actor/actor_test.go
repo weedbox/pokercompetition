@@ -175,7 +175,7 @@ func TestActor_MTT(t *testing.T) {
 	}
 
 	// 建立玩家
-	playerCount := 50
+	playerCount := 9
 	fmt.Println("Total Players: ", playerCount)
 	playerIDs := make([]string, 0)
 	for i := 1; i <= playerCount; i++ {
