@@ -696,6 +696,12 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 				knockoutPlayerRankings := ce.GetSortedReBuyKnockoutPlayerRankings()
 
 				for idx, knockoutPlayerID := range knockoutPlayerRankings {
+					playerCache, exist := ce.getPlayerCache(ce.competition.ID, knockoutPlayerID)
+					if !exist {
+						continue
+					}
+					ce.emitPlayerEvent("Final BuyIn Knockout Players", ce.competition.State.Players[playerCache.PlayerIdx])
+
 					// 更新賽事排名
 					ce.competition.State.Rankings = append(ce.competition.State.Rankings, &CompetitionRank{
 						PlayerID:   knockoutPlayerID,
