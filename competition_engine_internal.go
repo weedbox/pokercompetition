@@ -69,6 +69,7 @@ func (ce *competitionEngine) UpdateReserveTablePlayerState(playerState *pokertab
 
 	ce.competition.State.Players[playerCache.PlayerIdx].CurrentSeat = playerState.Seat
 	ce.emitPlayerEvent("[UpdateReserveTablePlayerState] player table seat updated", ce.competition.State.Players[playerCache.PlayerIdx])
+	ce.emitEvent(fmt.Sprintf("Player (%s) table seat updated to %d", playerState.PlayerID, playerState.Seat), playerState.PlayerID)
 }
 
 func (ce *competitionEngine) UpdateTable(table *pokertable.Table) {
@@ -244,6 +245,7 @@ func (ce *competitionEngine) addCompetitionTable(tableSetting TableSetting, play
 				ce.competition.State.Players[i].Chips = bankroll
 				ce.competition.State.Players[i].Status = playerStatus
 				ce.emitPlayerEvent("[addCompetitionTable] existing player", ce.competition.State.Players[i])
+				ce.emitEvent(fmt.Sprintf("[addCompetitionTable] add existing player to (%s)", table.ID), ce.competition.State.Players[i].PlayerID)
 			}
 		}
 	}
@@ -259,9 +261,12 @@ func (ce *competitionEngine) addCompetitionTable(tableSetting TableSetting, play
 			ce.insertPlayerCache(ce.competition.ID, playerCache.PlayerID, playerCache)
 			newPlayerIdx++
 			ce.emitPlayerEvent("[addCompetitionTable] new player", &player)
+			ce.emitEvent(fmt.Sprintf("[addCompetitionTable] add new player to (%s)", table.ID), playerID)
 		}
 		ce.competition.State.Players = append(ce.competition.State.Players, newPlayers...)
 	}
+
+	ce.emitEvent("[addCompetitionTable]", "")
 
 	return table.ID, nil
 }
@@ -466,6 +471,10 @@ func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
 				ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_ReBuyWaiting
 				ce.competition.State.Players[playerCache.PlayerIdx].IsReBuying = true
 				ce.competition.State.Players[playerCache.PlayerIdx].ReBuyEndAt = reBuyEndAt
+				if ce.competition.Meta.Mode == CompetitionMode_MTT {
+					ce.competition.State.Players[playerCache.PlayerIdx].CurrentTableID = ""
+					ce.competition.State.Players[playerCache.PlayerIdx].CurrentSeat = UnsetValue
+				}
 				ce.emitPlayerEvent("re-buying", ce.competition.State.Players[playerCache.PlayerIdx])
 				reBuyPlayerIDs = append(reBuyPlayerIDs, player.PlayerID)
 			}
@@ -498,6 +507,8 @@ func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
 			}
 
 			if len(leavePlayerIDs) > 0 {
+				ce.emitEvent("re buy leave", strings.Join(leavePlayerIDs, ","))
+
 				if err := ce.tableManagerBackend.PlayersLeave(table.ID, leavePlayerIDs); err != nil {
 					ce.emitErrorEvent("Knockout Players -> PlayersLeave", strings.Join(leavePlayerIDs, ","), err)
 				}

@@ -703,8 +703,9 @@ func (ce *competitionEngine) MatchCloseTable(tableID string) error {
 			continue
 		}
 		ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_WaitingTableBalancing
-		ce.emitPlayerEvent("[MatchTableReservePlayer] table is closed, wait for allocate to new table", ce.competition.State.Players[playerCache.PlayerIdx])
+		ce.emitPlayerEvent("[MatchCloseTable] table is closed, wait for allocate to new table", ce.competition.State.Players[playerCache.PlayerIdx])
 	}
+	ce.emitEvent("[MatchCloseTable]", "")
 
 	return ce.tableManagerBackend.CloseTable(tableID)
 }
@@ -749,6 +750,7 @@ func (ce *competitionEngine) MatchTableReservePlayer(tableID, playerID string, s
 	ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_Playing
 	ce.competition.State.Players[playerCache.PlayerIdx].CurrentSeat = seat
 	ce.emitPlayerEvent("[MatchTableReservePlayer] reserve table", ce.competition.State.Players[playerCache.PlayerIdx])
+	ce.emitEvent("[MatchTableReservePlayer] reserve table", ce.competition.State.Players[playerCache.PlayerIdx].PlayerID)
 
 	jp := pokertable.JoinPlayer{
 		PlayerID:    playerID,
@@ -800,6 +802,8 @@ func (ce *competitionEngine) MatchTableReservePlayerDone(tableID string) error {
 		}
 		joinPlayers = append(joinPlayers, jp)
 	}
+
+	ce.emitEvent("[MatchTableReservePlayer] players batch reserve table", "")
 
 	// call tableEngine
 	if err := ce.tableManagerBackend.PlayersBatchReserve(tableID, joinPlayers); err != nil {
