@@ -464,11 +464,15 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 		ce.emitPlayerEvent("PlayerBuyIn -> Buy In", &player)
 	} else {
 		// ReBuy logic
+		ce.competition.State.Players[playerIdx].Status = playerStatus
 		ce.competition.State.Players[playerIdx].Chips = joinPlayer.RedeemChips
 		ce.competition.State.Players[playerIdx].ReBuyTimes++
 		ce.competition.State.Players[playerIdx].IsReBuying = false
 		ce.competition.State.Players[playerIdx].ReBuyEndAt = UnsetValue
 		ce.competition.State.Players[playerIdx].TotalRedeemChips += joinPlayer.RedeemChips
+		if ce.competition.Meta.Mode == CompetitionMode_CT && len(ce.competition.State.Tables) > 0 {
+			ce.competition.State.Players[playerIdx].CurrentTableID = ce.competition.State.Tables[0].ID
+		}
 		if playerCache, exist := ce.getPlayerCache(ce.competition.ID, joinPlayer.PlayerID); exist {
 			playerCache.ReBuyTimes = ce.competition.State.Players[playerIdx].ReBuyTimes
 		} else {
@@ -702,6 +706,8 @@ func (ce *competitionEngine) MatchCloseTable(tableID string) error {
 		if !exist {
 			continue
 		}
+		playerCache.TableID = ""
+		ce.competition.State.Players[playerCache.PlayerIdx].CurrentTableID = ""
 		ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_WaitingTableBalancing
 		ce.emitPlayerEvent("[MatchCloseTable] table is closed, wait for allocate to new table", ce.competition.State.Players[playerCache.PlayerIdx])
 	}
