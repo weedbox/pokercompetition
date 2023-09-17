@@ -13,6 +13,8 @@ var (
 )
 
 type Manager interface {
+	Reset()
+
 	// CompetitionEngine Actions
 	GetCompetitionEngine(competitionID string) (CompetitionEngine, error)
 
@@ -52,6 +54,10 @@ func NewManager(tableManagerBackend TableManagerBackend, qm match.QueueManager) 
 		tableManagerBackend: tableManagerBackend,
 		qm:                  qm,
 	}
+}
+
+func (m *manager) Reset() {
+	m.competitionEngines = sync.Map{}
 }
 
 func (m *manager) GetCompetitionEngine(competitionID string) (CompetitionEngine, error) {
