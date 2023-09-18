@@ -80,6 +80,16 @@ func (ce *competitionEngine) UpdateTable(table *pokertable.Table) {
 		return
 	}
 
+	endStatuses := []CompetitionStateStatus{
+		CompetitionStateStatus_End,
+		CompetitionStateStatus_AutoEnd,
+		CompetitionStateStatus_ForceEnd,
+	}
+	if funk.Contains(endStatuses, ce.competition.State.Status) {
+		fmt.Println("[DEBUG#UpdateTable] status is end, no need to update table. Status:", string(ce.competition.State.Status))
+		return
+	}
+
 	// 更新 competition table
 	var cloneTable pokertable.Table
 	if encoded, err := json.Marshal(table); err == nil {
@@ -414,7 +424,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 		)
 
 		// 結束賽事
-		if len(alivePlayerIDs) == 1 && len(ce.competition.State.Tables) == 1 {
+		if ce.competition.State.BlindState.IsFinalBuyInLevel() && len(alivePlayerIDs) == 1 && len(ce.competition.State.Tables) == 1 {
 			ce.CloseCompetition(CompetitionStateStatus_End)
 		}
 	}

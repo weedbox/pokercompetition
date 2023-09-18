@@ -424,18 +424,12 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 		}
 
 		// validate re-buy conditions
-		if !ce.competition.State.Players[playerIdx].IsReBuying {
+		if ce.competition.State.Players[playerIdx].Status != CompetitionPlayerStatus_ReBuyWaiting {
 			return ErrCompetitionReBuyRejected
 		}
 
-		if ce.competition.Meta.Mode == CompetitionMode_CT {
-			if time.Now().Unix() > ce.competition.State.Players[playerIdx].ReBuyEndAt {
-				return ErrCompetitionReBuyRejected
-			}
-		}
-
 		if ce.competition.State.Players[playerIdx].Chips > 0 {
-			return ErrCompetitionExceedReBuyLimit
+			return ErrCompetitionReBuyRejected
 		}
 
 		if ce.competition.State.Players[playerIdx].ReBuyTimes >= ce.competition.Meta.ReBuySetting.MaxTime {
