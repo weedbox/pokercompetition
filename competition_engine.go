@@ -38,8 +38,8 @@ type CompetitionEngine interface {
 	OnTableClosed(fn func(*pokertable.Table))  // TODO: test only, delete it later on
 
 	// Others
-	UpdateTable(table *pokertable.Table)                                    // 桌次更新
-	UpdateReserveTablePlayerState(playerState *pokertable.TablePlayerState) // 更新 Reserve 桌次玩家狀態
+	UpdateTable(table *pokertable.Table)                                                    // 桌次更新
+	UpdateReserveTablePlayerState(tableID string, playerState *pokertable.TablePlayerState) // 更新 Reserve 桌次玩家狀態
 
 	// Events
 	OnCompetitionUpdated(fn func(*Competition))                       // 賽事更新事件監聽器
@@ -127,8 +127,8 @@ func WithTableManagerBackend(tmb TableManagerBackend) CompetitionEngineOpt {
 		ce.tableManagerBackend.OnTableUpdated(func(table *pokertable.Table) {
 			ce.UpdateTable(table)
 		})
-		ce.tableManagerBackend.OnTablePlayerReserved(func(playerState *pokertable.TablePlayerState) {
-			ce.UpdateReserveTablePlayerState(playerState)
+		ce.tableManagerBackend.OnTablePlayerReserved(func(tableID string, playerState *pokertable.TablePlayerState) {
+			ce.UpdateReserveTablePlayerState(tableID, playerState)
 		})
 	}
 }
@@ -483,6 +483,12 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 		ce.emitPlayerEvent("PlayerBuyIn -> Buy In", &player)
 	} else {
 		// ReBuy logic
+		playerCache, exist := ce.getPlayerCache(ce.competition.ID, joinPlayer.PlayerID)
+		if !exist {
+			return ErrCompetitionPlayerNotFound
+		}
+
+		playerCache.ReBuyTimes = ce.competition.State.Players[playerIdx].ReBuyTimes
 		ce.competition.State.Players[playerIdx].Status = playerStatus
 		ce.competition.State.Players[playerIdx].Chips = joinPlayer.RedeemChips
 		ce.competition.State.Players[playerIdx].ReBuyTimes++
@@ -490,12 +496,8 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 		ce.competition.State.Players[playerIdx].ReBuyEndAt = UnsetValue
 		ce.competition.State.Players[playerIdx].TotalRedeemChips += joinPlayer.RedeemChips
 		if ce.competition.Meta.Mode == CompetitionMode_CT && len(ce.competition.State.Tables) > 0 {
+			playerCache.TableID = ce.competition.State.Tables[0].ID
 			ce.competition.State.Players[playerIdx].CurrentTableID = ce.competition.State.Tables[0].ID
-		}
-		if playerCache, exist := ce.getPlayerCache(ce.competition.ID, joinPlayer.PlayerID); exist {
-			playerCache.ReBuyTimes = ce.competition.State.Players[playerIdx].ReBuyTimes
-		} else {
-			return ErrCompetitionPlayerNotFound
 		}
 		ce.emitEvent("PlayerBuyIn -> Re Buy", joinPlayer.PlayerID)
 		ce.emitPlayerEvent("PlayerBuyIn -> Re Buy", ce.competition.State.Players[playerIdx])

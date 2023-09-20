@@ -60,7 +60,7 @@ func (ce *competitionEngine) newDefaultCompetitionPlayerData(tableID, playerID s
 	return player, playerCache
 }
 
-func (ce *competitionEngine) UpdateReserveTablePlayerState(playerState *pokertable.TablePlayerState) {
+func (ce *competitionEngine) UpdateReserveTablePlayerState(tableID string, playerState *pokertable.TablePlayerState) {
 	// 更新玩家狀態
 	playerCache, exist := ce.getPlayerCache(ce.competition.ID, playerState.PlayerID)
 	if !exist {
@@ -68,8 +68,10 @@ func (ce *competitionEngine) UpdateReserveTablePlayerState(playerState *pokertab
 	}
 
 	ce.competition.State.Players[playerCache.PlayerIdx].CurrentSeat = playerState.Seat
+	ce.competition.State.Players[playerCache.PlayerIdx].CurrentTableID = tableID
+	ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_Playing
 	ce.emitPlayerEvent("[UpdateReserveTablePlayerState] player table seat updated", ce.competition.State.Players[playerCache.PlayerIdx])
-	ce.emitEvent(fmt.Sprintf("Player (%s) table seat updated to %d", playerState.PlayerID, playerState.Seat), playerState.PlayerID)
+	// ce.emitEvent(fmt.Sprintf("Player (%s) table seat updated to %d", playerState.PlayerID, playerState.Seat), playerState.PlayerID)
 }
 
 func (ce *competitionEngine) UpdateTable(table *pokertable.Table) {

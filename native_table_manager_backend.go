@@ -9,7 +9,7 @@ import (
 type TableManagerBackend interface {
 	// Events
 	OnTableUpdated(fn func(table *pokertable.Table))
-	OnTablePlayerReserved(fn func(table *pokertable.TablePlayerState))
+	OnTablePlayerReserved(fn func(tableID string, playerState *pokertable.TablePlayerState))
 
 	// TableManager Actions
 	CreateTable(options *pokertable.TableEngineOptions, setting pokertable.TableSetting) (*pokertable.Table, error)
@@ -30,8 +30,9 @@ type TableManagerBackend interface {
 
 func NewNativeTableManagerBackend(manager pokertable.Manager) TableManagerBackend {
 	backend := nativeTableManagerBackend{
-		manager:        manager,
-		onTableUpdated: func(t *pokertable.Table) {},
+		manager:               manager,
+		onTableUpdated:        func(t *pokertable.Table) {},
+		onTablePlayerReserved: func(tableID string, playerState *pokertable.TablePlayerState) {},
 	}
 	return &backend
 }
@@ -39,14 +40,14 @@ func NewNativeTableManagerBackend(manager pokertable.Manager) TableManagerBacken
 type nativeTableManagerBackend struct {
 	manager               pokertable.Manager
 	onTableUpdated        func(table *pokertable.Table)
-	onTablePlayerReserved func(playerState *pokertable.TablePlayerState)
+	onTablePlayerReserved func(tableID string, playerState *pokertable.TablePlayerState)
 }
 
 func (ntmb *nativeTableManagerBackend) OnTableUpdated(fn func(table *pokertable.Table)) {
 	ntmb.onTableUpdated = fn
 }
 
-func (ntmb *nativeTableManagerBackend) OnTablePlayerReserved(fn func(playerState *pokertable.TablePlayerState)) {
+func (ntmb *nativeTableManagerBackend) OnTablePlayerReserved(fn func(tableID string, playerState *pokertable.TablePlayerState)) {
 	ntmb.onTablePlayerReserved = fn
 }
 
@@ -66,7 +67,7 @@ func (ntmb *nativeTableManagerBackend) CreateTable(options *pokertable.TableEngi
 
 		ntmb.onTableUpdated(&cloneTable)
 	}
-	callbacks.OnTablePlayerReserved = func(competitionID string, playerState *pokertable.TablePlayerState) {
+	callbacks.OnTablePlayerReserved = func(competitionID, tableID string, playerState *pokertable.TablePlayerState) {
 		data, err := json.Marshal(playerState)
 		if err != nil {
 			return
@@ -78,7 +79,7 @@ func (ntmb *nativeTableManagerBackend) CreateTable(options *pokertable.TableEngi
 			return
 		}
 
-		ntmb.onTablePlayerReserved(&clonePlayerState)
+		ntmb.onTablePlayerReserved(tableID, &clonePlayerState)
 	}
 
 	table, err := ntmb.manager.CreateTable(options, callbacks, setting)

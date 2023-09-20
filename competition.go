@@ -43,11 +43,11 @@ const (
 )
 
 type Competition struct {
+	UpdateSerial int64             `json:"update_serial" mapstructure:"update_serial"` // 更新序列號 (數字越大越晚發生)
 	ID           string            `json:"id" mapstructure:"id"`                       // 賽事 Unique ID
 	Meta         CompetitionMeta   `json:"meta" mapstructure:"meta"`                   // 賽事固定資料
 	State        *CompetitionState `json:"state" mapstructure:"state"`                 // 賽事動態資料
 	UpdateAt     int64             `json:"update_at" mapstructure:"update_at"`         // 更新時間 (Seconds)
-	UpdateSerial int64             `json:"update_serial" mapstructure:"update_serial"` // 更新序列號 (數字越大越晚發生)
 }
 
 type CompetitionMeta struct {
