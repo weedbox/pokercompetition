@@ -482,7 +482,6 @@ func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
 				ce.competition.State.Players[playerCache.PlayerIdx].IsReBuying = true
 				ce.competition.State.Players[playerCache.PlayerIdx].ReBuyEndAt = reBuyEndAt
 				if ce.competition.Meta.Mode == CompetitionMode_MTT {
-					ce.competition.State.Players[playerCache.PlayerIdx].CurrentTableID = ""
 					ce.competition.State.Players[playerCache.PlayerIdx].CurrentSeat = UnsetValue
 				}
 				ce.emitPlayerEvent("re-buying", ce.competition.State.Players[playerCache.PlayerIdx])
