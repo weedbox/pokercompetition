@@ -1,6 +1,7 @@
 package actor
 
 import (
+	"fmt"
 	"math/rand"
 	"time"
 
@@ -9,37 +10,54 @@ import (
 	"github.com/weedbox/timebank"
 )
 
+type TableAutoJoinActionRequestFunc func(competitionID, tableID, playerID string)
+
 type ActionProbability struct {
 	Action string
 	Weight float64
 }
 
 var (
+	// original bot actions
+	// actionProbabilities = []ActionProbability{
+	// 	{Action: "check", Weight: 0.1},
+	// 	{Action: "call", Weight: 0.3},
+	// 	{Action: "fold", Weight: 0.15},
+	// 	{Action: "allin", Weight: 0.05},
+	// 	{Action: "raise", Weight: 0.3},
+	// 	{Action: "bet", Weight: 0.1},
+	// }
+
+	// lower down raise weight
 	actionProbabilities = []ActionProbability{
 		{Action: "check", Weight: 0.1},
-		{Action: "call", Weight: 0.3},
+		{Action: "call", Weight: 0.5},
 		{Action: "fold", Weight: 0.15},
 		{Action: "allin", Weight: 0.05},
-		{Action: "raise", Weight: 0.3},
+		{Action: "raise", Weight: 0.1},
 		{Action: "bet", Weight: 0.1},
 	}
 )
 
 type botRunner struct {
-	actor             Actor
-	actions           Actions
-	playerID          string
-	isHumanized       bool
-	curGameID         string
-	lastGameStateTime int64
-	timebank          *timebank.TimeBank
-	tableInfo         *pokertable.Table
+	actor                          Actor
+	actions                        Actions
+	playerID                       string
+	isHumanized                    bool
+	curGameID                      string
+	lastGameStateTime              int64
+	timebank                       *timebank.TimeBank
+	tableInfo                      *pokertable.Table
+	onTableGameWagerActionUpdated  TableGameWagerActionUpdatedFunc
+	onTableAutoJoinActionRequested TableAutoJoinActionRequestFunc
 }
 
 func NewBotRunner(playerID string) *botRunner {
 	return &botRunner{
-		playerID: playerID,
-		timebank: timebank.NewTimeBank(),
+		playerID:                       playerID,
+		timebank:                       timebank.NewTimeBank(),
+		onTableGameWagerActionUpdated:  func(string, string, int, string, string, int64) {},
+		onTableAutoJoinActionRequested: func(string, string, string) {},
 	}
 }
 
@@ -52,10 +70,45 @@ func (br *botRunner) Humanized(enabled bool) {
 	br.isHumanized = enabled
 }
 
+func (br *botRunner) OnTableGameWagerActionUpdated(fn TableGameWagerActionUpdatedFunc) error {
+	br.onTableGameWagerActionUpdated = fn
+	return nil
+}
+
+func (br *botRunner) OnTableAutoJoinActionRequested(fn TableAutoJoinActionRequestFunc) error {
+	br.onTableAutoJoinActionRequested = fn
+	return nil
+}
+
 func (br *botRunner) UpdateTableState(table *pokertable.Table) error {
 
 	gs := table.State.GameState
+	//oldState := br.tableInfo.State
 	br.tableInfo = table
+
+	// Check if you have been eliminated
+	isEliminated := true
+	shouldAutoJoin := false
+	for _, ps := range table.State.PlayerStates {
+		if ps.PlayerID == br.playerID {
+			isEliminated = false
+			if !ps.IsIn {
+				shouldAutoJoin = true
+			}
+			break
+		}
+	}
+
+	if isEliminated {
+		fmt.Printf("[DEBUG#botRunner#UpdateTableState] [1] No reaction required since bot (%s), table (%s) is eliminated.\n", br.playerID, table.ID)
+		return nil
+	}
+
+	// request auto join table
+	if shouldAutoJoin {
+		br.onTableAutoJoinActionRequested(table.Meta.CompetitionID, table.ID, br.playerID)
+		return nil
+	}
 
 	// The state remains unchanged or is outdated
 	if gs != nil {
@@ -63,53 +116,46 @@ func (br *botRunner) UpdateTableState(table *pokertable.Table) error {
 		// New game
 		if gs.GameID != br.curGameID {
 			br.curGameID = gs.GameID
-		}
-
-		//fmt.Println(br.lastGameStateTime, br.tableInfo.State.GameState.UpdatedAt)
-		if br.lastGameStateTime >= gs.UpdatedAt {
+		} else if br.lastGameStateTime >= gs.UpdatedAt {
+			// Ignore if game state is too old
 			//fmt.Println(br.playerID, table.ID)
+			fmt.Printf("[DEBUG#botRunner#UpdateTableState] [2] No reaction required since lastGameStateTime >= currentGameStateTime. Bot PlayerID: %s, TableID: %s\n", br.playerID, table.ID)
 			return nil
 		}
 
 		br.lastGameStateTime = gs.UpdatedAt
 	}
 
-	// Check if you have been eliminated
-	isEliminated := true
-	for _, ps := range table.State.PlayerStates {
-		if ps.PlayerID == br.playerID {
-			isEliminated = false
-		}
-	}
-
-	if isEliminated {
-		return nil
-	}
-
-	// Update player index in game
-	gamePlayerIdx := br.actor.GetTable().GetGamePlayerIndex(br.playerID)
-
-	// Somehow, this player is not in the game.
-	// It probably has no chips already or just sat down and have not participated in the game yet
-	if gamePlayerIdx == -1 {
-		return nil
-	}
-
 	if table.State.Status != pokertable.TableStateStatus_TableGamePlaying {
 		return nil
 	}
 
-	//fmt.Printf("Bot (player_id=%s, gameIdx=%d)\n", br.playerID, br.gamePlayerIdx)
+	// Getting player index in game
+	gamePlayerIdx := table.GamePlayerIndex(br.playerID)
+
+	// Somehow, this player is not in the game.
+	// It probably has no chips already or just sat down and have not participated in the game yet
+	if gamePlayerIdx == -1 {
+		fmt.Printf("[DEBUG#botRunner#UpdateTableState] [3] No reaction required since bot (%s) gamePlayerIdx is -1 at table (%s) when table status is %s.\n", br.playerID, table.ID, pokertable.TableStateStatus_TableGamePlaying)
+		return nil
+	}
+
+	//fmt.Printf("Bot (player_id=%s, gameIdx=%d, event=%s)\n", br.playerID, gamePlayerIdx, gs.Status.CurrentEvent)
 
 	// game is running so we have to check actions allowed
 	player := gs.GetPlayer(gamePlayerIdx)
 	if player == nil {
+		fmt.Printf("[DEBUG#botRunner#UpdateTableState] [4] No reaction required since gs GetPlayer(Bot) Failed. PlayerID: %s, GameIdx: %d, Event: %s\n", br.playerID, gamePlayerIdx, gs.Status.CurrentEvent)
 		return nil
 	}
 
 	if len(player.AllowedActions) > 0 {
 		//fmt.Println(br.playerID, player.AllowedActions)
-		return br.requestMove(table.State.GameState, gamePlayerIdx)
+		err := br.requestMove(table.State.GameState, gamePlayerIdx)
+		if err != nil {
+			fmt.Printf("[DEBUG#botRunner#UpdateTableState] [5] Bot requestMove Failed (player_id=%s, gameIdx=%d, event=%s). Error: %+v\n", br.playerID, gamePlayerIdx, gs.Status.CurrentEvent, err)
+			return err
+		}
 	}
 
 	return nil
@@ -119,7 +165,7 @@ func (br *botRunner) requestMove(gs *pokerface.GameState, playerIdx int) error {
 
 	//fmt.Println(br.tableInfo.State.GameState.Status.Round, br.gamePlayerIdx, gs.Players[br.gamePlayerIdx].AllowedActions)
 	/*
-		player := gs.Players[br.gamePlayerIdx]
+		player := gs.Players[playerIdx]
 		if len(player.AllowedActions) == 1 {
 			fmt.Println(br.playerID, player.AllowedActions)
 		}
@@ -127,10 +173,8 @@ func (br *botRunner) requestMove(gs *pokerface.GameState, playerIdx int) error {
 
 	// Do ready() and pay() automatically
 	if gs.HasAction(playerIdx, "ready") {
-		// fmt.Printf("[#%d][%d][%s][%s] READY\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
 		return br.actions.Ready()
 	} else if gs.HasAction(playerIdx, "pass") {
-		// fmt.Printf("[#%d][%d][%s][%s] PASS\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
 		return br.actions.Pass()
 	} else if gs.HasAction(playerIdx, "pay") {
 
@@ -139,17 +183,14 @@ func (br *botRunner) requestMove(gs *pokerface.GameState, playerIdx int) error {
 		case pokerface.GameEventSymbols[pokerface.GameEvent_AnteRequested]:
 
 			// Ante
-			// fmt.Printf("[#%d][%d][%s][%s] PAY ANTE\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
 			return br.actions.Pay(gs.Meta.Ante)
 
 		case pokerface.GameEventSymbols[pokerface.GameEvent_BlindsRequested]:
 
 			// blinds
 			if gs.HasPosition(playerIdx, "sb") {
-				// fmt.Printf("[#%d][%d][%s][%s] PAY SB\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
 				return br.actions.Pay(gs.Meta.Blind.SB)
 			} else if gs.HasPosition(playerIdx, "bb") {
-				// fmt.Printf("[#%d][%d][%s][%s] PAY BB\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
 				return br.actions.Pay(gs.Meta.Blind.BB)
 			}
 
@@ -255,37 +296,102 @@ func (br *botRunner) requestAI(gs *pokerface.GameState, playerIdx int) error {
 		minBet := gs.Status.MiniBet
 
 		if player.InitialStackSize <= minBet {
-			// fmt.Printf("[#%d][%d][%s][%s] BET %d\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round, player.InitialStackSize)
 			return br.actions.Bet(player.InitialStackSize)
 		}
 
 		chips = rand.Int63n(player.InitialStackSize-minBet) + minBet
-		// fmt.Printf("[#%d][%d][%s][%s] BET %d\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round, chips)
-		return br.actions.Bet(chips)
+
+		err := br.actions.Bet(chips)
+		if err != nil {
+			return err
+		}
+
+		br.updateWagerAction(pokertable.WagerAction_Bet, chips)
+		return nil
 	case "raise":
 
 		maxChipLevel := player.InitialStackSize
 		minChipLevel := gs.Status.CurrentWager + gs.Status.PreviousRaiseSize
 
 		if maxChipLevel <= minChipLevel {
-			// fmt.Printf("[#%d][%d][%s][%s] RAISE %d\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round, maxChipLevel)
-			return br.actions.Raise(maxChipLevel)
+			err := br.actions.Raise(maxChipLevel)
+			if err != nil {
+				return err
+			}
+
+			br.updateWagerAction(pokertable.WagerAction_Raise, maxChipLevel)
+			return nil
 		}
 
 		chips = rand.Int63n(maxChipLevel-minChipLevel) + minChipLevel
-		// fmt.Printf("[#%d][%d][%s][%s] RAISE %d\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round, chips)
-		return br.actions.Raise(chips)
+
+		err := br.actions.Raise(chips)
+		if err != nil {
+			return err
+		}
+
+		br.updateWagerAction(pokertable.WagerAction_Raise, chips)
+		return nil
 	case "call":
-		// fmt.Printf("[#%d][%d][%s][%s] CALL\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
-		return br.actions.Call()
+		// TODO: should move logic to pokertable
+		wager := int64(0)
+		gamePlayerIdx := br.tableInfo.FindGamePlayerIdx(br.playerID)
+		if gamePlayerIdx >= 0 && br.tableInfo != nil && br.tableInfo.State.GameState != nil && gamePlayerIdx < len(br.tableInfo.State.GameState.Players) {
+			wager = br.tableInfo.State.GameState.Status.CurrentWager - br.tableInfo.State.GameState.GetPlayer(gamePlayerIdx).Wager
+		}
+
+		err := br.actions.Call()
+		if err != nil {
+			return err
+		}
+
+		br.updateWagerAction(pokertable.WagerAction_Call, wager)
+		return nil
 	case "check":
-		// fmt.Printf("[#%d][%d][%s][%s] CHECK\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
-		return br.actions.Check()
+		err := br.actions.Check()
+		if err != nil {
+			return err
+		}
+
+		br.updateWagerAction(pokertable.WagerAction_Check, 0)
+		return nil
 	case "allin":
-		// fmt.Printf("[#%d][%d][%s][%s] ALLIN\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
-		return br.actions.Allin()
+		// TODO: should move logic to pokertable
+		wager := int64(0)
+		gamePlayerIdx := br.tableInfo.FindGamePlayerIdx(br.playerID)
+		if gamePlayerIdx >= 0 && br.tableInfo != nil && br.tableInfo.State.GameState != nil && gamePlayerIdx < len(br.tableInfo.State.GameState.Players) {
+			wager = br.tableInfo.State.GameState.GetPlayer(gamePlayerIdx).StackSize
+		}
+
+		err := br.actions.Allin()
+		if err != nil {
+			return err
+		}
+
+		br.updateWagerAction(pokertable.WagerAction_AllIn, wager)
+		return nil
 	}
 
-	// fmt.Printf("[#%d][%d][%s][%s] FOLD\n", br.tableInfo.UpdateSerial, br.tableInfo.State.GameCount, br.playerID, br.tableInfo.State.GameState.Status.Round)
-	return br.actions.Fold()
+	err := br.actions.Fold()
+	if err != nil {
+		return err
+	}
+
+	br.updateWagerAction(pokertable.WagerAction_Fold, 0)
+	return nil
+}
+
+func (br *botRunner) updateWagerAction(action string, chips int64) {
+	tableID := ""
+	gameCount := 0
+	round := ""
+	if br.tableInfo != nil {
+		tableID = br.tableInfo.ID
+		gameCount = br.tableInfo.State.GameCount
+
+		if br.tableInfo.State.GameState != nil {
+			round = br.tableInfo.State.GameState.Status.Round
+		}
+	}
+	br.onTableGameWagerActionUpdated(tableID, br.curGameID, gameCount, round, action, chips)
 }

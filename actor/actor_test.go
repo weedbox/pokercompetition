@@ -7,7 +7,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/thoas/go-funk"
@@ -109,6 +108,12 @@ func TestActor_CT(t *testing.T) {
 
 		// Initializing bot runner
 		bot := NewBotRunner(p.PlayerID)
+		bot.OnTableAutoJoinActionRequested(func(competitionID, tableID, playerID string) {
+			go func() {
+				assert.Nil(t, tableEngine.PlayerJoin(playerID), fmt.Sprintf("%s join table failed", playerID))
+				t.Logf("%s is joined", playerID)
+			}()
+		})
 		a.SetRunner(bot)
 
 		actors = append(actors, a)
@@ -148,10 +153,6 @@ func TestActor_CT(t *testing.T) {
 		assert.Nil(t, err, fmt.Sprintf("%s buy in competition failed", joinPlayer.PlayerID))
 		logData = append(logData, makeLog(fmt.Sprintf("[Competition][%d] %s join competition", competitionEngine.GetCompetition().UpdateSerial, joinPlayer.PlayerID), competition.GetJSON))
 		t.Logf("%s buy in", joinPlayer.PlayerID)
-		time.Sleep(time.Millisecond * 300)
-		err = tableEngine.PlayerJoin(joinPlayer.PlayerID)
-		assert.Nil(t, err, fmt.Sprintf("%s join table failed", joinPlayer.PlayerID))
-		t.Logf("%s is joined", joinPlayer.PlayerID)
 	}
 
 	wg.Wait()

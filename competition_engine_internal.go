@@ -426,9 +426,9 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 		)
 
 		// 結束賽事
-		if ce.competition.State.BlindState.IsFinalBuyInLevel() && len(alivePlayerIDs) == 1 && len(ce.competition.State.Tables) == 1 {
-			ce.CloseCompetition(CompetitionStateStatus_End)
-		}
+		// if ce.competition.State.BlindState.IsFinalBuyInLevel() && len(alivePlayerIDs) == 1 && len(ce.competition.State.Tables) == 1 {
+		// 	ce.CloseCompetition(CompetitionStateStatus_End)
+		// }
 	}
 }
 
