@@ -409,6 +409,8 @@ func (ce *competitionEngine) StartCompetition() error {
 			if err != nil {
 				ce.emitErrorEvent("MTT StartCompetition Register Player to Match failed", player.PlayerID, err)
 				return err
+			} else {
+				ce.match.PrintTables()
 			}
 		}
 	}
@@ -518,7 +520,12 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 	case CompetitionMode_MTT:
 		// 比賽開打後 MTT 一律丟到拆併桌程式配桌
 		if ce.competition.State.Status == CompetitionStateStatus_DelayedBuyIn {
-			ce.match.Register(joinPlayer.PlayerID)
+			if err := ce.match.Register(joinPlayer.PlayerID); err != nil {
+				ce.emitErrorEvent("PlayerBuyIn -> Register Player to Match failed", joinPlayer.PlayerID, err)
+				return err
+			} else {
+				ce.match.PrintTables()
+			}
 		}
 	}
 

@@ -409,12 +409,25 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 			sc.SB = table.State.SeatChanges.NewSB
 			sc.BB = table.State.SeatChanges.NewBB
 			sc.Seats = leftPlayerSeats
-			ce.matchTableBackend.UpdateTable(table.ID, sc)
+			if err := ce.matchTableBackend.UpdateTable(table.ID, sc); err != nil {
+				ce.emitErrorEvent(fmt.Sprintf("[%s][%d] MTT Match Update Table SeatChanges", table.ID, table.State.GameCount), "", err)
+			} else {
+				fmt.Printf("---------- [c: %s][t: %s] 第 (%d) 手結算, NewDealer: %d, NewSB: %d, NewBB: %d, leftPlayerSeats: %+v ----------\n",
+					ce.competition.ID,
+					table.ID,
+					table.State.GameCount,
+					sc.Dealer,
+					sc.SB,
+					sc.BB,
+					sc.Seats,
+				)
+				ce.match.PrintTables()
+			}
 		} else {
-			ce.emitErrorEvent(fmt.Sprintf("[%s] MTT Match Update Table SeatChanges is nil", table.ID), "", errors.New("nil seat change state is not allowed when settling mtt table"))
+			ce.emitErrorEvent(fmt.Sprintf("[c: %s][t: %s] MTT Match Update Table SeatChanges is nil", ce.competition.ID, table.ID), "", errors.New("nil seat change state is not allowed when settling mtt table"))
 		}
 
-		fmt.Printf("---------- [%s][%s] 第 (%d) 手結算, 停止買入: %+v, [離開 %d 人 (%s), 活著: %d 人 (%s)] ----------\n",
+		fmt.Printf("---------- [c: %s][t: %s] 第 (%d) 手結算, 停止買入: %+v, [離開 %d 人 (%s), 活著: %d 人 (%s)] ----------\n",
 			ce.competition.ID,
 			table.ID,
 			table.State.GameCount,
