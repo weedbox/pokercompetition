@@ -32,12 +32,9 @@ func TestActor_CT(t *testing.T) {
 	}
 
 	// 建立賽事管理
-	qm := pokercompetition.NewNativeQueueManager()
-	err := qm.Connect()
-	assert.Nil(t, err, "queue manager connect error")
 	tableManager := pokertable.NewManager()
 	tableManagerBackend := pokercompetition.NewNativeTableManagerBackend(tableManager)
-	manager := pokercompetition.NewManager(tableManagerBackend, qm)
+	manager := pokercompetition.NewManager(tableManagerBackend, nil)
 	tableOptions := pokertable.NewTableEngineOptions()
 	tableOptions.Interval = 1
 	manager.SetTableEngineOptions(tableOptions)

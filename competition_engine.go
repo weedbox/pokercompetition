@@ -29,6 +29,7 @@ var (
 	ErrCompetitionPlayerNotFound       = errors.New("competition: player not found")
 	ErrCompetitionTableNotFound        = errors.New("competition: table not found")
 	ErrMatchInitFailed                 = errors.New("competition: failed to init match")
+	ErrMatchTableReservePlayerFailed   = errors.New("competition: failed to balance player to table by match")
 )
 
 type CompetitionEngineOpt func(*competitionEngine)
@@ -757,6 +758,11 @@ func (ce *competitionEngine) MatchTableReservePlayer(tableID, playerID string, s
 	playerCache, exist := ce.getPlayerCache(ce.competition.ID, playerID)
 	if !exist {
 		return ErrCompetitionPlayerNotFound
+	}
+
+	if ce.competition.State.Players[playerCache.PlayerIdx].Chips <= 0 {
+		fmt.Printf("[DEBUG#MTT#MatchTableReservePlayer#ErrMatchTableReservePlayerFailed] competition (%s), table (%s), seat (%d), player (%s), chips (%d)\n", ce.competition.ID, tableID, seat, playerID, ce.competition.State.Players[playerCache.PlayerIdx].Chips)
+		return ErrMatchTableReservePlayerFailed
 	}
 
 	if ce.competition.State.Tables[tableIdx].State.GameCount <= 0 {
