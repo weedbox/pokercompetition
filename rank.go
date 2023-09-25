@@ -116,10 +116,10 @@ func (ce *competitionEngine) GetSortedTableSettlementKnockoutPlayerRankings(tabl
 }
 
 /*
-GetSortedReBuyKnockoutPlayerRankings 超過 ReBuy 時間後預計被淘汰玩家的排名 (越早入桌者，排名越前面，但 index 越小 aka. 排名後面者陣列 index 越小)
+GetSortedFinalBuyInKnockoutPlayerRankings 停止買入後預計被淘汰玩家的排名 (越早入桌者，排名越前面，但 index 越小 aka. 排名後面者陣列 index 越小)
   - @return SortedFinalKnockoutPlayerIDs 排序過後的淘汰玩家 ID 陣列
 */
-func (ce *competitionEngine) GetSortedReBuyKnockoutPlayerRankings() []string {
+func (ce *competitionEngine) GetSortedFinalBuyInKnockoutPlayerRankings() []string {
 	sortedFinalKnockoutPlayers := make([]CompetitionPlayer, 0)
 
 	// 找出可能的淘汰者們
@@ -152,7 +152,7 @@ GetParticipatedPlayerCompetitionRankingData 計算賽事所有沒有被淘汰玩
 func (ce *competitionEngine) GetParticipatedPlayerCompetitionRankingData(competitionID string, players []*CompetitionPlayer) []RankData {
 	playingPlayers := make([]CompetitionPlayer, 0)
 	for _, player := range players {
-		if player.Status == CompetitionPlayerStatus_Playing {
+		if player.Chips > 0 {
 			playingPlayers = append(playingPlayers, *player)
 		}
 	}

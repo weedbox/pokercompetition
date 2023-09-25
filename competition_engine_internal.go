@@ -360,7 +360,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 	ce.handleReBuy(table)
 
 	// 處理淘汰玩家
-	knockoutPlayerIDs := ce.handleKnockoutPlayers(table)
+	knockoutPlayerIDs := ce.handleTableKnockoutPlayers(table)
 
 	// 事件更新
 	ce.emitEvent("Table Settlement", "")
@@ -453,7 +453,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 	}
 }
 
-func (ce *competitionEngine) handleKnockoutPlayers(table *pokertable.Table) []string {
+func (ce *competitionEngine) handleTableKnockoutPlayers(table *pokertable.Table) []string {
 	// 列出淘汰玩家
 	knockoutPlayerRankings := ce.GetSortedTableSettlementKnockoutPlayerRankings(table.State.PlayerStates)
 	knockoutPlayerIDs := make([]string, 0)
@@ -713,7 +713,7 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 			ce.updateTableBlind(table.ID)
 		}
 
-		ce.emitCompetitionStateEvent(CompetitionStateEvent_BlindUpdated)
+		ce.emitCompetitionStateEvent(CompetitionStateEvent_BlindUpdated) // change CurrentLevelIndex
 
 		// 更新賽事狀態: 停止買入
 		if ce.competition.State.BlindState.IsFinalBuyInLevel() {
@@ -727,27 +727,28 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 				}
 
 				// 淘汰沒資格玩家
-				if ce.competition.Meta.Mode == CompetitionMode_CT {
-					knockoutPlayerRankings := ce.GetSortedReBuyKnockoutPlayerRankings()
-
-					for idx, knockoutPlayerID := range knockoutPlayerRankings {
-						playerCache, exist := ce.getPlayerCache(ce.competition.ID, knockoutPlayerID)
-						if !exist {
-							continue
-						}
-						ce.emitPlayerEvent("Final BuyIn Knockout Players", ce.competition.State.Players[playerCache.PlayerIdx])
-
-						// 更新賽事排名
-						ce.competition.State.Rankings = append(ce.competition.State.Rankings, &CompetitionRank{
-							PlayerID:   knockoutPlayerID,
-							FinalChips: 0,
-						})
-						rank := ce.competition.PlayingPlayerCount() + (len(knockoutPlayerRankings) - idx)
-						ce.emitCompetitionStateFinalPlayerRankEvent(knockoutPlayerID, rank)
+				knockoutPlayerRankings := ce.GetSortedFinalBuyInKnockoutPlayerRankings()
+				for idx, knockoutPlayerID := range knockoutPlayerRankings {
+					playerCache, exist := ce.getPlayerCache(ce.competition.ID, knockoutPlayerID)
+					if !exist {
+						continue
 					}
-					ce.emitEvent("Final BuyIn Knockout Players", "")
-					ce.emitCompetitionStateEvent(CompetitionStateEvent_KnockoutPlayers)
+
+					ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_Knockout
+					ce.competition.State.Players[playerCache.PlayerIdx].CurrentSeat = UnsetValue
+					ce.emitPlayerEvent("Final BuyIn Knockout Players", ce.competition.State.Players[playerCache.PlayerIdx])
+
+					// 更新賽事排名
+					ce.competition.State.Rankings = append(ce.competition.State.Rankings, &CompetitionRank{
+						PlayerID:   knockoutPlayerID,
+						FinalChips: 0,
+					})
+					rank := ce.competition.PlayingPlayerCount() + (len(knockoutPlayerRankings) - idx)
+					ce.emitCompetitionStateFinalPlayerRankEvent(knockoutPlayerID, rank)
 				}
+				ce.emitEvent("Final BuyIn Knockout Players", "")
+				ce.emitCompetitionStateEvent(CompetitionStateEvent_KnockoutPlayers)
+				ce.emitCompetitionStateEvent(CompetitionStateEvent_BlindUpdated) // change Status
 			}
 		}
 	})
