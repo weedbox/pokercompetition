@@ -502,6 +502,10 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 			playerCache.TableID = ce.competition.State.Tables[0].ID
 			ce.competition.State.Players[playerIdx].CurrentTableID = ce.competition.State.Tables[0].ID
 		}
+		if ce.competition.Meta.Mode == CompetitionMode_MTT {
+			playerCache.TableID = ""
+			ce.competition.State.Players[playerIdx].CurrentTableID = "" // re-buy 時要清空 CurrentTableID 等待重新配桌
+		}
 		ce.emitEvent("PlayerBuyIn -> Re Buy", joinPlayer.PlayerID)
 		ce.emitPlayerEvent("PlayerBuyIn -> Re Buy", ce.competition.State.Players[playerIdx])
 	}
