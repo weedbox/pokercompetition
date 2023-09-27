@@ -201,7 +201,7 @@ func (c Competition) CanStart() bool {
 
 func (c Competition) PlayingPlayerCount() int {
 	return len(funk.Filter(c.State.Players, func(player *CompetitionPlayer) bool {
-		return (player.Status == CompetitionPlayerStatus_Playing)
+		return player.Chips > 0
 	}).([]*CompetitionPlayer))
 }
 
