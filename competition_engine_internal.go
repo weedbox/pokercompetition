@@ -138,19 +138,11 @@ func (ce *competitionEngine) handleCompetitionTableCreated(table *pokertable.Tab
 }
 
 func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tableIdx int) {
-	reopenGame := func(ce *competitionEngine, table *pokertable.Table) {
-		readyPlayersCount := 0
-		for _, p := range table.State.PlayerStates {
-			if p.IsIn && p.Bankroll > 0 {
-				readyPlayersCount++
-			}
-		}
-		if ce.competition.State.Status == CompetitionStateStatus_DelayedBuyIn && readyPlayersCount >= ce.competition.Meta.TableMinPlayerCount {
-			if err := ce.tableManagerBackend.TableGameOpen(table.ID); err != nil {
-				ce.emitErrorEvent("Game Reopen", "", err)
-				return
-			}
-			ce.emitEvent("Game Reopen:", "")
+	shouldReopenGame := false
+	readyPlayersCount := 0
+	for _, p := range table.State.PlayerStates {
+		if p.IsIn && p.Bankroll > 0 {
+			readyPlayersCount++
 		}
 	}
 
@@ -161,56 +153,18 @@ func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tab
 			return
 		}
 
-		reopenGame(ce, table)
+		shouldReopenGame = ce.competition.State.Status == CompetitionStateStatus_DelayedBuyIn && readyPlayersCount >= ce.competition.Meta.TableMinPlayerCount
 	case CompetitionMode_MTT:
-		// TODO: checkout resume from breaking logic
-		if ce.competition.IsBreaking() {
-			if !ce.setResumeFromPauseTask {
-				// resume game from breaking
-				endAt := ce.competition.State.BlindState.EndAts[ce.competition.State.BlindState.CurrentLevelIndex]
-				if err := timebank.NewTimeBank().NewTaskWithDeadline(time.Unix(endAt, 0), func(isCancelled bool) {
-					if isCancelled {
-						return
-					}
+		shouldReopenGame = readyPlayersCount >= ce.competition.Meta.TableMinPlayerCount
+	}
 
-					endStatus := []CompetitionStateStatus{
-						CompetitionStateStatus_End,
-						CompetitionStateStatus_AutoEnd,
-						CompetitionStateStatus_ForceEnd,
-					}
-					if funk.Contains(endStatus, ce.competition.State.Status) {
-						return
-					}
-
-					if len(ce.competition.State.Tables) > tableIdx {
-						t := ce.competition.State.Tables[tableIdx]
-						tableID := t.ID
-						// TODO: close table check might not be necessary
-						if ce.shouldCloseTable(t.State.StartAt, len(t.AlivePlayers())) {
-							if err := ce.tableManagerBackend.CloseTable(tableID); err != nil {
-								ce.emitErrorEvent("resume game from breaking & close table", "", err)
-								return
-							}
-						}
-
-						autoOpenGame := t.State.Status == pokertable.TableStateStatus_TablePausing && len(t.AlivePlayers()) >= t.Meta.TableMinPlayerCount
-						if !autoOpenGame {
-							return
-						}
-						if err := ce.tableManagerBackend.TableGameOpen(tableID); err != nil {
-							ce.emitErrorEvent("resume game from breaking & auto open next game", "", err)
-						}
-					}
-
-					ce.setResumeFromPauseTask = false
-				}); err != nil {
-					ce.emitErrorEvent("new resume game task from breaking", "", err)
-					return
-				}
-				ce.setResumeFromPauseTask = true
-			}
+	// re-open game
+	if shouldReopenGame {
+		if err := ce.tableManagerBackend.TableGameOpen(table.ID); err != nil {
+			ce.emitErrorEvent("Game Reopen", "", err)
+			return
 		}
-		reopenGame(ce, table)
+		ce.emitEvent("Game Reopen:", "")
 	}
 }
 
@@ -438,18 +392,75 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 			strings.Join(alivePlayerIDs, ","),
 		)
 
-		// 結束賽事
 		if err := timebank.NewTimeBank().NewTask(time.Second*3, func(isCancelled bool) {
 			if isCancelled {
 				return
 			}
 
+			// 中場休息處理
+			ce.handleBreaking(table.ID, tableIdx)
+
+			// 結束賽事處理
 			if ce.competition.State.BlindState.IsFinalBuyInLevel() && len(alivePlayerIDs) == 1 && len(ce.competition.State.Tables) == 1 {
 				ce.CloseCompetition(CompetitionStateStatus_End)
 			}
 		}); err != nil {
-			ce.emitErrorEvent("error close competition", "", err)
+			ce.emitErrorEvent("error next stage after settle competition table", "", err)
 		}
+	}
+}
+
+func (ce *competitionEngine) handleBreaking(tableID string, tableIdx int) {
+	if !ce.competition.IsBreaking() {
+		return
+	}
+
+	_, exist := ce.breakingPauseResumeStates[tableID]
+	if !exist {
+		ce.breakingPauseResumeStates[tableID] = false
+	}
+
+	// already resume table games from breaking
+	if ce.breakingPauseResumeStates[tableID] {
+		return
+	}
+
+	// reopen table game
+	endAt := ce.competition.State.BlindState.EndAts[ce.competition.State.BlindState.CurrentLevelIndex]
+	if err := timebank.NewTimeBank().NewTaskWithDeadline(time.Unix(endAt, 0), func(isCancelled bool) {
+		if isCancelled {
+			return
+		}
+
+		endStatus := []CompetitionStateStatus{
+			CompetitionStateStatus_End,
+			CompetitionStateStatus_AutoEnd,
+			CompetitionStateStatus_ForceEnd,
+		}
+		if funk.Contains(endStatus, ce.competition.State.Status) {
+			return
+		}
+
+		if ce.breakingPauseResumeStates[tableID] {
+			return
+		}
+
+		if len(ce.competition.State.Tables) > tableIdx {
+			t := ce.competition.State.Tables[tableIdx]
+
+			autoOpenGame := t.State.Status == pokertable.TableStateStatus_TablePausing && len(t.AlivePlayers()) >= t.Meta.TableMinPlayerCount
+			if !autoOpenGame {
+				return
+			}
+			if err := ce.tableManagerBackend.TableGameOpen(tableID); err != nil {
+				ce.emitErrorEvent("resume game from breaking & auto open next game", "", err)
+			}
+
+			ce.breakingPauseResumeStates[tableID] = true
+		}
+	}); err != nil {
+		ce.emitErrorEvent("new resume game task from breaking", "", err)
+		return
 	}
 }
 

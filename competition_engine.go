@@ -81,7 +81,7 @@ type competitionEngine struct {
 	onCompetitionPlayerUpdated          func(string, *CompetitionPlayer)
 	onCompetitionFinalPlayerRankUpdated func(string, string, int)
 	onCompetitionStateUpdated           func(string, *Competition)
-	setResumeFromPauseTask              bool
+	breakingPauseResumeStates           map[string]bool // key: tableID, value: is resume from pause
 	blind                               pokerblind.Blind
 	match                               match.Match
 	matchTableBackend                   match.TableBackend
@@ -101,7 +101,7 @@ func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
 		onCompetitionPlayerUpdated:          func(string, *CompetitionPlayer) {},
 		onCompetitionFinalPlayerRankUpdated: func(string, string, int) {},
 		onCompetitionStateUpdated:           func(string, *Competition) {},
-		setResumeFromPauseTask:              false,
+		breakingPauseResumeStates:           make(map[string]bool),
 		blind:                               pokerblind.NewBlind(),
 		tablePlayerWaitingQueue:             make(map[string]map[int]int),
 
@@ -565,6 +565,10 @@ func (ce *competitionEngine) PlayerAddon(tableID string, joinPlayer JoinPlayer) 
 
 	// validate Addon times
 	if ce.competition.Meta.AddonSetting.IsBreakOnly && !ce.competition.IsBreaking() {
+		return ErrCompetitionAddonRejected
+	}
+
+	if !ce.competition.CurrentBlindLevel().AllowAddon {
 		return ErrCompetitionAddonRejected
 	}
 
