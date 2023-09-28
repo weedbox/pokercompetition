@@ -75,12 +75,12 @@ func (b *blind) ApplyOptions(options *BlindOptions) *BlindState {
 	b.bs = &BlindState{
 		BlindID: options.ID,
 		Meta: Meta{
-			InitialLevel:    options.InitialLevel,
-			FinalBuyInLevel: options.FinalBuyInLevel,
-			Levels:          options.Levels,
+			InitialLevel:         options.InitialLevel,
+			FinalBuyInLevelIndex: options.FinalBuyInLevelIndex,
+			Levels:               options.Levels,
 		},
 		Status: Status{
-			FinalBuyInLevelIndex: UnsetValue,
+			FinalBuyInLevelIndex: options.FinalBuyInLevelIndex,
 			CurrentLevelIndex:    UnsetValue,
 			LevelEndAts:          levelEndAts,
 		},
@@ -103,9 +103,6 @@ func (b *blind) Start() (*BlindState, error) {
 	for idx, bl := range b.bs.Meta.Levels {
 		if bl.Level == b.bs.Meta.InitialLevel {
 			b.bs.Status.CurrentLevelIndex = idx
-		}
-		if bl.Level == b.bs.Meta.FinalBuyInLevel {
-			b.bs.Status.FinalBuyInLevelIndex = idx
 		}
 	}
 

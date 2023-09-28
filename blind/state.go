@@ -16,9 +16,9 @@ type BlindState struct {
 }
 
 type Meta struct {
-	InitialLevel    int          `json:"initial_level"`
-	FinalBuyInLevel int          `json:"final_buy_in_level"`
-	Levels          []BlindLevel `json:"levels"`
+	InitialLevel         int          `json:"initial_level"`
+	FinalBuyInLevelIndex int          `json:"final_buy_in_level_index"`
+	Levels               []BlindLevel `json:"levels"`
 }
 
 type Status struct {

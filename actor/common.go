@@ -14,17 +14,17 @@ func NewCTCompetitionSetting() pokercompetition.CompetitionSetting {
 		CompetitionID: uuid.New().String(),
 		Meta: pokercompetition.CompetitionMeta{
 			Blind: pokercompetition.Blind{
-				ID:              uuid.New().String(),
-				InitialLevel:    1,
-				FinalBuyInLevel: 2,
-				DealerBlindTime: 1,
+				ID:                   uuid.New().String(),
+				InitialLevel:         1,
+				FinalBuyInLevelIndex: 1,
+				DealerBlindTime:      1,
 				Levels: []pokercompetition.BlindLevel{
 					{
 						Level:    1,
 						SB:       10,
 						BB:       20,
 						Ante:     0,
-						Duration: 3,
+						Duration: 5,
 					},
 					{
 						Level:    2,
@@ -77,10 +77,10 @@ func NewMTTCompetitionSetting() pokercompetition.CompetitionSetting {
 		CompetitionID: uuid.New().String(),
 		Meta: pokercompetition.CompetitionMeta{
 			Blind: pokercompetition.Blind{
-				ID:              uuid.New().String(),
-				InitialLevel:    1,
-				FinalBuyInLevel: 2,
-				DealerBlindTime: 1,
+				ID:                   uuid.New().String(),
+				InitialLevel:         1,
+				FinalBuyInLevelIndex: 1,
+				DealerBlindTime:      1,
 				Levels: []pokercompetition.BlindLevel{
 					{
 						Level:    1,

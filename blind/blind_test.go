@@ -15,9 +15,9 @@ func Test_Blind_Start(t *testing.T) {
 
 	// apply options
 	options := &BlindOptions{
-		ID:              uuid.New().String(),
-		InitialLevel:    1,
-		FinalBuyInLevel: 3,
+		ID:                   uuid.New().String(),
+		InitialLevel:         1,
+		FinalBuyInLevelIndex: 2,
 		Levels: []BlindLevel{
 			{
 				Level: 1,
@@ -87,9 +87,9 @@ func Test_Blind_BeforeFinalBuyIn(t *testing.T) {
 
 	// apply options
 	options := &BlindOptions{
-		ID:              uuid.New().String(),
-		InitialLevel:    1,
-		FinalBuyInLevel: 3,
+		ID:                   uuid.New().String(),
+		InitialLevel:         1,
+		FinalBuyInLevelIndex: 2,
 		Levels: []BlindLevel{
 			{
 				Level: 1,
@@ -164,9 +164,9 @@ func Test_Blind_FinalBuyIn(t *testing.T) {
 
 	// apply options
 	options := &BlindOptions{
-		ID:              uuid.New().String(),
-		InitialLevel:    1,
-		FinalBuyInLevel: 3,
+		ID:                   uuid.New().String(),
+		InitialLevel:         1,
+		FinalBuyInLevelIndex: 2,
 		Levels: []BlindLevel{
 			{
 				Level: 1,
@@ -240,9 +240,9 @@ func Test_Blind_LevelDuration(t *testing.T) {
 
 	// apply options
 	options := &BlindOptions{
-		ID:              uuid.New().String(),
-		InitialLevel:    1,
-		FinalBuyInLevel: 3,
+		ID:                   uuid.New().String(),
+		InitialLevel:         1,
+		FinalBuyInLevelIndex: 1,
 		Levels: []BlindLevel{
 			{
 				Level: 1,
@@ -285,9 +285,9 @@ func Test_Blind_BreakingLevel(t *testing.T) {
 
 	// apply options
 	options := &BlindOptions{
-		ID:              uuid.New().String(),
-		InitialLevel:    1,
-		FinalBuyInLevel: 3,
+		ID:                   uuid.New().String(),
+		InitialLevel:         1,
+		FinalBuyInLevelIndex: 2,
 		Levels: []BlindLevel{
 			{
 				Level: 1,
@@ -320,7 +320,7 @@ func Test_Blind_BreakingLevel(t *testing.T) {
 				Duration: 2,
 			},
 			{
-				Level: 4,
+				Level: 3,
 				Ante:  10,
 				Blind: pokerface.BlindSetting{
 					Dealer: 0,
@@ -330,7 +330,7 @@ func Test_Blind_BreakingLevel(t *testing.T) {
 				Duration: 1,
 			},
 			{
-				Level: 5,
+				Level: 4,
 				Ante:  10,
 				Blind: pokerface.BlindSetting{
 					Dealer: 0,

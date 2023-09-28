@@ -125,11 +125,11 @@ type CompetitionPlayer struct {
 }
 
 type Blind struct {
-	ID              string       `json:"id" mapstructure:"id"`                                 // ID
-	InitialLevel    int          `json:"initial_level" mapstructure:"initial_level"`           // 起始盲注級別
-	FinalBuyInLevel int          `json:"final_buy_in_level" mapstructure:"final_buy_in_level"` // 最後買入盲注等級
-	DealerBlindTime int          `json:"dealer_blind_time" mapstructure:"dealer_blind_time"`   // Dealer 位置要收取的前注倍數 (短牌用)
-	Levels          []BlindLevel `json:"levels" mapstructure:"levels"`                         // 級別資訊列表
+	ID                   string       `json:"id" mapstructure:"id"`                                         // ID
+	InitialLevel         int          `json:"initial_level" mapstructure:"initial_level"`                   // 起始盲注級別
+	FinalBuyInLevelIndex int          `json:"final_buy_in_level_idx" mapstructure:"final_buy_in_level_idx"` // 最後買入盲注等級索引值
+	DealerBlindTime      int          `json:"dealer_blind_time" mapstructure:"dealer_blind_time"`           // Dealer 位置要收取的前注倍數 (短牌用)
+	Levels               []BlindLevel `json:"levels" mapstructure:"levels"`                                 // 級別資訊列表
 }
 
 type BlindLevel struct {
@@ -251,6 +251,5 @@ func (bs BlindState) IsFinalBuyInLevel() bool {
 	if bs.FinalBuyInLevelIndex == UnsetValue {
 		return true
 	}
-
 	return bs.CurrentLevelIndex >= bs.FinalBuyInLevelIndex
 }

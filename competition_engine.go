@@ -218,7 +218,7 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 			Tables:    make([]*pokertable.Table, 0),
 			Rankings:  make([]*CompetitionRank, 0),
 			BlindState: &BlindState{
-				FinalBuyInLevelIndex: UnsetValue,
+				FinalBuyInLevelIndex: competitionSetting.Meta.Blind.FinalBuyInLevelIndex,
 				CurrentLevelIndex:    UnsetValue,
 				EndAts:               endAts,
 			},
@@ -317,7 +317,7 @@ StartCompetition 開賽
 */
 func (ce *competitionEngine) StartCompetition() error {
 	// start the competition
-	if ce.competition.Meta.Blind.FinalBuyInLevel <= 0 {
+	if ce.competition.Meta.Blind.FinalBuyInLevelIndex <= 0 {
 		ce.competition.State.Status = CompetitionStateStatus_StoppedBuyIn
 	} else {
 		ce.competition.State.Status = CompetitionStateStatus_DelayedBuyIn
@@ -348,9 +348,9 @@ func (ce *competitionEngine) StartCompetition() error {
 	case CompetitionMode_CT:
 		// PauseAutoEndTable (Final BuyIn Level & Table Is Pause)
 		finalBuyInLevelTime := int64(0)
-		for _, level := range ce.competition.Meta.Blind.Levels {
+		for idx, level := range ce.competition.Meta.Blind.Levels {
 			finalBuyInLevelTime += int64(level.Duration)
-			if level.Level == ce.competition.Meta.Blind.FinalBuyInLevel {
+			if idx == ce.competition.Meta.Blind.FinalBuyInLevelIndex {
 				break
 			}
 		}

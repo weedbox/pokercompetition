@@ -693,9 +693,9 @@ func (ce *competitionEngine) updateTableBlind(tableID string) {
 
 func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 	options := &pokerblind.BlindOptions{
-		ID:              meta.Blind.ID,
-		InitialLevel:    meta.Blind.InitialLevel,
-		FinalBuyInLevel: meta.Blind.FinalBuyInLevel,
+		ID:                   meta.Blind.ID,
+		InitialLevel:         meta.Blind.InitialLevel,
+		FinalBuyInLevelIndex: meta.Blind.FinalBuyInLevelIndex,
 		Levels: funk.Map(meta.Blind.Levels, func(bl BlindLevel) pokerblind.BlindLevel {
 			dealer := int64(0)
 			if meta.Rule == CompetitionRule_ShortDeck {
