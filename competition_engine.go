@@ -553,6 +553,10 @@ func (ce *competitionEngine) PlayerAddon(tableID string, joinPlayer JoinPlayer) 
 	}
 
 	// validate Addon times
+	if ce.competition.Meta.AddonSetting.IsBreakOnly && !ce.competition.IsBreaking() {
+		return ErrCompetitionAddonRejected
+	}
+
 	if ce.competition.State.Players[playerIdx].AddonTimes >= ce.competition.Meta.AddonSetting.MaxTime {
 		return ErrCompetitionExceedAddonLimit
 	}

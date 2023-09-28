@@ -133,11 +133,12 @@ type Blind struct {
 }
 
 type BlindLevel struct {
-	Level    int   `json:"level" mapstructure:"level"`       // 盲注等級(-1 表示中場休息)
-	SB       int64 `json:"sb" mapstructure:"sb"`             // 小盲籌碼量
-	BB       int64 `json:"bb" mapstructure:"bb"`             // 大盲籌碼量
-	Ante     int64 `json:"ante" mapstructure:"ante"`         // 前注籌碼量
-	Duration int   `json:"duration" mapstructure:"duration"` // 等級持續時間 (Seconds)
+	Level      int   `json:"level" mapstructure:"level"`             // 盲注等級(-1 表示中場休息)
+	SB         int64 `json:"sb" mapstructure:"sb"`                   // 小盲籌碼量
+	BB         int64 `json:"bb" mapstructure:"bb"`                   // 大盲籌碼量
+	Ante       int64 `json:"ante" mapstructure:"ante"`               // 前注籌碼量
+	Duration   int   `json:"duration" mapstructure:"duration"`       // 等級持續時間 (Seconds)
+	AllowAddon bool  `json:"allow_addon" mapstructure:"allow_addon"` // 是否允許增購
 }
 
 type BlindState struct {
