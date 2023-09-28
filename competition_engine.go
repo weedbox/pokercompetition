@@ -463,6 +463,17 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 		if ce.competition.State.Players[playerIdx].ReBuyTimes >= ce.competition.Meta.ReBuySetting.MaxTime {
 			return ErrCompetitionExceedReBuyLimit
 		}
+	} else {
+		// check ct buy in conditions
+		if ce.competition.Meta.Mode == CompetitionMode_CT {
+			if len(ce.competition.State.Tables) == 0 {
+				return ErrCompetitionTableNotFound
+			}
+
+			if len(ce.competition.State.Tables[0].State.PlayerStates) >= ce.competition.State.Tables[0].Meta.TableMaxSeatCount {
+				return ErrCompetitionBuyInRejected
+			}
+		}
 	}
 
 	tableID := ""
