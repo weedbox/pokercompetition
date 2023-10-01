@@ -14,7 +14,7 @@ import (
 	pokertable "github.com/weedbox/pokertable"
 )
 
-func TestActor_CT(t *testing.T) {
+func TestActor_CT_Breaking(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 
@@ -40,7 +40,148 @@ func TestActor_CT(t *testing.T) {
 	manager.SetTableEngineOptions(tableOptions)
 
 	// 建立賽事
-	competitionSetting := NewCTCompetitionSetting()
+	competitionSetting := NewCTCompetitionSetting_Breaking()
+	options := pokercompetition.NewDefaultCompetitionEngineOptions()
+	options.OnCompetitionUpdated = func(competition *pokercompetition.Competition) {
+		logData = append(logData, makeLog(fmt.Sprintf("[Competition][%d]", competition.UpdateSerial), competition.GetJSON))
+		if competition.State.Status == pokercompetition.CompetitionStateStatus_End {
+			DebugPrintCompetitionEnded(*competition)
+
+			// write log
+			data := strings.Join(logData, "\n\n")
+			err := os.WriteFile("./game_log.txt", []byte(data), 0644)
+			if err != nil {
+				t.Log("Log failed", err)
+			} else {
+				t.Log("Log completed")
+			}
+			wg.Done()
+			return
+		}
+	}
+	options.OnCompetitionErrorUpdated = func(c *pokercompetition.Competition, err error) {
+		t.Log("[Competition] Error:", err)
+	}
+	options.OnCompetitionPlayerUpdated = func(cID string, cp *pokercompetition.CompetitionPlayer) {
+		json, err := jsonStringfy(cp)
+		assert.Nil(t, err, "json.Marshal CompetitionPlayer failed")
+		logData = append(logData, fmt.Sprintf("========== [CompetitionPlayer] ==========\n%s", json))
+	}
+
+	competition, err := manager.CreateCompetition(competitionSetting, options)
+	assert.Nil(t, err, "create competition failed")
+	assert.Equal(t, pokercompetition.CompetitionStateStatus_Registering, competition.State.Status, "status should be registering")
+	logData = append(logData, makeLog(fmt.Sprintf("[Competition][%d] Create CT Competition", competition.UpdateSerial), competition.GetJSON))
+	t.Log("create ct competition")
+
+	// get competition engine
+	competitionEngine, err := manager.GetCompetitionEngine(competition.ID)
+	assert.Nil(t, err, "get competition engine engine failed")
+
+	// 取得桌次管理
+	tableEngine, err := tableManager.GetTableEngine(competition.State.Tables[0].ID)
+	assert.Nil(t, err, "get table engine engine failed")
+
+	// 建立 Bot 玩家
+	playerIDs := []string{"Jeffrey", "Fred", "Chuck"}
+	joinPlayers := funk.Map(playerIDs, func(playerID string) pokercompetition.JoinPlayer {
+		return pokercompetition.JoinPlayer{
+			PlayerID:    playerID,
+			RedeemChips: 3000,
+		}
+	}).([]pokercompetition.JoinPlayer)
+
+	// Preparing actors
+	table := competition.State.Tables[0]
+	actors := make([]Actor, 0)
+	for _, p := range joinPlayers {
+
+		// Create new actor
+		a := NewActor()
+
+		// Initializing table engine adapter to communicate with table engine
+		tc := NewTableEngineAdapter(tableEngine, table)
+		a.SetAdapter(tc)
+
+		// Initializing bot runner
+		bot := NewBotRunner(p.PlayerID)
+		bot.OnTableAutoJoinActionRequested(func(competitionID, tableID, playerID string) {
+			go func() {
+				assert.Nil(t, tableEngine.PlayerJoin(playerID), fmt.Sprintf("%s join table failed", playerID))
+				t.Logf("%s is joined", playerID)
+			}()
+		})
+		a.SetRunner(bot)
+
+		actors = append(actors, a)
+	}
+
+	isGameSettledRecords := make(map[string]bool)
+	tableEngine.OnTableUpdated(func(table *pokertable.Table) {
+		logData = append(logData, makeLog(fmt.Sprintf("[Table][%d]", table.UpdateSerial), table.GetJSON))
+
+		// Update table state via adapter
+		for _, a := range actors {
+			a.GetTable().UpdateTableState(table)
+		}
+
+		switch table.State.Status {
+		case pokertable.TableStateStatus_TableGameOpened:
+			DebugPrintTableGameOpened(*table)
+		case pokertable.TableStateStatus_TableGameSettled:
+			if isGameSettled, ok := isGameSettledRecords[table.State.GameState.GameID]; ok && isGameSettled {
+				break
+			}
+			isGameSettledRecords[table.State.GameState.GameID] = true
+			t.Log("[Competition Status]", competition.State.Status)
+			DebugPrintTableGameSettled(*table)
+		case pokertable.TableStateStatus_TablePausing:
+			t.Logf("table [%s] is pausing. is final buy in: %+v", table.ID, competitionEngine.GetCompetition().State.BlindState.IsFinalBuyInLevel())
+		case pokertable.TableStateStatus_TableClosed:
+			t.Logf("table [%s] is closed", table.ID)
+		}
+
+		tableManagerBackend.UpdateTable(table)
+	})
+
+	// 玩家報名賽事
+	for _, joinPlayer := range joinPlayers {
+		err := manager.PlayerBuyIn(competition.ID, joinPlayer)
+		assert.Nil(t, err, fmt.Sprintf("%s buy in competition failed", joinPlayer.PlayerID))
+		logData = append(logData, makeLog(fmt.Sprintf("[Competition][%d] %s join competition", competitionEngine.GetCompetition().UpdateSerial, joinPlayer.PlayerID), competition.GetJSON))
+		t.Logf("%s buy in", joinPlayer.PlayerID)
+	}
+
+	wg.Wait()
+}
+
+func TestActor_CT_Normal(t *testing.T) {
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	logData := make([]string, 0)
+	makeLog := func(logTitle string, jsonPrinter func() (string, error)) string {
+		jsonString, _ := jsonPrinter()
+		return fmt.Sprintf("========== [%s] ==========\n%s", logTitle, jsonString)
+	}
+	jsonStringfy := func(data interface{}) (string, error) {
+		encoded, err := json.Marshal(data)
+		if err != nil {
+			return "", err
+		}
+		return string(encoded), nil
+	}
+
+	// 建立賽事管理
+	tableManager := pokertable.NewManager()
+	tableManagerBackend := pokercompetition.NewNativeTableManagerBackend(tableManager)
+	manager := pokercompetition.NewManager(tableManagerBackend, nil)
+	tableOptions := pokertable.NewTableEngineOptions()
+	tableOptions.Interval = 1
+	manager.SetTableEngineOptions(tableOptions)
+
+	// 建立賽事
+	competitionSetting := NewCTCompetitionSetting_Normal()
 	options := pokercompetition.NewDefaultCompetitionEngineOptions()
 	options.OnCompetitionUpdated = func(competition *pokercompetition.Competition) {
 		logData = append(logData, makeLog(fmt.Sprintf("[Competition][%d]", competition.UpdateSerial), competition.GetJSON))
