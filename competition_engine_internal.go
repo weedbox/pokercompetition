@@ -148,7 +148,7 @@ func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tab
 
 	switch ce.competition.Meta.Mode {
 	case CompetitionMode_CT:
-		if ce.shouldCloseTable(table.State.StartAt, len(table.AlivePlayers())) {
+		if ce.shouldCloseCTTable(table.State.StartAt, len(table.AlivePlayers())) {
 			ce.closeCompetitionTable(table, tableIdx)
 			return
 		}
@@ -232,6 +232,14 @@ func (ce *competitionEngine) addCompetitionTable(tableSetting TableSetting, play
 		ce.competition.State.Players = append(ce.competition.State.Players, newPlayers...)
 	}
 
+	// init breakingPauseResumeStates
+	ce.breakingPauseResumeStates[table.ID] = make(map[int]bool)
+	for idx, bl := range ce.competition.Meta.Blind.Levels {
+		if bl.Level == -1 {
+			ce.breakingPauseResumeStates[table.ID][idx] = false
+		}
+	}
+
 	ce.emitEvent("[addCompetitionTable]", "")
 
 	return table.ID, nil
@@ -287,6 +295,9 @@ func (ce *competitionEngine) closeCompetitionTable(table *pokertable.Table, tabl
 	fmt.Printf("[DEBUG#MTT] close table: %s, total tables: %d, alive players: %d\n", table.ID, len(ce.competition.State.Tables)-1, ce.competition.PlayingPlayerCount())
 	ce.onTableClosed(table)
 
+	// clean data
+	delete(ce.breakingPauseResumeStates, table.ID)
+
 	// competition close table
 	ce.deleteTable(tableIdx)
 	ce.emitEvent("closeCompetitionTable", "")
@@ -334,7 +345,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 		ce.handleBreaking(table.ID, tableIdx)
 
 		// 結束桌
-		if ce.shouldCloseTable(table.State.StartAt, len(table.AlivePlayers())) {
+		if ce.shouldCloseCTTable(table.State.StartAt, len(table.AlivePlayers())) {
 			if err := ce.tableManagerBackend.CloseTable(table.ID); err != nil {
 				ce.emitErrorEvent("Table Settlement Knockout Players -> CloseTable", "", err)
 			}
@@ -423,19 +434,22 @@ func (ce *competitionEngine) handleBreaking(tableID string, tableIdx int) {
 		return
 	}
 
-	_, exist := ce.breakingPauseResumeStates[tableID]
-	if !exist {
-		ce.breakingPauseResumeStates[tableID] = false
+	// check breakingPauseResumeStates
+	if _, exist := ce.breakingPauseResumeStates[tableID]; !exist {
+		ce.breakingPauseResumeStates[tableID] = make(map[int]bool)
+	}
+	if _, exist := ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex]; !exist {
+		ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] = false
 	}
 
 	// already resume table games from breaking
-	if ce.breakingPauseResumeStates[tableID] {
+	if ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] {
 		fmt.Println("[DEBUG#handleBreaking] already resume table games from breaking")
 		return
 	}
 
 	// reopen table game
-	endAt := ce.competition.State.BlindState.EndAts[ce.competition.State.BlindState.CurrentLevelIndex]
+	endAt := ce.competition.State.BlindState.EndAts[ce.competition.State.BlindState.CurrentLevelIndex] + 1
 	fmt.Println("[DEBUG#handleBreaking] break pause at:", time.Now())
 	fmt.Println("[DEBUG#handleBreaking] break pause stop & reopen game at:", time.Unix(endAt, 0))
 	if err := timebank.NewTimeBank().NewTaskWithDeadline(time.Unix(endAt, 0), func(isCancelled bool) {
@@ -453,7 +467,7 @@ func (ce *competitionEngine) handleBreaking(tableID string, tableIdx int) {
 			return
 		}
 
-		if ce.breakingPauseResumeStates[tableID] {
+		if ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] {
 			fmt.Println("[DEBUG#handleBreaking] not reopen since already resume table games from breaking")
 			return
 		}
@@ -470,7 +484,7 @@ func (ce *competitionEngine) handleBreaking(tableID string, tableIdx int) {
 				ce.emitErrorEvent("resume game from breaking & auto open next game", "", err)
 			}
 
-			ce.breakingPauseResumeStates[tableID] = true
+			ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] = true
 			fmt.Println("[DEBUG#handleBreaking] reopen success")
 		} else {
 			fmt.Println("[DEBUG#handleBreaking] not find table at index:", tableIdx)
@@ -692,11 +706,15 @@ func (ce *competitionEngine) updatePlayerFinalRankings() {
 }
 
 /*
-ShouldClose 計算桌次是否已達到結束條件
+shouldCloseCTTable CT 計算桌次是否已達到結束條件
   - 結束條件 1: 達到結束時間
   - 結束條件 2: 停止買入後且存活玩家小於最小開打數
 */
-func (ce *competitionEngine) shouldCloseTable(tableStartAt int64, tableAlivePlayerCount int) bool {
+func (ce *competitionEngine) shouldCloseCTTable(tableStartAt int64, tableAlivePlayerCount int) bool {
+	if ce.competition.Meta.Mode != CompetitionMode_CT {
+		return false
+	}
+
 	tableEndAt := time.Unix(tableStartAt, 0).Add(time.Second * time.Duration(ce.competition.Meta.MaxDuration)).Unix()
 	return time.Now().Unix() > tableEndAt || (ce.competition.State.BlindState.IsFinalBuyInLevel() && tableAlivePlayerCount < ce.competition.Meta.TableMinPlayerCount)
 }

@@ -81,7 +81,7 @@ type competitionEngine struct {
 	onCompetitionPlayerUpdated          func(string, *CompetitionPlayer)
 	onCompetitionFinalPlayerRankUpdated func(string, string, int)
 	onCompetitionStateUpdated           func(string, *Competition)
-	breakingPauseResumeStates           map[string]bool // key: tableID, value: is resume from pause
+	breakingPauseResumeStates           map[string]map[int]bool // key: tableID, value: (k,v): (breaking blind level index, is resume from pause)
 	blind                               pokerblind.Blind
 	match                               match.Match
 	matchTableBackend                   match.TableBackend
@@ -101,7 +101,7 @@ func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
 		onCompetitionPlayerUpdated:          func(string, *CompetitionPlayer) {},
 		onCompetitionFinalPlayerRankUpdated: func(string, string, int) {},
 		onCompetitionStateUpdated:           func(string, *Competition) {},
-		breakingPauseResumeStates:           make(map[string]bool),
+		breakingPauseResumeStates:           make(map[string]map[int]bool),
 		blind:                               pokerblind.NewBlind(),
 		tablePlayerWaitingQueue:             make(map[string]map[int]int),
 
@@ -704,7 +704,7 @@ func (ce *competitionEngine) PlayerQuit(tableID, playerID string) error {
 
 	// 結束桌
 	table := ce.competition.State.Tables[tableIdx]
-	if ce.competition.Meta.Mode == CompetitionMode_CT && ce.shouldCloseTable(table.State.StartAt, len(table.AlivePlayers())) {
+	if ce.competition.Meta.Mode == CompetitionMode_CT && ce.shouldCloseCTTable(table.State.StartAt, len(table.AlivePlayers())) {
 		if err := ce.tableManagerBackend.CloseTable(tableID); err != nil {
 			ce.emitErrorEvent("Player Quit Knockout Players -> CloseTable", "", err)
 		}
