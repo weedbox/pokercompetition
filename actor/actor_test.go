@@ -87,7 +87,7 @@ func TestActor_CT_Breaking(t *testing.T) {
 	joinPlayers := funk.Map(playerIDs, func(playerID string) pokercompetition.JoinPlayer {
 		return pokercompetition.JoinPlayer{
 			PlayerID:    playerID,
-			RedeemChips: 3000,
+			RedeemChips: 300000,
 		}
 	}).([]pokercompetition.JoinPlayer)
 
