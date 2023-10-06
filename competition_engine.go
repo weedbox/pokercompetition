@@ -222,6 +222,11 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 				CurrentLevelIndex:    UnsetValue,
 				EndAts:               endAts,
 			},
+			AdvanceState: &AdvanceState{
+				Status:        CompetitionAdvanceStatus_NotStart,
+				TotalTables:   -1,
+				UpdatedTables: -1,
+			},
 		},
 	}
 
@@ -409,8 +414,6 @@ func (ce *competitionEngine) StartCompetition() error {
 			if err != nil {
 				ce.emitErrorEvent("MTT StartCompetition Register Player to Match failed", player.PlayerID, err)
 				return err
-			} else {
-				ce.match.PrintTables()
 			}
 		}
 	}
@@ -502,10 +505,10 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 			return ErrCompetitionPlayerNotFound
 		}
 
-		playerCache.ReBuyTimes = ce.competition.State.Players[playerIdx].ReBuyTimes
 		ce.competition.State.Players[playerIdx].Status = playerStatus
 		ce.competition.State.Players[playerIdx].Chips = joinPlayer.RedeemChips
 		ce.competition.State.Players[playerIdx].ReBuyTimes++
+		playerCache.ReBuyTimes = ce.competition.State.Players[playerIdx].ReBuyTimes
 		ce.competition.State.Players[playerIdx].IsReBuying = false
 		ce.competition.State.Players[playerIdx].ReBuyEndAt = UnsetValue
 		ce.competition.State.Players[playerIdx].TotalRedeemChips += joinPlayer.RedeemChips
@@ -538,8 +541,6 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 			if err := ce.match.Register(joinPlayer.PlayerID); err != nil {
 				ce.emitErrorEvent("PlayerBuyIn -> Register Player to Match failed", joinPlayer.PlayerID, err)
 				return err
-			} else {
-				ce.match.PrintTables()
 			}
 		}
 	}

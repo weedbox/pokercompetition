@@ -21,6 +21,7 @@ type TableManagerBackend interface {
 	StartTableGame(tableID string) error
 	TableGameOpen(tableID string) error
 	BalanceTable(tableID string) error
+	PauseTable(tableID string) error
 	UpdateBlind(tableID string, level int, ante, dealer, sb, bb int64) error
 
 	// TODO: test only, should remove this
@@ -120,6 +121,10 @@ func (ntbm *nativeTableManagerBackend) TableGameOpen(tableID string) error {
 
 func (ntbm *nativeTableManagerBackend) BalanceTable(tableID string) error {
 	return ntbm.manager.BalanceTable(tableID)
+}
+
+func (ntbm *nativeTableManagerBackend) PauseTable(tableID string) error {
+	return ntbm.manager.PauseTable(tableID)
 }
 
 func (ntbm *nativeTableManagerBackend) UpdateBlind(tableID string, level int, ante, dealer, sb, bb int64) error {

@@ -71,7 +71,6 @@ func (ce *competitionEngine) UpdateReserveTablePlayerState(tableID string, playe
 	ce.competition.State.Players[playerCache.PlayerIdx].CurrentTableID = tableID
 	ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_Playing
 	ce.emitPlayerEvent("[UpdateReserveTablePlayerState] player table seat updated", ce.competition.State.Players[playerCache.PlayerIdx])
-	// ce.emitEvent(fmt.Sprintf("Player (%s) table seat updated to %d", playerState.PlayerID, playerState.Seat), playerState.PlayerID)
 }
 
 func (ce *competitionEngine) UpdateTable(table *pokertable.Table) {
@@ -118,7 +117,7 @@ func (ce *competitionEngine) UpdateTable(table *pokertable.Table) {
 func (ce *competitionEngine) handleCompetitionTableCreated(table *pokertable.Table, tableIdx int) {
 	switch ce.competition.Meta.Mode {
 	case CompetitionMode_CT:
-		if !ce.competition.CanStart() {
+		if !ce.canStartCT() {
 			return
 		}
 
@@ -369,32 +368,6 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 			}
 		}
 
-		// 拆併桌更新桌次狀態
-		// Preparing seat changes
-		if table.State.SeatChanges != nil {
-			sc := match.NewSeatChanges()
-			sc.Dealer = table.State.SeatChanges.NewDealer
-			sc.SB = table.State.SeatChanges.NewSB
-			sc.BB = table.State.SeatChanges.NewBB
-			sc.Seats = leftPlayerSeats
-			if err := ce.matchTableBackend.UpdateTable(table.ID, sc); err != nil {
-				ce.emitErrorEvent(fmt.Sprintf("[%s][%d] MTT Match Update Table SeatChanges", table.ID, table.State.GameCount), "", err)
-			} else {
-				fmt.Printf("---------- [c: %s][t: %s] 第 (%d) 手結算, NewDealer: %d, NewSB: %d, NewBB: %d, leftPlayerSeats: %+v ----------\n",
-					ce.competition.ID,
-					table.ID,
-					table.State.GameCount,
-					sc.Dealer,
-					sc.SB,
-					sc.BB,
-					sc.Seats,
-				)
-				ce.match.PrintTables()
-			}
-		} else {
-			ce.emitErrorEvent(fmt.Sprintf("[c: %s][t: %s] MTT Match Update Table SeatChanges is nil", ce.competition.ID, table.ID), "", errors.New("nil seat change state is not allowed when settling mtt table"))
-		}
-
 		fmt.Printf("---------- [c: %s][t: %s] 第 (%d) 手結算, 停止買入: %+v, [離開 %d 人 (%s), 活著: %d 人 (%s)] ----------\n",
 			ce.competition.ID,
 			table.ID,
@@ -406,13 +379,80 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 			strings.Join(alivePlayerIDs, ","),
 		)
 
+		// 更新晉級條件 (停買後更新)
+		if ce.competition.State.AdvanceState.Status == CompetitionAdvanceStatus_Updating {
+			ce.competition.State.AdvanceState.TotalTables = len(ce.competition.State.Tables)
+			shouldAdvancePauseTableGame := false
+
+			switch ce.competition.Meta.AdvanceSetting.Rule {
+			case CompetitionAdvanceRule_BlindLevel:
+				if ce.competition.CurrentBlindLevel().Level >= ce.competition.Meta.AdvanceSetting.BlindLevel {
+					shouldAdvancePauseTableGame = true
+				}
+			case CompetitionAdvanceRule_PlayerPercent:
+				possibleAdvancePlayerCount := ce.competition.PlayingPlayerCount() + len(ce.competition.State.Rankings)
+				finalAdvancePlayerCount := int(float64(len(ce.competition.State.Players)*ce.competition.Meta.AdvanceSetting.PlayerPercent) / 100) // 無條件捨去
+				if possibleAdvancePlayerCount >= finalAdvancePlayerCount {
+					shouldAdvancePauseTableGame = true
+				}
+			case CompetitionAdvanceRule_FixPlayer:
+				possibleAdvancePlayerCount := ce.competition.PlayingPlayerCount() + len(ce.competition.State.Rankings)
+				if possibleAdvancePlayerCount >= ce.competition.Meta.AdvanceSetting.FixedCount {
+					shouldAdvancePauseTableGame = true
+				}
+			}
+
+			if shouldAdvancePauseTableGame {
+				if err := ce.tableManagerBackend.PauseTable(table.ID); err != nil {
+					ce.emitErrorEvent(fmt.Sprintf("[%s][%d] Advance Pause Table", table.ID, table.State.GameCount), "", err)
+				} else {
+					ce.competition.State.AdvanceState.UpdatedTables++
+					if ce.competition.State.AdvanceState.TotalTables == ce.competition.State.AdvanceState.UpdatedTables {
+						ce.competition.State.AdvanceState.Status = CompetitionAdvanceStatus_End
+					}
+
+					ce.emitEvent(fmt.Sprintf("update advancement. status: %s", ce.competition.State.AdvanceState.Status), "")
+				}
+				return
+			}
+		}
+
+		if ce.competition.State.AdvanceState.Status == CompetitionAdvanceStatus_End {
+			if err := timebank.NewTimeBank().NewTask(time.Second*3, func(isCancelled bool) {
+				if isCancelled {
+					return
+				}
+
+				// 結束賽事處理
+				ce.CloseCompetition(CompetitionStateStatus_End)
+			}); err != nil {
+				ce.emitErrorEvent("error next stage after settle competition table", "", err)
+			}
+			return
+		}
+
+		// 拆併桌更新桌次狀態
+		// Preparing seat changes
+		if table.State.SeatChanges != nil {
+			sc := match.NewSeatChanges()
+			sc.Dealer = table.State.SeatChanges.NewDealer
+			sc.SB = table.State.SeatChanges.NewSB
+			sc.BB = table.State.SeatChanges.NewBB
+			sc.Seats = leftPlayerSeats
+			if err := ce.matchTableBackend.UpdateTable(table.ID, sc); err != nil {
+				ce.emitErrorEvent(fmt.Sprintf("[%s][%d] MTT Match Update Table SeatChanges", table.ID, table.State.GameCount), "", err)
+			}
+		} else {
+			ce.emitErrorEvent(fmt.Sprintf("[c: %s][t: %s] MTT Match Update Table SeatChanges is nil", ce.competition.ID, table.ID), "", errors.New("nil seat change state is not allowed when settling mtt table"))
+		}
+
+		// 中場休息處理
+		ce.handleBreaking(table.ID, tableIdx)
+
 		if err := timebank.NewTimeBank().NewTask(time.Second*3, func(isCancelled bool) {
 			if isCancelled {
 				return
 			}
-
-			// 中場休息處理
-			ce.handleBreaking(table.ID, tableIdx)
 
 			// 結束賽事處理
 			if ce.competition.State.BlindState.IsFinalBuyInLevel() && len(alivePlayerIDs) == 1 && len(ce.competition.State.Tables) == 1 {
@@ -428,9 +468,7 @@ func (ce *competitionEngine) handleBreaking(tableID string, tableIdx int) {
 	ce.mu.Lock()
 	defer ce.mu.Unlock()
 
-	fmt.Println("[DEBUG#handleBreaking] Current Blind:", ce.blind.GetState().CurrentLevel())
 	if !ce.competition.IsBreaking() {
-		fmt.Println("[DEBUG#handleBreaking] is not breaking")
 		return
 	}
 
@@ -444,14 +482,11 @@ func (ce *competitionEngine) handleBreaking(tableID string, tableIdx int) {
 
 	// already resume table games from breaking
 	if ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] {
-		fmt.Println("[DEBUG#handleBreaking] already resume table games from breaking")
 		return
 	}
 
 	// reopen table game
 	endAt := ce.competition.State.BlindState.EndAts[ce.competition.State.BlindState.CurrentLevelIndex] + 1
-	fmt.Println("[DEBUG#handleBreaking] break pause at:", time.Now())
-	fmt.Println("[DEBUG#handleBreaking] break pause stop & reopen game at:", time.Unix(endAt, 0))
 	if err := timebank.NewTimeBank().NewTaskWithDeadline(time.Unix(endAt, 0), func(isCancelled bool) {
 		if isCancelled {
 			return
@@ -463,12 +498,10 @@ func (ce *competitionEngine) handleBreaking(tableID string, tableIdx int) {
 			CompetitionStateStatus_ForceEnd,
 		}
 		if funk.Contains(endStatus, ce.competition.State.Status) {
-			fmt.Println("[DEBUG#handleBreaking] not reopen since competition status is:", ce.competition.State.Status)
 			return
 		}
 
 		if ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] {
-			fmt.Println("[DEBUG#handleBreaking] not reopen since already resume table games from breaking")
 			return
 		}
 
@@ -477,7 +510,6 @@ func (ce *competitionEngine) handleBreaking(tableID string, tableIdx int) {
 
 			autoOpenGame := t.State.Status == pokertable.TableStateStatus_TablePausing && len(t.AlivePlayers()) >= t.Meta.TableMinPlayerCount
 			if !autoOpenGame {
-				fmt.Printf("[DEBUG#handleBreaking] not autoOpenGame. table status: %s, AlivePlayers: %d, TableMinPlayerCount: %d\n", t.State.Status, len(t.AlivePlayers()), t.Meta.TableMinPlayerCount)
 				return
 			}
 			if err := ce.tableManagerBackend.TableGameOpen(tableID); err != nil {
@@ -485,7 +517,6 @@ func (ce *competitionEngine) handleBreaking(tableID string, tableIdx int) {
 			}
 
 			ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] = true
-			fmt.Println("[DEBUG#handleBreaking] reopen success")
 		} else {
 			fmt.Println("[DEBUG#handleBreaking] not find table at index:", tableIdx)
 		}
@@ -766,6 +797,9 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 		// 更新賽事狀態: 停止買入
 		if ce.competition.State.BlindState.IsFinalBuyInLevel() {
 			if ce.competition.State.Status != CompetitionStateStatus_StoppedBuyIn {
+				// 處理晉級
+				ce.initAdvancement()
+
 				ce.competition.State.Status = CompetitionStateStatus_StoppedBuyIn
 				ce.emitEvent("Final BuyIn", "")
 
@@ -803,4 +837,55 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 	ce.blind.OnErrorUpdated(func(bs *pokerblind.BlindState, err error) {
 		ce.emitErrorEvent("Blind Update Error", "", err)
 	})
+}
+
+func (ce *competitionEngine) canStartCT() bool {
+	if ce.competition.State.Status != CompetitionStateStatus_Registering {
+		return false
+	}
+
+	currentPlayerCount := 0
+	for _, table := range ce.competition.State.Tables {
+		for _, player := range table.State.PlayerStates {
+			if player.IsIn && player.Bankroll > 0 {
+				currentPlayerCount++
+			}
+		}
+	}
+
+	if currentPlayerCount >= ce.competition.Meta.MinPlayerCount {
+		// 開打條件一: 當賽局已經設定 StartAt (開打時間) & 現在時間已經大於等於開打時間且達到最小開桌人數
+		if ce.competition.State.StartAt > 0 && time.Now().Unix() >= ce.competition.State.StartAt {
+			return true
+		}
+
+		// 開打條件二: 賽局沒有設定 StartAt (開打時間) & 達到最小開桌人數
+		if ce.competition.State.StartAt <= 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func (ce *competitionEngine) initAdvancement() {
+	if ce.competition.Meta.Mode != CompetitionMode_MTT {
+		return
+	}
+
+	validAdvanceRules := []CompetitionAdvanceRule{
+		CompetitionAdvanceRule_PlayerPercent,
+		CompetitionAdvanceRule_BlindLevel,
+		CompetitionAdvanceRule_FixPlayer,
+	}
+	if funk.Contains(validAdvanceRules, ce.competition.Meta.AdvanceSetting.Rule) {
+		return
+	}
+
+	if ce.competition.State.AdvanceState.Status != CompetitionAdvanceStatus_NotStart {
+		return
+	}
+
+	ce.competition.State.AdvanceState.Status = CompetitionAdvanceStatus_Updating
+	ce.competition.State.AdvanceState.TotalTables = len(ce.competition.State.Tables)
+	ce.competition.State.AdvanceState.UpdatedTables = 0
 }
