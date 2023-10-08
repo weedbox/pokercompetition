@@ -158,7 +158,7 @@ func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tab
 	}
 
 	// re-open game
-	if shouldReopenGame {
+	if shouldReopenGame && !ce.competition.IsBreaking() {
 		if err := ce.tableManagerBackend.TableGameOpen(table.ID); err != nil {
 			ce.emitErrorEvent("Game Reopen", "", err)
 			return
