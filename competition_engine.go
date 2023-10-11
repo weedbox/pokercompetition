@@ -86,7 +86,8 @@ type competitionEngine struct {
 	match                               match.Match
 	matchTableBackend                   match.TableBackend
 	qm                                  match.QueueManager
-	tablePlayerWaitingQueue             map[string]map[int]int // key: tableID, value: (k,v): playerIdx, seat
+	tablePlayerWaitingQueue             map[string]map[int]int        // key: tableID, value: (k,v): playerIdx, seat
+	reBuyTimerStates                    map[string]*timebank.TimeBank // key: playerID, value: *timebank.TimeBank
 
 	onTableCreated func(*pokertable.Table) // TODO: test only, delete it later on
 	onTableClosed  func(*pokertable.Table) // TODO: test only, delete it later on
@@ -104,6 +105,7 @@ func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
 		breakingPauseResumeStates:           make(map[string]map[int]bool),
 		blind:                               pokerblind.NewBlind(),
 		tablePlayerWaitingQueue:             make(map[string]map[int]int),
+		reBuyTimerStates:                    make(map[string]*timebank.TimeBank),
 
 		onTableCreated: func(*pokertable.Table) {}, // TODO: test only, delete it later on
 		onTableClosed:  func(*pokertable.Table) {}, // TODO: test only, delete it later on
@@ -492,6 +494,7 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 
 	// do logic
 	if isBuyIn {
+		ce.reBuyTimerStates[joinPlayer.PlayerID] = timebank.NewTimeBank()
 		player, playerCache := ce.newDefaultCompetitionPlayerData(tableID, joinPlayer.PlayerID, joinPlayer.RedeemChips, playerStatus)
 		ce.competition.State.Players = append(ce.competition.State.Players, &player)
 		playerCache.PlayerIdx = len(ce.competition.State.Players) - 1
@@ -504,6 +507,11 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 		if !exist {
 			return ErrCompetitionPlayerNotFound
 		}
+
+		if _, exist := ce.reBuyTimerStates[joinPlayer.PlayerID]; !exist {
+			ce.reBuyTimerStates[joinPlayer.PlayerID] = timebank.NewTimeBank()
+		}
+		ce.reBuyTimerStates[joinPlayer.PlayerID].Cancel()
 
 		ce.competition.State.Players[playerIdx].Status = playerStatus
 		ce.competition.State.Players[playerIdx].Chips = joinPlayer.RedeemChips
@@ -627,6 +635,7 @@ func (ce *competitionEngine) PlayerRefund(playerID string) error {
 	// refund logic
 	ce.deletePlayer(playerIdx)
 	ce.deletePlayerCache(ce.competition.ID, playerID)
+	delete(ce.reBuyTimerStates, playerID)
 
 	ce.emitEvent("PlayerRefund", playerID)
 	return nil
@@ -658,6 +667,7 @@ func (ce *competitionEngine) PlayerLeave(tableID, playerID string) error {
 	// logic
 	ce.deletePlayer(playerIdx)
 	ce.deletePlayerCache(ce.competition.ID, playerID)
+	delete(ce.reBuyTimerStates, playerID)
 
 	ce.emitEvent("PlayerLeave", playerID)
 	return nil
@@ -681,6 +691,11 @@ func (ce *competitionEngine) PlayerQuit(tableID, playerID string) error {
 	if tableIdx == UnsetValue {
 		return ErrCompetitionQuitRejected
 	}
+
+	if _, exist := ce.reBuyTimerStates[playerID]; !exist {
+		ce.reBuyTimerStates[playerID] = timebank.NewTimeBank()
+	}
+	ce.reBuyTimerStates[playerID].Cancel()
 
 	ce.competition.State.Players[playerIdx].Status = CompetitionPlayerStatus_ReBuyWaiting
 	ce.competition.State.Players[playerIdx].IsReBuying = false

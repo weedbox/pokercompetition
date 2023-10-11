@@ -277,7 +277,7 @@ func (br *botRunner) requestAI(gs *pokerface.GameState, playerIdx int) error {
 	}
 
 	// Calculate chips
-	// chips := int64(0)
+	chips := int64(0)
 
 	/*
 		// Debugging messages
@@ -291,62 +291,62 @@ func (br *botRunner) requestAI(gs *pokerface.GameState, playerIdx int) error {
 	*/
 
 	switch action {
-	// case "bet":
+	case "bet":
 
-	// 	minBet := gs.Status.MiniBet
+		minBet := gs.Status.MiniBet
 
-	// 	if player.InitialStackSize <= minBet {
-	// 		return br.actions.Bet(player.InitialStackSize)
-	// 	}
+		if player.InitialStackSize <= minBet {
+			return br.actions.Bet(player.InitialStackSize)
+		}
 
-	// 	chips = rand.Int63n(player.InitialStackSize-minBet) + minBet
+		chips = rand.Int63n(player.InitialStackSize-minBet) + minBet
 
-	// 	err := br.actions.Bet(chips)
-	// 	if err != nil {
-	// 		return err
-	// 	}
+		err := br.actions.Bet(chips)
+		if err != nil {
+			return err
+		}
 
-	// 	br.updateWagerAction(pokertable.WagerAction_Bet, chips)
-	// 	return nil
-	// case "raise":
+		br.updateWagerAction(pokertable.WagerAction_Bet, chips)
+		return nil
+	case "raise":
 
-	// 	maxChipLevel := player.InitialStackSize
-	// 	minChipLevel := gs.Status.CurrentWager + gs.Status.PreviousRaiseSize
+		maxChipLevel := player.InitialStackSize
+		minChipLevel := gs.Status.CurrentWager + gs.Status.PreviousRaiseSize
 
-	// 	if maxChipLevel <= minChipLevel {
-	// 		err := br.actions.Raise(maxChipLevel)
-	// 		if err != nil {
-	// 			return err
-	// 		}
+		if maxChipLevel <= minChipLevel {
+			err := br.actions.Raise(maxChipLevel)
+			if err != nil {
+				return err
+			}
 
-	// 		br.updateWagerAction(pokertable.WagerAction_Raise, maxChipLevel)
-	// 		return nil
-	// 	}
+			br.updateWagerAction(pokertable.WagerAction_Raise, maxChipLevel)
+			return nil
+		}
 
-	// 	chips = rand.Int63n(maxChipLevel-minChipLevel) + minChipLevel
+		chips = rand.Int63n(maxChipLevel-minChipLevel) + minChipLevel
 
-	// 	err := br.actions.Raise(chips)
-	// 	if err != nil {
-	// 		return err
-	// 	}
+		err := br.actions.Raise(chips)
+		if err != nil {
+			return err
+		}
 
-	// 	br.updateWagerAction(pokertable.WagerAction_Raise, chips)
-	// 	return nil
-	// case "call":
-	// 	// TODO: should move logic to pokertable
-	// 	wager := int64(0)
-	// 	gamePlayerIdx := br.tableInfo.FindGamePlayerIdx(br.playerID)
-	// 	if gamePlayerIdx >= 0 && br.tableInfo != nil && br.tableInfo.State.GameState != nil && gamePlayerIdx < len(br.tableInfo.State.GameState.Players) {
-	// 		wager = br.tableInfo.State.GameState.Status.CurrentWager - br.tableInfo.State.GameState.GetPlayer(gamePlayerIdx).Wager
-	// 	}
+		br.updateWagerAction(pokertable.WagerAction_Raise, chips)
+		return nil
+	case "call":
+		// TODO: should move logic to pokertable
+		wager := int64(0)
+		gamePlayerIdx := br.tableInfo.FindGamePlayerIdx(br.playerID)
+		if gamePlayerIdx >= 0 && br.tableInfo != nil && br.tableInfo.State.GameState != nil && gamePlayerIdx < len(br.tableInfo.State.GameState.Players) {
+			wager = br.tableInfo.State.GameState.Status.CurrentWager - br.tableInfo.State.GameState.GetPlayer(gamePlayerIdx).Wager
+		}
 
-	// 	err := br.actions.Call()
-	// 	if err != nil {
-	// 		return err
-	// 	}
+		err := br.actions.Call()
+		if err != nil {
+			return err
+		}
 
-	// 	br.updateWagerAction(pokertable.WagerAction_Call, wager)
-	// 	return nil
+		br.updateWagerAction(pokertable.WagerAction_Call, wager)
+		return nil
 	case "check":
 		err := br.actions.Check()
 		if err != nil {
@@ -355,21 +355,21 @@ func (br *botRunner) requestAI(gs *pokerface.GameState, playerIdx int) error {
 
 		br.updateWagerAction(pokertable.WagerAction_Check, 0)
 		return nil
-		// case "allin":
-		// 	// TODO: should move logic to pokertable
-		// 	wager := int64(0)
-		// 	gamePlayerIdx := br.tableInfo.FindGamePlayerIdx(br.playerID)
-		// 	if gamePlayerIdx >= 0 && br.tableInfo != nil && br.tableInfo.State.GameState != nil && gamePlayerIdx < len(br.tableInfo.State.GameState.Players) {
-		// 		wager = br.tableInfo.State.GameState.GetPlayer(gamePlayerIdx).StackSize
-		// 	}
+	case "allin":
+		// TODO: should move logic to pokertable
+		wager := int64(0)
+		gamePlayerIdx := br.tableInfo.FindGamePlayerIdx(br.playerID)
+		if gamePlayerIdx >= 0 && br.tableInfo != nil && br.tableInfo.State.GameState != nil && gamePlayerIdx < len(br.tableInfo.State.GameState.Players) {
+			wager = br.tableInfo.State.GameState.GetPlayer(gamePlayerIdx).StackSize
+		}
 
-		// 	err := br.actions.Allin()
-		// 	if err != nil {
-		// 		return err
-		// 	}
+		err := br.actions.Allin()
+		if err != nil {
+			return err
+		}
 
-		// 	br.updateWagerAction(pokertable.WagerAction_AllIn, wager)
-		// 	return nil
+		br.updateWagerAction(pokertable.WagerAction_AllIn, wager)
+		return nil
 	}
 
 	err := br.actions.Fold()

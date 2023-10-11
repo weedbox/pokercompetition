@@ -555,6 +555,9 @@ func (ce *competitionEngine) handleTableKnockoutPlayers(table *pokertable.Table)
 }
 
 func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
+	ce.mu.Lock()
+	defer ce.mu.Unlock()
+
 	if ce.competition.State.BlindState.IsFinalBuyInLevel() {
 		return
 	}
@@ -590,38 +593,40 @@ func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
 	if len(reBuyPlayerIDs) > 0 && ce.competition.Meta.Mode == CompetitionMode_CT {
 		// AutoKnockout Player (When ReBuyEnd Time is reached)
 		reBuyEndAtTime := time.Unix(reBuyEndAt, 0)
-		if err := timebank.NewTimeBank().NewTaskWithDeadline(reBuyEndAtTime, func(isCancelled bool) {
-			if isCancelled {
-				return
+
+		for _, reBuyPlayerID := range reBuyPlayerIDs {
+			if _, exist := ce.reBuyTimerStates[reBuyPlayerID]; !exist {
+				ce.reBuyTimerStates[reBuyPlayerID] = timebank.NewTimeBank()
 			}
 
-			leavePlayerIDs := make([]string, 0)
-			for _, playerID := range reBuyPlayerIDs {
-				playerCache, exist := ce.getPlayerCache(ce.competition.ID, playerID)
+			ce.reBuyTimerStates[reBuyPlayerID].Cancel()
+			if err := ce.reBuyTimerStates[reBuyPlayerID].NewTaskWithDeadline(reBuyEndAtTime, func(isCancelled bool) {
+				if isCancelled {
+					return
+				}
+
+				playerCache, exist := ce.getPlayerCache(ce.competition.ID, reBuyPlayerID)
 				if !exist {
 					fmt.Println("[playerID] is not in the cache")
-					continue
+					return
 				}
 				if ce.competition.State.Players[playerCache.PlayerIdx].Chips <= 0 {
-					leavePlayerIDs = append(leavePlayerIDs, playerID)
 					ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_ReBuyWaiting
 					ce.competition.State.Players[playerCache.PlayerIdx].IsReBuying = false
 					ce.competition.State.Players[playerCache.PlayerIdx].ReBuyEndAt = UnsetValue
 					ce.competition.State.Players[playerCache.PlayerIdx].CurrentSeat = UnsetValue
 					ce.emitPlayerEvent("re buy leave", ce.competition.State.Players[playerCache.PlayerIdx])
 				}
-			}
 
-			if len(leavePlayerIDs) > 0 {
-				ce.emitEvent("re buy leave", strings.Join(leavePlayerIDs, ","))
+				ce.emitEvent("re buy leave", reBuyPlayerID)
 
-				if err := ce.tableManagerBackend.PlayersLeave(table.ID, leavePlayerIDs); err != nil {
-					ce.emitErrorEvent("Knockout Players -> PlayersLeave", strings.Join(leavePlayerIDs, ","), err)
+				if err := ce.tableManagerBackend.PlayersLeave(table.ID, []string{reBuyPlayerID}); err != nil {
+					ce.emitErrorEvent("re buy Knockout Players -> PlayersLeave", reBuyPlayerID, err)
 				}
+			}); err != nil {
+				ce.emitErrorEvent("Players ReBuy Add Timer", "", err)
+				continue
 			}
-		}); err != nil {
-			ce.emitErrorEvent("Auto Knockout ReBuy Players", "", err)
-			return
 		}
 	}
 }
