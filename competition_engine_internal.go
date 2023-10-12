@@ -455,7 +455,12 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 			}
 
 			// 結束賽事處理
-			if ce.competition.State.BlindState.IsFinalBuyInLevel() && len(alivePlayerIDs) == 1 && len(ce.competition.State.Tables) == 1 {
+			endStatuses := []CompetitionStateStatus{
+				CompetitionStateStatus_End,
+				CompetitionStateStatus_AutoEnd,
+				CompetitionStateStatus_ForceEnd,
+			}
+			if !funk.Contains(endStatuses, ce.competition.State.Status) && ce.competition.State.BlindState.IsFinalBuyInLevel() && len(alivePlayerIDs) == 1 && len(ce.competition.State.Tables) == 1 {
 				ce.CloseCompetition(CompetitionStateStatus_End)
 			}
 		}); err != nil {
