@@ -89,7 +89,7 @@ func (ce *competitionEngine) GetSortedTableSettlementKnockoutPlayerRankings(tabl
 			allowToReBuy = playerCache.ReBuyTimes < ce.competition.Meta.ReBuySetting.MaxTime
 			isAlreadyKnockout = ce.competition.State.Players[playerCache.PlayerIdx].Status == CompetitionPlayerStatus_Knockout
 		}
-		if !ce.competition.State.BlindState.IsFinalBuyInLevel() && allowToReBuy {
+		if !ce.competition.State.BlindState.IsStopBuyIn() && allowToReBuy {
 			continue
 		}
 

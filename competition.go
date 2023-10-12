@@ -246,10 +246,10 @@ func (c Competition) IsBreaking() bool {
 }
 
 // BlindState Getters
-func (bs BlindState) IsFinalBuyInLevel() bool {
+func (bs BlindState) IsStopBuyIn() bool {
 	// 沒有預設 FinalBuyInLevelIndex 代表不能補碼，永遠都是停止買入階段
 	if bs.FinalBuyInLevelIndex == UnsetValue {
 		return true
 	}
-	return bs.CurrentLevelIndex >= bs.FinalBuyInLevelIndex
+	return bs.CurrentLevelIndex > bs.FinalBuyInLevelIndex
 }

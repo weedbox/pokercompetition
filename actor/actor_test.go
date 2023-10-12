@@ -136,7 +136,7 @@ func TestActor_CT_Breaking(t *testing.T) {
 			t.Log("[Competition Status]", competition.State.Status)
 			DebugPrintTableGameSettled(*table)
 		case pokertable.TableStateStatus_TablePausing:
-			t.Logf("table [%s] is pausing. is final buy in: %+v", table.ID, competitionEngine.GetCompetition().State.BlindState.IsFinalBuyInLevel())
+			t.Logf("table [%s] is pausing. is final buy in: %+v", table.ID, competitionEngine.GetCompetition().State.BlindState.IsStopBuyIn())
 		case pokertable.TableStateStatus_TableClosed:
 			t.Logf("table [%s] is closed", table.ID)
 		}
@@ -277,7 +277,7 @@ func TestActor_CT_Normal(t *testing.T) {
 			t.Log("[Competition Status]", competition.State.Status)
 			DebugPrintTableGameSettled(*table)
 		case pokertable.TableStateStatus_TablePausing:
-			t.Logf("table [%s] is pausing. is final buy in: %+v", table.ID, competitionEngine.GetCompetition().State.BlindState.IsFinalBuyInLevel())
+			t.Logf("table [%s] is pausing. is final buy in: %+v", table.ID, competitionEngine.GetCompetition().State.BlindState.IsStopBuyIn())
 		case pokertable.TableStateStatus_TableClosed:
 			t.Logf("table [%s] is closed", table.ID)
 		}

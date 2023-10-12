@@ -701,7 +701,7 @@ func (ce *competitionEngine) PlayerQuit(tableID, playerID string) error {
 	ce.competition.State.Players[playerIdx].ReBuyEndAt = UnsetValue
 	ce.emitPlayerEvent("quit knockout", ce.competition.State.Players[playerIdx])
 
-	if ce.competition.State.BlindState.IsFinalBuyInLevel() {
+	if ce.competition.State.BlindState.IsStopBuyIn() {
 		// 更新賽事排名
 		ce.competition.State.Rankings = append(ce.competition.State.Rankings, &CompetitionRank{
 			PlayerID:   playerID,

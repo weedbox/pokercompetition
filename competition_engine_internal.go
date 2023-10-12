@@ -399,7 +399,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 			ce.competition.ID,
 			table.ID,
 			table.State.GameCount,
-			ce.competition.State.BlindState.IsFinalBuyInLevel(),
+			ce.competition.State.BlindState.IsStopBuyIn(),
 			len(zeroChipPlayerIDs),
 			strings.Join(zeroChipPlayerIDs, ","),
 			len(alivePlayerIDs),
@@ -415,7 +415,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 			ce.handleBreaking(table.ID, tableIdx)
 
 			// 結束賽事處理
-			if ce.competition.State.BlindState.IsFinalBuyInLevel() && len(alivePlayerIDs) == 1 && len(ce.competition.State.Tables) == 1 {
+			if ce.competition.State.BlindState.IsStopBuyIn() && len(alivePlayerIDs) == 1 && len(ce.competition.State.Tables) == 1 {
 				ce.CloseCompetition(CompetitionStateStatus_End)
 			}
 		}); err != nil {
@@ -527,7 +527,7 @@ func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
 	ce.mu.Lock()
 	defer ce.mu.Unlock()
 
-	if ce.competition.State.BlindState.IsFinalBuyInLevel() {
+	if ce.competition.State.BlindState.IsStopBuyIn() {
 		return
 	}
 
@@ -721,7 +721,7 @@ func (ce *competitionEngine) shouldCloseCTTable(tableStartAt int64, tableAlivePl
 	}
 
 	tableEndAt := time.Unix(tableStartAt, 0).Add(time.Second * time.Duration(ce.competition.Meta.MaxDuration)).Unix()
-	return time.Now().Unix() > tableEndAt || (ce.competition.State.BlindState.IsFinalBuyInLevel() && tableAlivePlayerCount < ce.competition.Meta.TableMinPlayerCount)
+	return time.Now().Unix() > tableEndAt || (ce.competition.State.BlindState.IsStopBuyIn() && tableAlivePlayerCount < ce.competition.Meta.TableMinPlayerCount)
 }
 
 func (ce *competitionEngine) updateTableBlind(tableID string) {
@@ -769,7 +769,7 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 		ce.emitCompetitionStateEvent(CompetitionStateEvent_BlindUpdated) // change CurrentLevelIndex
 
 		// 更新賽事狀態: 停止買入
-		if ce.competition.State.BlindState.IsFinalBuyInLevel() {
+		if ce.competition.State.BlindState.IsStopBuyIn() {
 			if ce.competition.State.Status != CompetitionStateStatus_StoppedBuyIn {
 				ce.competition.State.Status = CompetitionStateStatus_StoppedBuyIn
 				ce.emitEvent("Final BuyIn", "")
