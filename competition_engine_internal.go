@@ -803,6 +803,8 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 				ce.emitCompetitionStateEvent(CompetitionStateEvent_KnockoutPlayers)
 				ce.emitCompetitionStateEvent(CompetitionStateEvent_BlindUpdated) // change Status
 			}
+		} else {
+			ce.emitEvent("Blind CurrentLevelIndex Update", "")
 		}
 	})
 	ce.blind.OnErrorUpdated(func(bs *pokerblind.BlindState, err error) {
