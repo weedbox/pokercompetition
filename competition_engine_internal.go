@@ -82,12 +82,7 @@ func (ce *competitionEngine) UpdateTable(table *pokertable.Table) {
 		return
 	}
 
-	endStatuses := []CompetitionStateStatus{
-		CompetitionStateStatus_End,
-		CompetitionStateStatus_AutoEnd,
-		CompetitionStateStatus_ForceEnd,
-	}
-	if funk.Contains(endStatuses, ce.competition.State.Status) {
+	if ce.isEndStatus() {
 		fmt.Println("[DEBUG#UpdateTable] status is end, no need to update table. Status:", string(ce.competition.State.Status))
 		return
 	}
@@ -731,6 +726,15 @@ func (ce *competitionEngine) updateTableBlind(tableID string) {
 	}
 }
 
+func (ce *competitionEngine) isEndStatus() bool {
+	endStatuses := []CompetitionStateStatus{
+		CompetitionStateStatus_End,
+		CompetitionStateStatus_AutoEnd,
+		CompetitionStateStatus_ForceEnd,
+	}
+	return funk.Contains(endStatuses, ce.competition.State.Status)
+}
+
 func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 	options := &pokerblind.BlindOptions{
 		ID:                   meta.Blind.ID,
@@ -755,7 +759,7 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 	}
 	ce.blind.ApplyOptions(options)
 	ce.blind.OnBlindStateUpdated(func(bs *pokerblind.BlindState) {
-		if ce.competition.State.Status == CompetitionStateStatus_End {
+		if ce.isEndStatus() {
 			return
 		}
 
@@ -772,7 +776,7 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 		if ce.competition.State.BlindState.IsStopBuyIn() {
 			if ce.competition.State.Status != CompetitionStateStatus_StoppedBuyIn {
 				ce.competition.State.Status = CompetitionStateStatus_StoppedBuyIn
-				ce.emitEvent("Final BuyIn", "")
+				ce.emitEvent("Stopped BuyIn", "")
 
 				// MTT 在停止買入階段，停止拆併桌機制
 				if ce.competition.Meta.Mode == CompetitionMode_MTT {
@@ -780,7 +784,7 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 				}
 
 				// 淘汰沒資格玩家
-				knockoutPlayerRankings := ce.GetSortedFinalBuyInKnockoutPlayerRankings()
+				knockoutPlayerRankings := ce.GetSortedStopBuyInKnockoutPlayerRankings()
 				for idx, knockoutPlayerID := range knockoutPlayerRankings {
 					playerCache, exist := ce.getPlayerCache(ce.competition.ID, knockoutPlayerID)
 					if !exist {
@@ -789,7 +793,7 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 
 					ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_Knockout
 					ce.competition.State.Players[playerCache.PlayerIdx].CurrentSeat = UnsetValue
-					ce.emitPlayerEvent("Final BuyIn Knockout Players", ce.competition.State.Players[playerCache.PlayerIdx])
+					ce.emitPlayerEvent("Stopped BuyIn Knockout Players", ce.competition.State.Players[playerCache.PlayerIdx])
 
 					// 更新賽事排名
 					ce.competition.State.Rankings = append(ce.competition.State.Rankings, &CompetitionRank{
@@ -799,9 +803,16 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 					rank := ce.competition.PlayingPlayerCount() + (len(knockoutPlayerRankings) - idx)
 					ce.emitCompetitionStateFinalPlayerRankEvent(knockoutPlayerID, rank)
 				}
-				ce.emitEvent("Final BuyIn Knockout Players", "")
+
+				ce.emitEvent("Stopped BuyIn Knockout Players", "")
 				ce.emitCompetitionStateEvent(CompetitionStateEvent_KnockoutPlayers)
 				ce.emitCompetitionStateEvent(CompetitionStateEvent_BlindUpdated) // change Status
+
+				if ce.competition.Meta.Mode == CompetitionMode_CT && len(ce.competition.State.Tables) > 0 && len(ce.competition.State.Tables[0].AlivePlayers()) < 2 {
+					if err := ce.tableManagerBackend.CloseTable(ce.competition.State.Tables[0].ID); err != nil {
+						ce.emitErrorEvent("Stopped BuyIn auto close -> CloseTable", "", err)
+					}
+				}
 			}
 		} else {
 			ce.emitEvent("Blind CurrentLevelIndex Update", "")

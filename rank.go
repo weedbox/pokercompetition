@@ -69,11 +69,11 @@ func (ce *competitionEngine) GetParticipatedPlayerTableRankingData(competitionID
 
 /*
 GetSortedTableSettlementKnockoutPlayerRankings 桌次結算後預計被淘汰玩家的排名 (越早入桌者，排名越前面，但 index 越小 aka. 排名後面者陣列 index 越小)
-  - @return SortedFinalKnockoutPlayerIDs 排序過後的淘汰玩家 ID 陣列
+  - @return SortedKnockoutPlayers 排序過後的淘汰玩家 ID 陣列
 */
 func (ce *competitionEngine) GetSortedTableSettlementKnockoutPlayerRankings(tablePlayers []*pokertable.TablePlayerState) []string {
 	competitionID := ce.competition.ID
-	sortedFinalKnockoutPlayers := make([]pokertable.TablePlayerState, 0)
+	sortedKnockoutPlayers := make([]pokertable.TablePlayerState, 0)
 
 	// 找出可能的淘汰者們
 	for _, p := range tablePlayers {
@@ -97,45 +97,45 @@ func (ce *competitionEngine) GetSortedTableSettlementKnockoutPlayerRankings(tabl
 			continue
 		}
 
-		sortedFinalKnockoutPlayers = append(sortedFinalKnockoutPlayers, *p)
+		sortedKnockoutPlayers = append(sortedKnockoutPlayers, *p)
 	}
 
 	// 依加入時間晚到早排序
-	sort.Slice(sortedFinalKnockoutPlayers, func(i int, j int) bool {
-		playerCacheI, iExist := ce.getPlayerCache(competitionID, sortedFinalKnockoutPlayers[i].PlayerID)
-		playerCacheJ, jExist := ce.getPlayerCache(competitionID, sortedFinalKnockoutPlayers[j].PlayerID)
+	sort.Slice(sortedKnockoutPlayers, func(i int, j int) bool {
+		playerCacheI, iExist := ce.getPlayerCache(competitionID, sortedKnockoutPlayers[i].PlayerID)
+		playerCacheJ, jExist := ce.getPlayerCache(competitionID, sortedKnockoutPlayers[j].PlayerID)
 		if iExist && jExist {
 			return playerCacheI.JoinAt > playerCacheJ.JoinAt
 		}
 		return true
 	})
 
-	return funk.Map(sortedFinalKnockoutPlayers, func(p pokertable.TablePlayerState) string {
+	return funk.Map(sortedKnockoutPlayers, func(p pokertable.TablePlayerState) string {
 		return p.PlayerID
 	}).([]string)
 }
 
 /*
-GetSortedFinalBuyInKnockoutPlayerRankings 停止買入後預計被淘汰玩家的排名 (越早入桌者，排名越前面，但 index 越小 aka. 排名後面者陣列 index 越小)
-  - @return SortedFinalKnockoutPlayerIDs 排序過後的淘汰玩家 ID 陣列
+GetSortedStopBuyInKnockoutPlayerRankings 停止買入後預計被淘汰玩家的排名 (越早入桌者，排名越前面，但 index 越小 aka. 排名後面者陣列 index 越小)
+  - @return SortedStopKnockoutPlayerIDs 排序過後的淘汰玩家 ID 陣列
 */
-func (ce *competitionEngine) GetSortedFinalBuyInKnockoutPlayerRankings() []string {
-	sortedFinalKnockoutPlayers := make([]CompetitionPlayer, 0)
+func (ce *competitionEngine) GetSortedStopBuyInKnockoutPlayerRankings() []string {
+	sortedKnockoutPlayers := make([]CompetitionPlayer, 0)
 
 	// 找出可能的淘汰者們
 	for _, p := range ce.competition.State.Players {
 		if p.Chips == 0 && p.Status == CompetitionPlayerStatus_ReBuyWaiting {
-			sortedFinalKnockoutPlayers = append(sortedFinalKnockoutPlayers, *p)
+			sortedKnockoutPlayers = append(sortedKnockoutPlayers, *p)
 		}
 	}
 
 	// 依加入時間晚到早排序
-	sort.Slice(sortedFinalKnockoutPlayers, func(i int, j int) bool {
-		return sortedFinalKnockoutPlayers[i].JoinAt > sortedFinalKnockoutPlayers[j].JoinAt
+	sort.Slice(sortedKnockoutPlayers, func(i int, j int) bool {
+		return sortedKnockoutPlayers[i].JoinAt > sortedKnockoutPlayers[j].JoinAt
 	})
 
 	playerIDs := make([]string, 0)
-	for _, p := range sortedFinalKnockoutPlayers {
+	for _, p := range sortedKnockoutPlayers {
 		playerIDs = append(playerIDs, p.PlayerID)
 	}
 	return playerIDs

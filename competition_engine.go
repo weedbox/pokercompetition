@@ -348,37 +348,6 @@ func (ce *competitionEngine) StartCompetition() error {
 
 	switch ce.competition.Meta.Mode {
 	case CompetitionMode_CT:
-		// PauseAutoEndTable (Final BuyIn Level & Table Is Pause)
-		finalBuyInLevelTime := int64(0)
-		for idx, level := range ce.competition.Meta.Blind.Levels {
-			finalBuyInLevelTime += int64(level.Duration)
-			if idx == ce.competition.Meta.Blind.FinalBuyInLevelIndex {
-				break
-			}
-		}
-		pauseAutoCloseTime := time.Unix(ce.competition.State.StartAt+finalBuyInLevelTime, 0)
-		if err := timebank.NewTimeBank().NewTaskWithDeadline(pauseAutoCloseTime, func(isCancelled bool) {
-			if isCancelled {
-				return
-			}
-
-			endStatus := []CompetitionStateStatus{
-				CompetitionStateStatus_End,
-				CompetitionStateStatus_AutoEnd,
-				CompetitionStateStatus_ForceEnd,
-			}
-			if funk.Contains(endStatus, ce.competition.State.Status) {
-				return
-			}
-			if len(ce.competition.State.Tables) > 0 && len(ce.competition.State.Tables[0].AlivePlayers()) < 2 {
-				if err := ce.tableManagerBackend.CloseTable(ce.competition.State.Tables[0].ID); err != nil {
-					ce.emitErrorEvent("pause auto close -> CloseTable", "", err)
-				}
-			}
-		}); err != nil {
-			return err
-		}
-
 		normalCloseTime := time.Unix(ce.competition.State.EndAt, 0)
 		if err := timebank.NewTimeBank().NewTaskWithDeadline(normalCloseTime, func(isCancelled bool) {
 			if isCancelled {
