@@ -771,12 +771,12 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 		}
 
 		ce.emitCompetitionStateEvent(CompetitionStateEvent_BlindUpdated) // change CurrentLevelIndex
+		ce.emitEvent("Blind CurrentLevelIndex Update", "")
 
 		// 更新賽事狀態: 停止買入
 		if ce.competition.State.BlindState.IsStopBuyIn() {
 			if ce.competition.State.Status != CompetitionStateStatus_StoppedBuyIn {
 				ce.competition.State.Status = CompetitionStateStatus_StoppedBuyIn
-				ce.emitEvent("Stopped BuyIn", "")
 
 				// MTT 在停止買入階段，停止拆併桌機制
 				if ce.competition.Meta.Mode == CompetitionMode_MTT {
@@ -814,8 +814,6 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 					}
 				}
 			}
-		} else {
-			ce.emitEvent("Blind CurrentLevelIndex Update", "")
 		}
 	})
 	ce.blind.OnErrorUpdated(func(bs *pokerblind.BlindState, err error) {
