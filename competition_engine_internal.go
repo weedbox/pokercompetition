@@ -574,14 +574,16 @@ func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
 					fmt.Println("[playerID] is not in the cache")
 					return
 				}
-				if ce.competition.State.Players[playerCache.PlayerIdx].Chips <= 0 {
-					ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_ReBuyWaiting
-					ce.competition.State.Players[playerCache.PlayerIdx].IsReBuying = false
-					ce.competition.State.Players[playerCache.PlayerIdx].ReBuyEndAt = UnsetValue
-					ce.competition.State.Players[playerCache.PlayerIdx].CurrentSeat = UnsetValue
-					ce.emitPlayerEvent("re buy leave", ce.competition.State.Players[playerCache.PlayerIdx])
+
+				if ce.competition.State.Players[playerCache.PlayerIdx].Chips > 0 {
+					return
 				}
 
+				ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_ReBuyWaiting
+				ce.competition.State.Players[playerCache.PlayerIdx].IsReBuying = false
+				ce.competition.State.Players[playerCache.PlayerIdx].ReBuyEndAt = UnsetValue
+				ce.competition.State.Players[playerCache.PlayerIdx].CurrentSeat = UnsetValue
+				ce.emitPlayerEvent("re buy leave", ce.competition.State.Players[playerCache.PlayerIdx])
 				ce.emitEvent("re buy leave", reBuyPlayerID)
 
 				if err := ce.tableManagerBackend.PlayersLeave(table.ID, []string{reBuyPlayerID}); err != nil {
