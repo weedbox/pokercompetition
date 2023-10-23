@@ -579,6 +579,11 @@ func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
 					return
 				}
 
+				// 玩家已經被淘汰了 (停止買入階段觸發淘汰)
+				if ce.competition.State.Players[playerCache.PlayerIdx].Status == CompetitionPlayerStatus_Knockout {
+					return
+				}
+
 				ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_ReBuyWaiting
 				ce.competition.State.Players[playerCache.PlayerIdx].IsReBuying = false
 				ce.competition.State.Players[playerCache.PlayerIdx].ReBuyEndAt = UnsetValue
@@ -794,8 +799,22 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 					}
 
 					ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_Knockout
+					ce.competition.State.Players[playerCache.PlayerIdx].IsReBuying = false
+					ce.competition.State.Players[playerCache.PlayerIdx].ReBuyEndAt = UnsetValue
 					ce.competition.State.Players[playerCache.PlayerIdx].CurrentSeat = UnsetValue
 					ce.emitPlayerEvent("Stopped BuyIn Knockout Players", ce.competition.State.Players[playerCache.PlayerIdx])
+
+					// 玩家離座 (CT only), 因為 MTT 在結算沒籌碼時就已經離開該桌次了
+					if ce.competition.Meta.Mode == CompetitionMode_CT {
+						if len(ce.competition.State.Tables) > 0 {
+							if _, exist := ce.reBuyTimerStates[knockoutPlayerID]; exist {
+								ce.reBuyTimerStates[knockoutPlayerID].Cancel()
+							}
+							if err := ce.tableManagerBackend.PlayersLeave(ce.competition.State.Tables[0].ID, []string{knockoutPlayerID}); err != nil {
+								ce.emitErrorEvent("Stopped BuyIn Knockout Players -> PlayersLeave", knockoutPlayerID, err)
+							}
+						}
+					}
 
 					// 更新賽事排名
 					ce.competition.State.Rankings = append(ce.competition.State.Rankings, &CompetitionRank{
