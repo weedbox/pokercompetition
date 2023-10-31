@@ -42,6 +42,8 @@ github.com/weedbox/pokerface v0.0.10 h1:1ha1pVJcKephV+5yYZmSXu4OnOyThmGm3R6DEx6Z
 github.com/weedbox/pokerface v0.0.10/go.mod h1:crCafi1KcY6+jRb6sVkB8mF1fSuVri8tYOSEIdDDcr4=
 github.com/weedbox/pokerface v0.0.11 h1:XLmpe2YeSmCgqbkxS1bFKUXsktEzaZGd+szJsEnT+ZQ=
 github.com/weedbox/pokerface v0.0.11/go.mod h1:crCafi1KcY6+jRb6sVkB8mF1fSuVri8tYOSEIdDDcr4=
+github.com/weedbox/pokerface v0.0.12 h1:3e8wWw680UZL8zPS/p0mQvgxyNiGzLaXHBwItxdDOpA=
+github.com/weedbox/pokerface v0.0.12/go.mod h1:crCafi1KcY6+jRb6sVkB8mF1fSuVri8tYOSEIdDDcr4=
 github.com/weedbox/pokertable v0.0.17 h1:IQ054HJwf6942M8ABUNlnvfd3fFS3OirwVNWvt2YjnE=
 github.com/weedbox/pokertable v0.0.17/go.mod h1:RmGpg8JPOqSziSCayDBAQzTZeGtyqnxoZBObp8go17Q=
 github.com/weedbox/pokertable v0.0.19 h1:qxDXlrXliPZXtRqnQ+Us0pUQ7qtLljv6mIYIwF7YK2o=
@@ -54,6 +56,8 @@ github.com/weedbox/pokertable v0.0.22 h1:lGoFQ4kgx5Vjx8IW6c+nw/BKlu3Q4Nnn87PO1qi
 github.com/weedbox/pokertable v0.0.22/go.mod h1:g35Sw7B0DpjfHMOG6JYyhNnF9tfUMnuA9r49oR/WzcM=
 github.com/weedbox/pokertable v0.0.23 h1:M+/rtV+zKQZg/c+ppmur4wyrDCbbd6EfdMY8DvTJ5YY=
 github.com/weedbox/pokertable v0.0.23/go.mod h1:g35Sw7B0DpjfHMOG6JYyhNnF9tfUMnuA9r49oR/WzcM=
+github.com/weedbox/pokertable v0.0.24 h1:RbXkXGancpzvQMeU3EJLRQKiN0EQN1hEDADTkozbCXo=
+github.com/weedbox/pokertable v0.0.24/go.mod h1:2UfFIEvMlLmrKqTq5r7YBUiQxXP4FcIn19jsrgd3cWE=
 github.com/weedbox/syncsaga v0.0.0-20230821071725-a634f0872340 h1:ZHzlfkN/XnOIADtOxGUPbyislvjx0KjtTwCVuKEF1hw=
 github.com/weedbox/syncsaga v0.0.0-20230821071725-a634f0872340/go.mod h1:1k6tuqJhfosy4htz/8WTL17Hn4W1BJD4R+Lp/08EOPI=
 github.com/weedbox/timebank v0.0.0-20230713013837-bd7a6f808e3e h1:3v7juh57KHXyYVjfsE6gYn6tzgLBTQcDgg1A7fqNGC0=
