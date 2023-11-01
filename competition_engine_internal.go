@@ -435,6 +435,9 @@ func (ce *competitionEngine) handleBreaking(tableID string, tableIdx int) {
 	}
 	if _, exist := ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex]; !exist {
 		ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] = false
+	} else {
+		fmt.Println("[DEBUG#handleBreaking] already handle breaking & start timer")
+		return
 	}
 
 	// already resume table games from breaking
