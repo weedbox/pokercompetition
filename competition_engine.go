@@ -348,23 +348,38 @@ func (ce *competitionEngine) StartCompetition() error {
 
 	switch ce.competition.Meta.Mode {
 	case CompetitionMode_CT:
+		// 時間到了要結束賽事的機制
 		normalCloseTime := time.Unix(ce.competition.State.EndAt, 0)
 		if err := timebank.NewTimeBank().NewTaskWithDeadline(normalCloseTime, func(isCancelled bool) {
 			if isCancelled {
 				return
 			}
 
-			endStatus := []CompetitionStateStatus{
+			// 賽事已結算，不再處理
+			endStatuses := []CompetitionStateStatus{
 				CompetitionStateStatus_End,
 				CompetitionStateStatus_AutoEnd,
 				CompetitionStateStatus_ForceEnd,
 			}
-			if funk.Contains(endStatus, ce.competition.State.Status) {
+			if funk.Contains(endStatuses, ce.competition.State.Status) {
 				return
 			}
-			if len(ce.competition.State.Tables) > 0 && ce.competition.State.Tables[0].State.Status == pokertable.TableStateStatus_TableGameSettled {
-				if err := ce.tableManagerBackend.CloseTable(ce.competition.State.Tables[0].ID); err != nil {
-					ce.emitErrorEvent("end time auto close -> CloseTable", "", err)
+
+			if len(ce.competition.State.Tables) > 0 {
+				noneCloseTableStatuses := []pokertable.TableStateStatus{
+					// playing
+					pokertable.TableStateStatus_TableGameOpened,
+					pokertable.TableStateStatus_TableGamePlaying,
+					pokertable.TableStateStatus_TableGameSettled,
+
+					// close
+					pokertable.TableStateStatus_TableClosed,
+				}
+				// 桌次尚未結束，處理關桌
+				if !funk.Contains(noneCloseTableStatuses, ce.competition.State.Tables[0].State.Status) {
+					if err := ce.tableManagerBackend.CloseTable(ce.competition.State.Tables[0].ID); err != nil {
+						ce.emitErrorEvent("end time auto close -> CloseTable", "", err)
+					}
 				}
 			}
 		}); err != nil {

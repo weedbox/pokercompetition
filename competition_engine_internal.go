@@ -227,14 +227,6 @@ func (ce *competitionEngine) addCompetitionTable(tableSetting TableSetting, play
 		ce.competition.State.Players = append(ce.competition.State.Players, newPlayers...)
 	}
 
-	// init breakingPauseResumeStates
-	ce.breakingPauseResumeStates[table.ID] = make(map[int]bool)
-	for idx, bl := range ce.competition.Meta.Blind.Levels {
-		if bl.Level == -1 {
-			ce.breakingPauseResumeStates[table.ID][idx] = false
-		}
-	}
-
 	ce.emitEvent("[addCompetitionTable]", "")
 
 	return table.ID, nil
@@ -455,12 +447,12 @@ func (ce *competitionEngine) handleBreaking(tableID string, tableIdx int) {
 			return
 		}
 
-		endStatus := []CompetitionStateStatus{
+		endStatuses := []CompetitionStateStatus{
 			CompetitionStateStatus_End,
 			CompetitionStateStatus_AutoEnd,
 			CompetitionStateStatus_ForceEnd,
 		}
-		if funk.Contains(endStatus, ce.competition.State.Status) {
+		if funk.Contains(endStatuses, ce.competition.State.Status) {
 			fmt.Println("[DEBUG#handleBreaking] not reopen since competition status is:", ce.competition.State.Status)
 			return
 		}
