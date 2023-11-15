@@ -16,20 +16,21 @@ import (
 )
 
 var (
-	ErrCompetitionInvalidCreateSetting = errors.New("competition: invalid create competition setting")
-	ErrCompetitionLeaveRejected        = errors.New("competition: not allowed to leave")
-	ErrCompetitionRefundRejected       = errors.New("competition: not allowed to refund")
-	ErrCompetitionQuitRejected         = errors.New("competition: not allowed to quit")
-	ErrCompetitionNoRedeemChips        = errors.New("competition: not redeem any chips")
-	ErrCompetitionAddonRejected        = errors.New("competition: not allowed to addon")
-	ErrCompetitionReBuyRejected        = errors.New("competition: not allowed to re-buy")
-	ErrCompetitionBuyInRejected        = errors.New("competition: not allowed to buy in")
-	ErrCompetitionExceedReBuyLimit     = errors.New("competition: exceed re-buy limit")
-	ErrCompetitionExceedAddonLimit     = errors.New("competition: exceed addon limit")
-	ErrCompetitionPlayerNotFound       = errors.New("competition: player not found")
-	ErrCompetitionTableNotFound        = errors.New("competition: table not found")
-	ErrMatchInitFailed                 = errors.New("competition: failed to init match")
-	ErrMatchTableReservePlayerFailed   = errors.New("competition: failed to balance player to table by match")
+	ErrCompetitionInvalidCreateSetting            = errors.New("competition: invalid create competition setting")
+	ErrCompetitionUpdateBlindInitialLevelRejected = errors.New("competition: not allowed to update blind initial level")
+	ErrCompetitionLeaveRejected                   = errors.New("competition: not allowed to leave")
+	ErrCompetitionRefundRejected                  = errors.New("competition: not allowed to refund")
+	ErrCompetitionQuitRejected                    = errors.New("competition: not allowed to quit")
+	ErrCompetitionNoRedeemChips                   = errors.New("competition: not redeem any chips")
+	ErrCompetitionAddonRejected                   = errors.New("competition: not allowed to addon")
+	ErrCompetitionReBuyRejected                   = errors.New("competition: not allowed to re-buy")
+	ErrCompetitionBuyInRejected                   = errors.New("competition: not allowed to buy in")
+	ErrCompetitionExceedReBuyLimit                = errors.New("competition: exceed re-buy limit")
+	ErrCompetitionExceedAddonLimit                = errors.New("competition: exceed addon limit")
+	ErrCompetitionPlayerNotFound                  = errors.New("competition: player not found")
+	ErrCompetitionTableNotFound                   = errors.New("competition: table not found")
+	ErrMatchInitFailed                            = errors.New("competition: failed to init match")
+	ErrMatchTableReservePlayerFailed              = errors.New("competition: failed to balance player to table by match")
 )
 
 type CompetitionEngineOpt func(*competitionEngine)
@@ -52,6 +53,7 @@ type CompetitionEngine interface {
 	// Competition Actions
 	GetCompetition() *Competition                                                  // 取得賽事
 	CreateCompetition(competitionSetting CompetitionSetting) (*Competition, error) // 建立賽事
+	UpdateCompetitionBlindInitialLevel(level int) error                            // 更新賽事盲注初始等級
 	CloseCompetition(endStatus CompetitionStateStatus) error                       // 關閉賽事
 	StartCompetition() error                                                       // 開始賽事
 
@@ -307,6 +309,19 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 
 	ce.emitEvent("CreateCompetition", "")
 	return ce.competition, nil
+}
+
+/*
+UpdateCompetitionBlindInitialLevel 更新賽事盲注初始等級
+  - 適用時機: 主賽 Day 1 所有賽事結束後，更新主賽 Day 2 盲注初始等級
+*/
+func (ce *competitionEngine) UpdateCompetitionBlindInitialLevel(level int) error {
+	// 開賽後就不能再更新初始等級
+	if ce.competition.State.Status != CompetitionStateStatus_Registering {
+		return ErrCompetitionUpdateBlindInitialLevelRejected
+	}
+
+	return ce.blind.UpdateInitialLevel(level)
 }
 
 /*

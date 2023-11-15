@@ -11,6 +11,7 @@ import (
 
 var (
 	ErrBlindNoOptions = errors.New("blind: options not available")
+	ErrBlindNoState   = errors.New("blind: state not available")
 )
 
 type Blind interface {
@@ -22,6 +23,7 @@ type Blind interface {
 	GetState() *BlindState
 	PrintState() error
 	ApplyOptions(options *BlindOptions) *BlindState
+	UpdateInitialLevel(level int) error
 	Start() (*BlindState, error)
 	End()
 }
@@ -89,6 +91,15 @@ func (b *blind) ApplyOptions(options *BlindOptions) *BlindState {
 		UpdatedAt: nowUnix,
 	}
 	return b.bs
+}
+
+func (b *blind) UpdateInitialLevel(level int) error {
+	if b.bs == nil {
+		return ErrBlindNoState
+	}
+
+	b.bs.Meta.InitialLevel = level
+	return nil
 }
 
 func (b *blind) Start() (*BlindState, error) {

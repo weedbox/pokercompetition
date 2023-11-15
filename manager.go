@@ -20,6 +20,7 @@ type Manager interface {
 
 	// Competition Actions
 	CreateCompetition(competitionSetting CompetitionSetting, options *CompetitionEngineOptions) (*Competition, error)
+	UpdateCompetitionBlindInitialLevel(competitionID string, level int) error
 	CloseCompetition(competitionID string, endStatus CompetitionStateStatus) error
 	StartCompetition(competitionID string) error
 
@@ -86,6 +87,15 @@ func (m *manager) CreateCompetition(competitionSetting CompetitionSetting, optio
 
 	m.competitionEngines.Store(competition.ID, competitionEngine)
 	return competition, nil
+}
+
+func (m *manager) UpdateCompetitionBlindInitialLevel(competitionID string, level int) error {
+	competitionEngine, err := m.GetCompetitionEngine(competitionID)
+	if err != nil {
+		return ErrManagerCompetitionNotFound
+	}
+
+	return competitionEngine.UpdateCompetitionBlindInitialLevel(level)
 }
 
 func (m *manager) CloseCompetition(competitionID string, endStatus CompetitionStateStatus) error {
