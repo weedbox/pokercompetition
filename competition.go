@@ -43,10 +43,10 @@ const (
 	CompetitionRule_Omaha     CompetitionRule = "omaha"      // 奧瑪哈
 
 	// CompetitionAdvanceRule
-	CompetitionAdvanceRule_FinalTable    CompetitionAdvanceRule = "adv_rule_final_table"    // 晉級方式: 直到最後一桌
 	CompetitionAdvanceRule_PlayerPercent CompetitionAdvanceRule = "adv_rule_player_percent" // 晉級方式: 尚未淘汰玩家百分比
 	CompetitionAdvanceRule_BlindLevel    CompetitionAdvanceRule = "adv_rule_blind_level"    // 晉級方式: 盲注等級
 	CompetitionAdvanceRule_FixPlayer     CompetitionAdvanceRule = "adv_rule_fix_player"     // 晉級方式: 固定人數
+	CompetitionAdvanceRule_M_Over_N      CompetitionAdvanceRule = "adv_rule_m_over_n"       // 晉級方式: M 個 Buy In 取 N 人
 
 	// CompetitionAdvanceStatus
 	CompetitionAdvanceStatus_NotStart CompetitionAdvanceStatus = "adv_not_start" // 晉級狀態: 未開始
@@ -89,6 +89,7 @@ type CompetitionState struct {
 	Tables       []*pokertable.Table    `json:"tables"`        // 多桌
 	Rankings     []*CompetitionRank     `json:"rankings"`      // 停止買入後玩家排名 (陣列 Index 即是排名 rank - 1, ex: index 0 -> 第一名, index 1 -> 第二名...)
 	AdvanceState *AdvanceState          `json:"advance_state"` // 晉級狀態
+	Statistic    *Statistic             `json:"statistic"`     // 賽事統計資料
 }
 
 type CompetitionRank struct {
@@ -162,9 +163,14 @@ type BlindState struct {
 }
 
 type AdvanceState struct {
-	Status        CompetitionAdvanceStatus `json:"status"`         // 晉級狀態
-	TotalTables   int                      `json:"total_tables"`   // 總桌數
-	UpdatedTables int                      `json:"updated_tables"` // 已更新桌數
+	Status          CompetitionAdvanceStatus `json:"status"`            // 晉級狀態
+	TotalTables     int                      `json:"total_tables"`      // 總桌數
+	UpdatedTables   int                      `json:"updated_tables"`    // 已更新桌數
+	UpdatedTableIDs []string                 `json:"updated_table_ids"` // 已更新桌次 ID
+}
+
+type Statistic struct {
+	TotalBuyInCount int `json:"total_buy_in_count"` // 總買入次數
 }
 
 type ReBuySetting struct {
@@ -183,6 +189,8 @@ type AdvanceSetting struct {
 	PlayerPercent int                    `json:"player_percent"` // 晉級人數百分比
 	BlindLevel    int                    `json:"blind_level"`    // 晉級盲注級別
 	FixedCount    int                    `json:"fixed_count"`    // 晉級人數固定值
+	MOverN        []int                  `json:"m_over_n"`       // M 個 Buy In 取 N 人 設定
+	MOverNCount   int                    `json:"m_over_n_count"` // 停止買入後 (M 個 Buy In 取 N 人) 動態計算出來的值
 }
 
 // Competition Setters

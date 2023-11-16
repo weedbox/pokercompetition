@@ -201,6 +201,10 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 		}
 	}
 
+	if competitionSetting.Meta.AdvanceSetting.Rule == CompetitionAdvanceRule_M_Over_N && len(competitionSetting.Meta.AdvanceSetting.MOverN) != 2 {
+		return nil, ErrCompetitionInvalidCreateSetting
+	}
+
 	// setup blind
 	ce.initBlind(competitionSetting.Meta)
 
@@ -230,6 +234,9 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 				Status:        CompetitionAdvanceStatus_NotStart,
 				TotalTables:   -1,
 				UpdatedTables: -1,
+			},
+			Statistic: &Statistic{
+				TotalBuyInCount: 0,
 			},
 		},
 	}
@@ -546,6 +553,9 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 		ce.emitEvent("PlayerBuyIn -> Re Buy", joinPlayer.PlayerID)
 		ce.emitPlayerEvent("PlayerBuyIn -> Re Buy", ce.competition.State.Players[playerIdx])
 	}
+
+	// 更新統計數據
+	ce.competition.State.Statistic.TotalBuyInCount++
 
 	switch ce.competition.Meta.Mode {
 	case CompetitionMode_CT:
