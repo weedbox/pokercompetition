@@ -389,20 +389,10 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 				if ce.competition.CurrentBlindLevel().Level >= ce.competition.Meta.AdvanceSetting.BlindLevel {
 					shouldAdvancePauseTableGame = true
 				}
-			case CompetitionAdvanceRule_PlayerPercent:
+			case CompetitionAdvanceRule_PlayerCount:
 				possibleAdvancePlayerCount := ce.competition.PlayingPlayerCount() + len(ce.competition.State.Rankings)
-				finalAdvancePlayerCount := int(float64(len(ce.competition.State.Players)*ce.competition.Meta.AdvanceSetting.PlayerPercent) / 100) // 無條件捨去
+				finalAdvancePlayerCount := ce.competition.Meta.AdvanceSetting.PlayerCount
 				if possibleAdvancePlayerCount >= finalAdvancePlayerCount {
-					shouldAdvancePauseTableGame = true
-				}
-			case CompetitionAdvanceRule_FixPlayer:
-				possibleAdvancePlayerCount := ce.competition.PlayingPlayerCount() + len(ce.competition.State.Rankings)
-				if possibleAdvancePlayerCount >= ce.competition.Meta.AdvanceSetting.FixedCount {
-					shouldAdvancePauseTableGame = true
-				}
-			case CompetitionAdvanceRule_M_Over_N:
-				possibleAdvancePlayerCount := ce.competition.PlayingPlayerCount() + len(ce.competition.State.Rankings)
-				if possibleAdvancePlayerCount >= ce.competition.Meta.AdvanceSetting.MOverNCount {
 					shouldAdvancePauseTableGame = true
 				}
 			}
@@ -892,10 +882,8 @@ func (ce *competitionEngine) initAdvancement() {
 	}
 
 	validAdvanceRules := []CompetitionAdvanceRule{
-		CompetitionAdvanceRule_PlayerPercent,
+		CompetitionAdvanceRule_PlayerCount,
 		CompetitionAdvanceRule_BlindLevel,
-		CompetitionAdvanceRule_FixPlayer,
-		CompetitionAdvanceRule_M_Over_N,
 	}
 	if funk.Contains(validAdvanceRules, ce.competition.Meta.AdvanceSetting.Rule) {
 		return
@@ -905,15 +893,8 @@ func (ce *competitionEngine) initAdvancement() {
 		return
 	}
 
-	// 動態計算 M 取 N 的晉級玩家數量
-	if ce.competition.Meta.AdvanceSetting.Rule == CompetitionAdvanceRule_M_Over_N {
-		base := ce.competition.Meta.AdvanceSetting.MOverN[0]
-		multiplier := ce.competition.Meta.AdvanceSetting.MOverN[1]
-		mOverNCount := (ce.competition.State.Statistic.TotalBuyInCount / base) * multiplier
-		if ce.competition.State.Statistic.TotalBuyInCount%base > 0 {
-			mOverNCount++
-		}
-		ce.competition.Meta.AdvanceSetting.MOverNCount = mOverNCount
+	if ce.competition.Meta.AdvanceSetting.Rule == CompetitionAdvanceRule_PlayerCount {
+		ce.competition.Meta.AdvanceSetting.PlayerCount = ce.onAdvancePlayerCountUpdated(ce.competition.ID, ce.competition.State.Statistic.TotalBuyInCount)
 	}
 
 	ce.competition.State.AdvanceState.Status = CompetitionAdvanceStatus_Updating

@@ -36,19 +36,20 @@ var (
 type CompetitionEngineOpt func(*competitionEngine)
 
 type CompetitionEngine interface {
-	OnTableCreated(fn func(*pokertable.Table)) // TODO: test only, delete it later on
-	OnTableClosed(fn func(*pokertable.Table))  // TODO: test only, delete it later on
+	OnTableCreated(fn func(table *pokertable.Table)) // TODO: test only, delete it later on
+	OnTableClosed(fn func(table *pokertable.Table))  // TODO: test only, delete it later on
 
 	// Others
 	UpdateTable(table *pokertable.Table)                                                    // 桌次更新
 	UpdateReserveTablePlayerState(tableID string, playerState *pokertable.TablePlayerState) // 更新 Reserve 桌次玩家狀態
 
 	// Events
-	OnCompetitionUpdated(fn func(*Competition))                       // 賽事更新事件監聽器
-	OnCompetitionErrorUpdated(fn func(*Competition, error))           // 賽事錯誤更新事件監聽器
-	OnCompetitionPlayerUpdated(fn func(string, *CompetitionPlayer))   // 賽事玩家更新事件監聽器
-	OnCompetitionFinalPlayerRankUpdated(fn func(string, string, int)) // 賽事玩家最終名次監聽器
-	OnCompetitionStateUpdated(fn func(string, *Competition))          // 賽事狀態監聽器
+	OnCompetitionUpdated(fn func(competition *Competition))                                         // 賽事更新事件監聽器
+	OnCompetitionErrorUpdated(fn func(competition *Competition, err error))                         // 賽事錯誤更新事件監聽器
+	OnCompetitionPlayerUpdated(fn func(competitionID string, competitionPlayer *CompetitionPlayer)) // 賽事玩家更新事件監聽器
+	OnCompetitionFinalPlayerRankUpdated(fn func(competitionID, playerID string, rank int))          // 賽事玩家最終名次監聽器
+	OnCompetitionStateUpdated(fn func(competitionID string, competition *Competition))              // 賽事狀態監聽器
+	OnAdvancePlayerCountUpdated(fn func(competitionID string, totalBuyInCount int) int)             // 賽事晉級人數更新監聽器
 
 	// Competition Actions
 	GetCompetition() *Competition                                                  // 取得賽事
@@ -78,11 +79,12 @@ type competitionEngine struct {
 	gameSettledRecords                  sync.Map // key: <gameID>, value: IsSettled
 	tableOptions                        *pokertable.TableEngineOptions
 	tableManagerBackend                 TableManagerBackend
-	onCompetitionUpdated                func(*Competition)
-	onCompetitionErrorUpdated           func(*Competition, error)
-	onCompetitionPlayerUpdated          func(string, *CompetitionPlayer)
-	onCompetitionFinalPlayerRankUpdated func(string, string, int)
-	onCompetitionStateUpdated           func(string, *Competition)
+	onCompetitionUpdated                func(competition *Competition)
+	onCompetitionErrorUpdated           func(competition *Competition, err error)
+	onCompetitionPlayerUpdated          func(competitionID string, competitionPlayer *CompetitionPlayer)
+	onCompetitionFinalPlayerRankUpdated func(competitionID, playerID string, rank int)
+	onCompetitionStateUpdated           func(competitionID string, competition *Competition)
+	onAdvancePlayerCountUpdated         func(competitionID string, totalBuyInCount int) int
 	breakingPauseResumeStates           map[string]map[int]bool // key: tableID, value: (k,v): (breaking blind level index, is resume from pause)
 	blind                               pokerblind.Blind
 	match                               match.Match
@@ -91,26 +93,27 @@ type competitionEngine struct {
 	tablePlayerWaitingQueue             map[string]map[int]int        // key: tableID, value: (k,v): playerIdx, seat
 	reBuyTimerStates                    map[string]*timebank.TimeBank // key: playerID, value: *timebank.TimeBank
 
-	onTableCreated func(*pokertable.Table) // TODO: test only, delete it later on
-	onTableClosed  func(*pokertable.Table) // TODO: test only, delete it later on
+	onTableCreated func(table *pokertable.Table) // TODO: test only, delete it later on
+	onTableClosed  func(table *pokertable.Table) // TODO: test only, delete it later on
 }
 
 func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
 	ce := &competitionEngine{
 		playerCaches:                        sync.Map{},
 		gameSettledRecords:                  sync.Map{},
-		onCompetitionUpdated:                func(*Competition) {},
-		onCompetitionErrorUpdated:           func(*Competition, error) {},
-		onCompetitionPlayerUpdated:          func(string, *CompetitionPlayer) {},
-		onCompetitionFinalPlayerRankUpdated: func(string, string, int) {},
-		onCompetitionStateUpdated:           func(string, *Competition) {},
+		onCompetitionUpdated:                func(competition *Competition) {},
+		onCompetitionErrorUpdated:           func(competition *Competition, err error) {},
+		onCompetitionPlayerUpdated:          func(competitionID string, competitionPlayer *CompetitionPlayer) {},
+		onCompetitionFinalPlayerRankUpdated: func(competitionID, playerID string, rank int) {},
+		onCompetitionStateUpdated:           func(competitionID string, competition *Competition) {},
+		onAdvancePlayerCountUpdated:         func(competitionID string, totalBuyInCount int) int { return 0 },
 		breakingPauseResumeStates:           make(map[string]map[int]bool),
 		blind:                               pokerblind.NewBlind(),
 		tablePlayerWaitingQueue:             make(map[string]map[int]int),
 		reBuyTimerStates:                    make(map[string]*timebank.TimeBank),
 
-		onTableCreated: func(*pokertable.Table) {}, // TODO: test only, delete it later on
-		onTableClosed:  func(*pokertable.Table) {}, // TODO: test only, delete it later on
+		onTableCreated: func(table *pokertable.Table) {}, // TODO: test only, delete it later on
+		onTableClosed:  func(table *pokertable.Table) {}, // TODO: test only, delete it later on
 	}
 
 	for _, opt := range opts {
@@ -151,33 +154,37 @@ func WithQueueManagerOptions(qm match.QueueManager) CompetitionEngineOpt {
 }
 
 // TODO: test only, delete it later on
-func (ce *competitionEngine) OnTableCreated(fn func(*pokertable.Table)) {
+func (ce *competitionEngine) OnTableCreated(fn func(table *pokertable.Table)) {
 	ce.onTableCreated = fn
 }
 
 // TODO: test only, delete it later on
-func (ce *competitionEngine) OnTableClosed(fn func(*pokertable.Table)) {
+func (ce *competitionEngine) OnTableClosed(fn func(table *pokertable.Table)) {
 	ce.onTableClosed = fn
 }
 
-func (ce *competitionEngine) OnCompetitionUpdated(fn func(*Competition)) {
+func (ce *competitionEngine) OnCompetitionUpdated(fn func(competition *Competition)) {
 	ce.onCompetitionUpdated = fn
 }
 
-func (ce *competitionEngine) OnCompetitionErrorUpdated(fn func(*Competition, error)) {
+func (ce *competitionEngine) OnCompetitionErrorUpdated(fn func(competition *Competition, err error)) {
 	ce.onCompetitionErrorUpdated = fn
 }
 
-func (ce *competitionEngine) OnCompetitionPlayerUpdated(fn func(string, *CompetitionPlayer)) {
+func (ce *competitionEngine) OnCompetitionPlayerUpdated(fn func(competitionID string, competitionPlayer *CompetitionPlayer)) {
 	ce.onCompetitionPlayerUpdated = fn
 }
 
-func (ce *competitionEngine) OnCompetitionFinalPlayerRankUpdated(fn func(string, string, int)) {
+func (ce *competitionEngine) OnCompetitionFinalPlayerRankUpdated(fn func(competitionID, playerID string, rank int)) {
 	ce.onCompetitionFinalPlayerRankUpdated = fn
 }
 
-func (ce *competitionEngine) OnCompetitionStateUpdated(fn func(string, *Competition)) {
+func (ce *competitionEngine) OnCompetitionStateUpdated(fn func(competitionID string, competition *Competition)) {
 	ce.onCompetitionStateUpdated = fn
+}
+
+func (ce *competitionEngine) OnAdvancePlayerCountUpdated(fn func(competitionID string, totalBuyInCount int) int) {
+	ce.onAdvancePlayerCountUpdated = fn
 }
 
 func (ce *competitionEngine) GetCompetition() *Competition {
@@ -199,10 +206,6 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 		if len(tableSetting.JoinPlayers) > competitionSetting.Meta.TableMaxSeatCount {
 			return nil, ErrCompetitionInvalidCreateSetting
 		}
-	}
-
-	if competitionSetting.Meta.AdvanceSetting.Rule == CompetitionAdvanceRule_M_Over_N && len(competitionSetting.Meta.AdvanceSetting.MOverN) != 2 {
-		return nil, ErrCompetitionInvalidCreateSetting
 	}
 
 	// setup blind

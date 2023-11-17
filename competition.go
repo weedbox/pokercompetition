@@ -43,10 +43,8 @@ const (
 	CompetitionRule_Omaha     CompetitionRule = "omaha"      // 奧瑪哈
 
 	// CompetitionAdvanceRule
-	CompetitionAdvanceRule_PlayerPercent CompetitionAdvanceRule = "adv_rule_player_percent" // 晉級方式: 尚未淘汰玩家百分比
-	CompetitionAdvanceRule_BlindLevel    CompetitionAdvanceRule = "adv_rule_blind_level"    // 晉級方式: 盲注等級
-	CompetitionAdvanceRule_FixPlayer     CompetitionAdvanceRule = "adv_rule_fix_player"     // 晉級方式: 固定人數
-	CompetitionAdvanceRule_M_Over_N      CompetitionAdvanceRule = "adv_rule_m_over_n"       // 晉級方式: M 個 Buy In 取 N 人
+	CompetitionAdvanceRule_PlayerCount CompetitionAdvanceRule = "player_count" // 晉級方式: 尚未淘汰玩家人數
+	CompetitionAdvanceRule_BlindLevel  CompetitionAdvanceRule = "blind_level"  // 晉級方式: 盲注等級
 
 	// CompetitionAdvanceStatus
 	CompetitionAdvanceStatus_NotStart CompetitionAdvanceStatus = "adv_not_start" // 晉級狀態: 未開始
@@ -185,12 +183,9 @@ type AddonSetting struct {
 }
 
 type AdvanceSetting struct {
-	Rule          CompetitionAdvanceRule `json:"rule"`           // 晉級方式
-	PlayerPercent int                    `json:"player_percent"` // 晉級人數百分比
-	BlindLevel    int                    `json:"blind_level"`    // 晉級盲注級別
-	FixedCount    int                    `json:"fixed_count"`    // 晉級人數固定值
-	MOverN        []int                  `json:"m_over_n"`       // M 個 Buy In 取 N 人 設定
-	MOverNCount   int                    `json:"m_over_n_count"` // 停止買入後 (M 個 Buy In 取 N 人) 動態計算出來的值
+	Rule        CompetitionAdvanceRule `json:"rule"`         // 晉級方式
+	PlayerCount int                    `json:"player_count"` // 晉級人數
+	BlindLevel  int                    `json:"blind_level"`  // 晉級盲注級別
 }
 
 // Competition Setters

@@ -1,19 +1,21 @@
 package pokercompetition
 
 type CompetitionEngineOptions struct {
-	OnCompetitionUpdated                func(*Competition)
-	OnCompetitionErrorUpdated           func(*Competition, error)
-	OnCompetitionPlayerUpdated          func(string, *CompetitionPlayer)
-	OnCompetitionFinalPlayerRankUpdated func(string, string, int)
-	OnCompetitionStateUpdated           func(string, *Competition)
+	OnCompetitionUpdated                func(competition *Competition)
+	OnCompetitionErrorUpdated           func(competition *Competition, err error)
+	OnCompetitionPlayerUpdated          func(competitionID string, competitionPlayer *CompetitionPlayer)
+	OnCompetitionFinalPlayerRankUpdated func(competitionID, playerID string, rank int)
+	OnCompetitionStateUpdated           func(competitionID string, competition *Competition)
+	OnAdvancePlayerCountUpdated         func(competitionID string, totalBuyInCount int) int
 }
 
 func NewDefaultCompetitionEngineOptions() *CompetitionEngineOptions {
 	return &CompetitionEngineOptions{
-		OnCompetitionUpdated:                func(*Competition) {},
-		OnCompetitionErrorUpdated:           func(*Competition, error) {},
-		OnCompetitionPlayerUpdated:          func(string, *CompetitionPlayer) {},
-		OnCompetitionFinalPlayerRankUpdated: func(string, string, int) {},
-		OnCompetitionStateUpdated:           func(string, *Competition) {},
+		OnCompetitionUpdated:                func(competition *Competition) {},
+		OnCompetitionErrorUpdated:           func(competition *Competition, err error) {},
+		OnCompetitionPlayerUpdated:          func(competitionID string, competitionPlayer *CompetitionPlayer) {},
+		OnCompetitionFinalPlayerRankUpdated: func(competitionID, playerID string, rank int) {},
+		OnCompetitionStateUpdated:           func(competitionID string, competition *Competition) {},
+		OnAdvancePlayerCountUpdated:         func(competitionID string, totalBuyInCount int) int { return 0 },
 	}
 }

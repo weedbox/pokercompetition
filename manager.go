@@ -80,6 +80,7 @@ func (m *manager) CreateCompetition(competitionSetting CompetitionSetting, optio
 	competitionEngine.OnCompetitionPlayerUpdated(options.OnCompetitionPlayerUpdated)
 	competitionEngine.OnCompetitionFinalPlayerRankUpdated(options.OnCompetitionFinalPlayerRankUpdated)
 	competitionEngine.OnCompetitionStateUpdated(options.OnCompetitionStateUpdated)
+	competitionEngine.OnAdvancePlayerCountUpdated(options.OnAdvancePlayerCountUpdated)
 	competition, err := competitionEngine.CreateCompetition(competitionSetting)
 	if err != nil {
 		return nil, err
