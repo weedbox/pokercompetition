@@ -378,54 +378,38 @@ func (ce *competitionEngine) StartCompetition() error {
 
 	switch ce.competition.Meta.Mode {
 	case CompetitionMode_CT:
-		// PauseAutoEndTable (Final BuyIn Level & Table Is Pause)
-		finalBuyInLevelTime := int64(0)
-		for idx, level := range ce.competition.Meta.Blind.Levels {
-			finalBuyInLevelTime += int64(level.Duration)
-			if idx == ce.competition.Meta.Blind.FinalBuyInLevelIndex {
-				break
-			}
-		}
-		pauseAutoCloseTime := time.Unix(ce.competition.State.StartAt+finalBuyInLevelTime, 0)
-		if err := timebank.NewTimeBank().NewTaskWithDeadline(pauseAutoCloseTime, func(isCancelled bool) {
-			if isCancelled {
-				return
-			}
-
-			endStatus := []CompetitionStateStatus{
-				CompetitionStateStatus_End,
-				CompetitionStateStatus_AutoEnd,
-				CompetitionStateStatus_ForceEnd,
-			}
-			if funk.Contains(endStatus, ce.competition.State.Status) {
-				return
-			}
-			if len(ce.competition.State.Tables) > 0 && len(ce.competition.State.Tables[0].AlivePlayers()) < 2 {
-				if err := ce.tableManagerBackend.CloseTable(ce.competition.State.Tables[0].ID); err != nil {
-					ce.emitErrorEvent("pause auto close -> CloseTable", "", err)
-				}
-			}
-		}); err != nil {
-			return err
-		}
-
+		// 時間到了要結束賽事的機制
 		normalCloseTime := time.Unix(ce.competition.State.EndAt, 0)
 		if err := timebank.NewTimeBank().NewTaskWithDeadline(normalCloseTime, func(isCancelled bool) {
 			if isCancelled {
 				return
 			}
 
-			endStatus := []CompetitionStateStatus{
+			// 賽事已結算，不再處理
+			endStatuses := []CompetitionStateStatus{
 				CompetitionStateStatus_End,
 				CompetitionStateStatus_AutoEnd,
 				CompetitionStateStatus_ForceEnd,
 			}
-			if funk.Contains(endStatus, ce.competition.State.Status) {
+			if funk.Contains(endStatuses, ce.competition.State.Status) {
 				return
 			}
-			if len(ce.competition.State.Tables) > 0 && ce.competition.State.Tables[0].State.Status == pokertable.TableStateStatus_TableGameSettled {
-				if err := ce.tableManagerBackend.CloseTable(ce.competition.State.Tables[0].ID); err != nil {
-					ce.emitErrorEvent("end time auto close -> CloseTable", "", err)
+
+			if len(ce.competition.State.Tables) > 0 {
+				noneCloseTableStatuses := []pokertable.TableStateStatus{
+					// playing
+					pokertable.TableStateStatus_TableGameOpened,
+					pokertable.TableStateStatus_TableGamePlaying,
+					pokertable.TableStateStatus_TableGameSettled,
+
+					// close
+					pokertable.TableStateStatus_TableClosed,
+				}
+				// 桌次尚未結束，處理關桌
+				if !funk.Contains(noneCloseTableStatuses, ce.competition.State.Tables[0].State.Status) {
+					if err := ce.tableManagerBackend.CloseTable(ce.competition.State.Tables[0].ID); err != nil {
+						ce.emitErrorEvent("end time auto close -> CloseTable", "", err)
+					}
 				}
 			}
 		}); err != nil {
@@ -730,7 +714,7 @@ func (ce *competitionEngine) PlayerQuit(tableID, playerID string) error {
 	ce.competition.State.Players[playerIdx].ReBuyEndAt = UnsetValue
 	ce.emitPlayerEvent("quit knockout", ce.competition.State.Players[playerIdx])
 
-	if ce.competition.State.BlindState.IsFinalBuyInLevel() {
+	if ce.competition.State.BlindState.IsStopBuyIn() {
 		// 更新賽事排名
 		ce.competition.State.Rankings = append(ce.competition.State.Rankings, &CompetitionRank{
 			PlayerID:   playerID,

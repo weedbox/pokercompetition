@@ -81,12 +81,7 @@ func (ce *competitionEngine) UpdateTable(table *pokertable.Table) {
 		return
 	}
 
-	endStatuses := []CompetitionStateStatus{
-		CompetitionStateStatus_End,
-		CompetitionStateStatus_AutoEnd,
-		CompetitionStateStatus_ForceEnd,
-	}
-	if funk.Contains(endStatuses, ce.competition.State.Status) {
+	if ce.isEndStatus() {
 		fmt.Println("[DEBUG#UpdateTable] status is end, no need to update table. Status:", string(ce.competition.State.Status))
 		return
 	}
@@ -231,14 +226,6 @@ func (ce *competitionEngine) addCompetitionTable(tableSetting TableSetting, play
 		ce.competition.State.Players = append(ce.competition.State.Players, newPlayers...)
 	}
 
-	// init breakingPauseResumeStates
-	ce.breakingPauseResumeStates[table.ID] = make(map[int]bool)
-	for idx, bl := range ce.competition.Meta.Blind.Levels {
-		if bl.Level == -1 {
-			ce.breakingPauseResumeStates[table.ID][idx] = false
-		}
-	}
-
 	ce.emitEvent("[addCompetitionTable]", "")
 
 	return table.ID, nil
@@ -372,7 +359,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 			ce.competition.ID,
 			table.ID,
 			table.State.GameCount,
-			ce.competition.State.BlindState.IsFinalBuyInLevel(),
+			ce.competition.State.BlindState.IsStopBuyIn(),
 			len(zeroChipPlayerIDs),
 			strings.Join(zeroChipPlayerIDs, ","),
 			len(alivePlayerIDs),
@@ -456,7 +443,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 				CompetitionStateStatus_AutoEnd,
 				CompetitionStateStatus_ForceEnd,
 			}
-			if !funk.Contains(endStatuses, ce.competition.State.Status) && ce.competition.State.BlindState.IsFinalBuyInLevel() && len(alivePlayerIDs) == 1 && len(ce.competition.State.Tables) == 1 {
+			if !funk.Contains(endStatuses, ce.competition.State.Status) && ce.competition.State.BlindState.IsStopBuyIn() && len(alivePlayerIDs) == 1 && len(ce.competition.State.Tables) == 1 {
 				ce.CloseCompetition(CompetitionStateStatus_End)
 			}
 		}); err != nil {
@@ -479,6 +466,9 @@ func (ce *competitionEngine) handleBreaking(tableID string, tableIdx int) {
 	}
 	if _, exist := ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex]; !exist {
 		ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] = false
+	} else {
+		fmt.Println("[DEBUG#handleBreaking] already handle breaking & start timer")
+		return
 	}
 
 	// already resume table games from breaking
@@ -493,12 +483,13 @@ func (ce *competitionEngine) handleBreaking(tableID string, tableIdx int) {
 			return
 		}
 
-		endStatus := []CompetitionStateStatus{
+		endStatuses := []CompetitionStateStatus{
 			CompetitionStateStatus_End,
 			CompetitionStateStatus_AutoEnd,
 			CompetitionStateStatus_ForceEnd,
 		}
-		if funk.Contains(endStatus, ce.competition.State.Status) {
+		if funk.Contains(endStatuses, ce.competition.State.Status) {
+			fmt.Println("[DEBUG#handleBreaking] not reopen since competition status is:", ce.competition.State.Status)
 			return
 		}
 
@@ -559,7 +550,7 @@ func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
 	ce.mu.Lock()
 	defer ce.mu.Unlock()
 
-	if ce.competition.State.BlindState.IsFinalBuyInLevel() {
+	if ce.competition.State.BlindState.IsStopBuyIn() {
 		return
 	}
 
@@ -611,14 +602,21 @@ func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
 					fmt.Println("[playerID] is not in the cache")
 					return
 				}
-				if ce.competition.State.Players[playerCache.PlayerIdx].Chips <= 0 {
-					ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_ReBuyWaiting
-					ce.competition.State.Players[playerCache.PlayerIdx].IsReBuying = false
-					ce.competition.State.Players[playerCache.PlayerIdx].ReBuyEndAt = UnsetValue
-					ce.competition.State.Players[playerCache.PlayerIdx].CurrentSeat = UnsetValue
-					ce.emitPlayerEvent("re buy leave", ce.competition.State.Players[playerCache.PlayerIdx])
+
+				if ce.competition.State.Players[playerCache.PlayerIdx].Chips > 0 {
+					return
 				}
 
+				// 玩家已經被淘汰了 (停止買入階段觸發淘汰)
+				if ce.competition.State.Players[playerCache.PlayerIdx].Status == CompetitionPlayerStatus_Knockout {
+					return
+				}
+
+				ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_ReBuyWaiting
+				ce.competition.State.Players[playerCache.PlayerIdx].IsReBuying = false
+				ce.competition.State.Players[playerCache.PlayerIdx].ReBuyEndAt = UnsetValue
+				ce.competition.State.Players[playerCache.PlayerIdx].CurrentSeat = UnsetValue
+				ce.emitPlayerEvent("re buy leave", ce.competition.State.Players[playerCache.PlayerIdx])
 				ce.emitEvent("re buy leave", reBuyPlayerID)
 
 				if err := ce.tableManagerBackend.PlayersLeave(table.ID, []string{reBuyPlayerID}); err != nil {
@@ -753,7 +751,7 @@ func (ce *competitionEngine) shouldCloseCTTable(tableStartAt int64, tableAlivePl
 	}
 
 	tableEndAt := time.Unix(tableStartAt, 0).Add(time.Second * time.Duration(ce.competition.Meta.MaxDuration)).Unix()
-	return time.Now().Unix() > tableEndAt || (ce.competition.State.BlindState.IsFinalBuyInLevel() && tableAlivePlayerCount < ce.competition.Meta.TableMinPlayerCount)
+	return time.Now().Unix() > tableEndAt || (ce.competition.State.BlindState.IsStopBuyIn() && tableAlivePlayerCount < ce.competition.Meta.TableMinPlayerCount)
 }
 
 func (ce *competitionEngine) updateTableBlind(tableID string) {
@@ -761,6 +759,15 @@ func (ce *competitionEngine) updateTableBlind(tableID string) {
 	if err := ce.tableManagerBackend.UpdateBlind(tableID, level, ante, dealer, sb, bb); err != nil {
 		ce.emitErrorEvent("update blind", "", err)
 	}
+}
+
+func (ce *competitionEngine) isEndStatus() bool {
+	endStatuses := []CompetitionStateStatus{
+		CompetitionStateStatus_End,
+		CompetitionStateStatus_AutoEnd,
+		CompetitionStateStatus_ForceEnd,
+	}
+	return funk.Contains(endStatuses, ce.competition.State.Status)
 }
 
 func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
@@ -787,7 +794,7 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 	}
 	ce.blind.ApplyOptions(options)
 	ce.blind.OnBlindStateUpdated(func(bs *pokerblind.BlindState) {
-		if ce.competition.State.Status == CompetitionStateStatus_End {
+		if ce.isEndStatus() {
 			return
 		}
 
@@ -799,15 +806,15 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 		}
 
 		ce.emitCompetitionStateEvent(CompetitionStateEvent_BlindUpdated) // change CurrentLevelIndex
+		ce.emitEvent("Blind CurrentLevelIndex Update", "")
 
 		// 更新賽事狀態: 停止買入
-		if ce.competition.State.BlindState.IsFinalBuyInLevel() {
+		if ce.competition.State.BlindState.IsStopBuyIn() {
 			if ce.competition.State.Status != CompetitionStateStatus_StoppedBuyIn {
 				// 處理晉級
 				ce.initAdvancement()
 
 				ce.competition.State.Status = CompetitionStateStatus_StoppedBuyIn
-				ce.emitEvent("Final BuyIn", "")
 
 				// MTT 在停止買入階段，停止拆併桌機制
 				if ce.competition.Meta.Mode == CompetitionMode_MTT {
@@ -815,7 +822,7 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 				}
 
 				// 淘汰沒資格玩家
-				knockoutPlayerRankings := ce.GetSortedFinalBuyInKnockoutPlayerRankings()
+				knockoutPlayerRankings := ce.GetSortedStopBuyInKnockoutPlayerRankings()
 				for idx, knockoutPlayerID := range knockoutPlayerRankings {
 					playerCache, exist := ce.getPlayerCache(ce.competition.ID, knockoutPlayerID)
 					if !exist {
@@ -823,8 +830,22 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 					}
 
 					ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_Knockout
+					ce.competition.State.Players[playerCache.PlayerIdx].IsReBuying = false
+					ce.competition.State.Players[playerCache.PlayerIdx].ReBuyEndAt = UnsetValue
 					ce.competition.State.Players[playerCache.PlayerIdx].CurrentSeat = UnsetValue
-					ce.emitPlayerEvent("Final BuyIn Knockout Players", ce.competition.State.Players[playerCache.PlayerIdx])
+					ce.emitPlayerEvent("Stopped BuyIn Knockout Players", ce.competition.State.Players[playerCache.PlayerIdx])
+
+					// 玩家離座 (CT only), 因為 MTT 在結算沒籌碼時就已經離開該桌次了
+					if ce.competition.Meta.Mode == CompetitionMode_CT {
+						if len(ce.competition.State.Tables) > 0 {
+							if _, exist := ce.reBuyTimerStates[knockoutPlayerID]; exist {
+								ce.reBuyTimerStates[knockoutPlayerID].Cancel()
+							}
+							if err := ce.tableManagerBackend.PlayersLeave(ce.competition.State.Tables[0].ID, []string{knockoutPlayerID}); err != nil {
+								ce.emitErrorEvent("Stopped BuyIn Knockout Players -> PlayersLeave", knockoutPlayerID, err)
+							}
+						}
+					}
 
 					// 更新賽事排名
 					ce.competition.State.Rankings = append(ce.competition.State.Rankings, &CompetitionRank{
@@ -834,9 +855,16 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 					rank := ce.competition.PlayingPlayerCount() + (len(knockoutPlayerRankings) - idx)
 					ce.emitCompetitionStateFinalPlayerRankEvent(knockoutPlayerID, rank)
 				}
-				ce.emitEvent("Final BuyIn Knockout Players", "")
+
+				ce.emitEvent("Stopped BuyIn Knockout Players", "")
 				ce.emitCompetitionStateEvent(CompetitionStateEvent_KnockoutPlayers)
 				ce.emitCompetitionStateEvent(CompetitionStateEvent_BlindUpdated) // change Status
+
+				if ce.competition.Meta.Mode == CompetitionMode_CT && len(ce.competition.State.Tables) > 0 && len(ce.competition.State.Tables[0].AlivePlayers()) < 2 {
+					if err := ce.tableManagerBackend.CloseTable(ce.competition.State.Tables[0].ID); err != nil {
+						ce.emitErrorEvent("Stopped BuyIn auto close -> CloseTable", "", err)
+					}
+				}
 			}
 		}
 	})
