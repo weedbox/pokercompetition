@@ -417,16 +417,18 @@ func (ce *competitionEngine) StartCompetition() error {
 		}
 	case CompetitionMode_MTT:
 		ce.mu.RLock()
-		defer ce.mu.RUnlock()
 
 		// 拆併桌加入玩家
 		for _, player := range ce.competition.State.Players {
 			err := ce.match.Register(player.PlayerID)
 			if err != nil {
 				ce.emitErrorEvent("MTT StartCompetition Register Player to Match failed", player.PlayerID, err)
+				ce.mu.RUnlock()
 				return err
 			}
 		}
+
+		ce.mu.RUnlock()
 	}
 
 	ce.emitEvent("StartCompetition", "")
@@ -460,21 +462,23 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 	}
 
 	if !isBuyIn {
+		cp := ce.competition.State.Players[playerIdx]
+
 		// validate re-buy player
-		if ce.competition.State.Players[playerIdx].Status == CompetitionPlayerStatus_Knockout {
+		if cp.Status == CompetitionPlayerStatus_Knockout {
 			return ErrCompetitionReBuyRejected
 		}
 
 		// validate re-buy conditions
-		if ce.competition.State.Players[playerIdx].Status != CompetitionPlayerStatus_ReBuyWaiting {
+		if cp.Status != CompetitionPlayerStatus_ReBuyWaiting {
 			return ErrCompetitionReBuyRejected
 		}
 
-		if ce.competition.State.Players[playerIdx].Chips > 0 {
+		if cp.Chips > 0 {
 			return ErrCompetitionReBuyRejected
 		}
 
-		if ce.competition.State.Players[playerIdx].ReBuyTimes >= ce.competition.Meta.ReBuySetting.MaxTime {
+		if cp.ReBuyTimes >= ce.competition.Meta.ReBuySetting.MaxTime {
 			return ErrCompetitionExceedReBuyLimit
 		}
 	} else {
@@ -522,23 +526,24 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 		}
 		ce.reBuyTimerStates[joinPlayer.PlayerID].Cancel()
 
-		ce.competition.State.Players[playerIdx].Status = playerStatus
-		ce.competition.State.Players[playerIdx].Chips = joinPlayer.RedeemChips
-		ce.competition.State.Players[playerIdx].ReBuyTimes++
-		playerCache.ReBuyTimes = ce.competition.State.Players[playerIdx].ReBuyTimes
-		ce.competition.State.Players[playerIdx].IsReBuying = false
-		ce.competition.State.Players[playerIdx].ReBuyEndAt = UnsetValue
-		ce.competition.State.Players[playerIdx].TotalRedeemChips += joinPlayer.RedeemChips
+		cp := ce.competition.State.Players[playerIdx]
+		cp.Status = playerStatus
+		cp.Chips = joinPlayer.RedeemChips
+		cp.ReBuyTimes++
+		playerCache.ReBuyTimes = cp.ReBuyTimes
+		cp.IsReBuying = false
+		cp.ReBuyEndAt = UnsetValue
+		cp.TotalRedeemChips += joinPlayer.RedeemChips
 		if ce.competition.Meta.Mode == CompetitionMode_CT && len(ce.competition.State.Tables) > 0 {
 			playerCache.TableID = ce.competition.State.Tables[0].ID
-			ce.competition.State.Players[playerIdx].CurrentTableID = ce.competition.State.Tables[0].ID
+			cp.CurrentTableID = ce.competition.State.Tables[0].ID
 		}
 		if ce.competition.Meta.Mode == CompetitionMode_MTT {
 			playerCache.TableID = ""
-			ce.competition.State.Players[playerIdx].CurrentTableID = "" // re-buy 時要清空 CurrentTableID 等待重新配桌
+			cp.CurrentTableID = "" // re-buy 時要清空 CurrentTableID 等待重新配桌
 		}
 		ce.emitEvent("PlayerBuyIn -> Re Buy", joinPlayer.PlayerID)
-		ce.emitPlayerEvent("PlayerBuyIn -> Re Buy", ce.competition.State.Players[playerIdx])
+		ce.emitPlayerEvent("PlayerBuyIn -> Re Buy", cp)
 	}
 
 	// 更新統計數據
@@ -593,15 +598,16 @@ func (ce *competitionEngine) PlayerAddon(tableID string, joinPlayer JoinPlayer) 
 		return ErrCompetitionAddonRejected
 	}
 
-	if ce.competition.State.Players[playerIdx].AddonTimes >= ce.competition.Meta.AddonSetting.MaxTime {
+	cp := ce.competition.State.Players[playerIdx]
+	if cp.AddonTimes >= ce.competition.Meta.AddonSetting.MaxTime {
 		return ErrCompetitionExceedAddonLimit
 	}
 
 	// do logic
-	ce.competition.State.Players[playerIdx].CurrentTableID = tableID
-	ce.competition.State.Players[playerIdx].Chips += joinPlayer.RedeemChips
-	ce.competition.State.Players[playerIdx].AddonTimes++
-	ce.competition.State.Players[playerIdx].TotalRedeemChips += joinPlayer.RedeemChips
+	cp.CurrentTableID = tableID
+	cp.Chips += joinPlayer.RedeemChips
+	cp.AddonTimes++
+	cp.TotalRedeemChips += joinPlayer.RedeemChips
 
 	// call tableEngine
 	jp := pokertable.JoinPlayer{
@@ -613,7 +619,7 @@ func (ce *competitionEngine) PlayerAddon(tableID string, joinPlayer JoinPlayer) 
 	}
 
 	ce.emitEvent("PlayerAddon", joinPlayer.PlayerID)
-	ce.emitPlayerEvent("PlayerAddon", ce.competition.State.Players[playerIdx])
+	ce.emitPlayerEvent("PlayerAddon", cp)
 	return nil
 }
 
@@ -709,10 +715,11 @@ func (ce *competitionEngine) PlayerQuit(tableID, playerID string) error {
 	}
 	ce.reBuyTimerStates[playerID].Cancel()
 
-	ce.competition.State.Players[playerIdx].Status = CompetitionPlayerStatus_ReBuyWaiting
-	ce.competition.State.Players[playerIdx].IsReBuying = false
-	ce.competition.State.Players[playerIdx].ReBuyEndAt = UnsetValue
-	ce.emitPlayerEvent("quit knockout", ce.competition.State.Players[playerIdx])
+	cp := ce.competition.State.Players[playerIdx]
+	cp.Status = CompetitionPlayerStatus_ReBuyWaiting
+	cp.IsReBuying = false
+	cp.ReBuyEndAt = UnsetValue
+	ce.emitPlayerEvent("quit knockout", cp)
 
 	if ce.competition.State.BlindState.IsStopBuyIn() {
 		// 更新賽事排名
@@ -787,9 +794,11 @@ func (ce *competitionEngine) MatchCloseTable(tableID string) error {
 			continue
 		}
 		playerCache.TableID = ""
-		ce.competition.State.Players[playerCache.PlayerIdx].CurrentTableID = ""
-		ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_WaitingTableBalancing
-		ce.emitPlayerEvent("[MatchCloseTable] table is closed, wait for allocate to new table", ce.competition.State.Players[playerCache.PlayerIdx])
+
+		cp := ce.competition.State.Players[playerCache.PlayerIdx]
+		cp.CurrentTableID = ""
+		cp.Status = CompetitionPlayerStatus_WaitingTableBalancing
+		ce.emitPlayerEvent("[MatchCloseTable] table is closed, wait for allocate to new table", cp)
 	}
 	ce.emitEvent("[MatchCloseTable]", "")
 
@@ -818,8 +827,9 @@ func (ce *competitionEngine) MatchTableReservePlayer(tableID, playerID string, s
 		return ErrCompetitionPlayerNotFound
 	}
 
-	if ce.competition.State.Players[playerCache.PlayerIdx].Chips <= 0 {
-		fmt.Printf("[DEBUG#MTT#MatchTableReservePlayer#ErrMatchTableReservePlayerFailed] competition (%s), table (%s), seat (%d), player (%s), chips (%d)\n", ce.competition.ID, tableID, seat, playerID, ce.competition.State.Players[playerCache.PlayerIdx].Chips)
+	cp := ce.competition.State.Players[playerCache.PlayerIdx]
+	if cp.Chips <= 0 {
+		fmt.Printf("[DEBUG#MTT#MatchTableReservePlayer#ErrMatchTableReservePlayerFailed] competition (%s), table (%s), seat (%d), player (%s), chips (%d)\n", ce.competition.ID, tableID, seat, playerID, cp.Chips)
 		return ErrMatchTableReservePlayerFailed
 	}
 
@@ -837,15 +847,15 @@ func (ce *competitionEngine) MatchTableReservePlayer(tableID, playerID string, s
 	// 桌次已開打，直接將玩家丟到桌次中
 	// update cache & competition players
 	playerCache.TableID = tableID
-	ce.competition.State.Players[playerCache.PlayerIdx].CurrentTableID = tableID
-	ce.competition.State.Players[playerCache.PlayerIdx].Status = CompetitionPlayerStatus_Playing
-	ce.competition.State.Players[playerCache.PlayerIdx].CurrentSeat = seat
-	ce.emitPlayerEvent("[MatchTableReservePlayer] reserve table", ce.competition.State.Players[playerCache.PlayerIdx])
-	ce.emitEvent("[MatchTableReservePlayer] reserve table", ce.competition.State.Players[playerCache.PlayerIdx].PlayerID)
+	cp.CurrentTableID = tableID
+	cp.Status = CompetitionPlayerStatus_Playing
+	cp.CurrentSeat = seat
+	ce.emitPlayerEvent("[MatchTableReservePlayer] reserve table", cp)
+	ce.emitEvent("[MatchTableReservePlayer] reserve table", cp.PlayerID)
 
 	jp := pokertable.JoinPlayer{
 		PlayerID:    playerID,
-		RedeemChips: ce.competition.State.Players[playerCache.PlayerIdx].Chips,
+		RedeemChips: cp.Chips,
 		Seat:        seat,
 	}
 
@@ -873,22 +883,22 @@ func (ce *competitionEngine) MatchTableReservePlayerDone(tableID string) error {
 
 	joinPlayers := make([]pokertable.JoinPlayer, 0)
 	for playerIdx, seat := range targetPlayerIndexes {
-		player := ce.competition.State.Players[playerIdx]
-		playerCache, exist := ce.getPlayerCache(ce.competition.ID, player.PlayerID)
+		cp := ce.competition.State.Players[playerIdx]
+		playerCache, exist := ce.getPlayerCache(ce.competition.ID, cp.PlayerID)
 		if !exist {
 			return ErrCompetitionPlayerNotFound
 		}
 
 		// update cache & competition players
 		playerCache.TableID = tableID
-		ce.competition.State.Players[playerIdx].CurrentTableID = tableID
-		ce.competition.State.Players[playerIdx].Status = CompetitionPlayerStatus_Playing
-		ce.competition.State.Players[playerCache.PlayerIdx].CurrentSeat = seat
-		ce.emitPlayerEvent("[MatchTableReservePlayer] wait balance table", ce.competition.State.Players[playerCache.PlayerIdx])
+		cp.CurrentTableID = tableID
+		cp.Status = CompetitionPlayerStatus_Playing
+		cp.CurrentSeat = seat
+		ce.emitPlayerEvent("[MatchTableReservePlayer] wait balance table", cp)
 
 		jp := pokertable.JoinPlayer{
-			PlayerID:    player.PlayerID,
-			RedeemChips: player.Chips,
+			PlayerID:    cp.PlayerID,
+			RedeemChips: cp.Chips,
 			Seat:        seat,
 		}
 		joinPlayers = append(joinPlayers, jp)
