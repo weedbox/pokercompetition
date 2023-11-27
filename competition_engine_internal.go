@@ -922,7 +922,7 @@ func (ce *competitionEngine) initAdvancement() {
 		CompetitionAdvanceRule_PlayerCount,
 		CompetitionAdvanceRule_BlindLevel,
 	}
-	if funk.Contains(validAdvanceRules, ce.competition.Meta.AdvanceSetting.Rule) {
+	if !funk.Contains(validAdvanceRules, ce.competition.Meta.AdvanceSetting.Rule) {
 		return
 	}
 
