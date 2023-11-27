@@ -797,7 +797,11 @@ func (ce *competitionEngine) MatchCloseTable(tableID string) error {
 
 		cp := ce.competition.State.Players[playerCache.PlayerIdx]
 		cp.CurrentTableID = ""
-		cp.Status = CompetitionPlayerStatus_WaitingTableBalancing
+
+		// 只有有籌碼玩家才會改變狀態
+		if cp.Chips > 0 {
+			cp.Status = CompetitionPlayerStatus_WaitingTableBalancing
+		}
 		ce.emitPlayerEvent("[MatchCloseTable] table is closed, wait for allocate to new table", cp)
 	}
 	ce.emitEvent("[MatchCloseTable]", "")
