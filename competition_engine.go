@@ -17,6 +17,7 @@ import (
 
 var (
 	ErrCompetitionInvalidCreateSetting            = errors.New("competition: invalid create competition setting")
+	ErrCompetitionStartRejected                   = errors.New("competition: already started")
 	ErrCompetitionUpdateBlindInitialLevelRejected = errors.New("competition: not allowed to update blind initial level")
 	ErrCompetitionLeaveRejected                   = errors.New("competition: not allowed to leave")
 	ErrCompetitionRefundRejected                  = errors.New("competition: not allowed to refund")
@@ -56,7 +57,7 @@ type CompetitionEngine interface {
 	CreateCompetition(competitionSetting CompetitionSetting) (*Competition, error) // 建立賽事
 	UpdateCompetitionBlindInitialLevel(level int) error                            // 更新賽事盲注初始等級
 	CloseCompetition(endStatus CompetitionStateStatus) error                       // 關閉賽事
-	StartCompetition() error                                                       // 開始賽事
+	StartCompetition() (int64, error)                                              // 開始賽事
 
 	// Player Operations
 	PlayerBuyIn(joinPlayer JoinPlayer) error                 // 玩家報名或補碼
@@ -347,7 +348,11 @@ func (ce *competitionEngine) CloseCompetition(endStatus CompetitionStateStatus) 
 StartCompetition 開賽
   - 適用時機: MTT 手動開賽、MTT 自動開賽、CT 開賽
 */
-func (ce *competitionEngine) StartCompetition() error {
+func (ce *competitionEngine) StartCompetition() (int64, error) {
+	if ce.competition.State.Status != CompetitionStateStatus_Registering {
+		return ce.competition.State.StartAt, ErrCompetitionStartRejected
+	}
+
 	// start the competition
 	if ce.competition.Meta.Blind.FinalBuyInLevelIndex <= 0 {
 		ce.competition.State.Status = CompetitionStateStatus_StoppedBuyIn
@@ -356,9 +361,8 @@ func (ce *competitionEngine) StartCompetition() error {
 	}
 
 	// update start & end at
-	if ce.competition.State.StartAt <= 0 {
-		ce.competition.State.StartAt = time.Now().Unix()
-	}
+	ce.competition.State.StartAt = time.Now().Unix()
+
 	// TODO: decide mtt 是否需要設定 EndAt?
 	if ce.competition.Meta.Mode == CompetitionMode_CT {
 		ce.competition.State.EndAt = ce.competition.State.StartAt + int64((time.Duration(ce.competition.Meta.MaxDuration) * time.Second).Seconds())
@@ -370,7 +374,7 @@ func (ce *competitionEngine) StartCompetition() error {
 	bs, err := ce.blind.Start()
 	if err != nil {
 		ce.emitErrorEvent("Start Blind Error", "", err)
-		return err
+		return 0, err
 	}
 	ce.competition.State.BlindState.CurrentLevelIndex = bs.Status.CurrentLevelIndex
 	ce.competition.State.BlindState.FinalBuyInLevelIndex = bs.Status.FinalBuyInLevelIndex
@@ -413,7 +417,7 @@ func (ce *competitionEngine) StartCompetition() error {
 				}
 			}
 		}); err != nil {
-			return err
+			return ce.competition.State.StartAt, err
 		}
 	case CompetitionMode_MTT:
 		ce.mu.RLock()
@@ -424,7 +428,7 @@ func (ce *competitionEngine) StartCompetition() error {
 			if err != nil {
 				ce.emitErrorEvent("MTT StartCompetition Register Player to Match failed", player.PlayerID, err)
 				ce.mu.RUnlock()
-				return err
+				return ce.competition.State.StartAt, err
 			}
 		}
 
@@ -433,7 +437,7 @@ func (ce *competitionEngine) StartCompetition() error {
 
 	ce.emitEvent("StartCompetition", "")
 	ce.emitCompetitionStateEvent(CompetitionStateEvent_Started)
-	return nil
+	return ce.competition.State.StartAt, nil
 }
 
 func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {

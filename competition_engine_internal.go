@@ -118,7 +118,7 @@ func (ce *competitionEngine) handleCompetitionTableCreated(table *pokertable.Tab
 		}
 
 		// auto start game if condition is reached
-		if err := ce.StartCompetition(); err != nil {
+		if _, err := ce.StartCompetition(); err != nil {
 			ce.emitErrorEvent("CT Auto StartCompetition", "", err)
 			return
 		}

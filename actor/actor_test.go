@@ -469,7 +469,7 @@ func TestActor_MTT(t *testing.T) {
 	}
 
 	// 手動開賽
-	err = manager.StartCompetition(competition.ID)
+	_, err = manager.StartCompetition(competition.ID)
 	assert.Nil(t, err, "start mtt competition failed")
 	wg.Wait()
 }

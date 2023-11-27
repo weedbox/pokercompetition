@@ -22,7 +22,7 @@ type Manager interface {
 	CreateCompetition(competitionSetting CompetitionSetting, options *CompetitionEngineOptions) (*Competition, error)
 	UpdateCompetitionBlindInitialLevel(competitionID string, level int) error
 	CloseCompetition(competitionID string, endStatus CompetitionStateStatus) error
-	StartCompetition(competitionID string) error
+	StartCompetition(competitionID string) (int64, error)
 
 	// Table Actions
 	GetTableEngineOptions() *pokertable.TableEngineOptions
@@ -113,10 +113,10 @@ func (m *manager) CloseCompetition(competitionID string, endStatus CompetitionSt
 	return nil
 }
 
-func (m *manager) StartCompetition(competitionID string) error {
+func (m *manager) StartCompetition(competitionID string) (int64, error) {
 	competitionEngine, err := m.GetCompetitionEngine(competitionID)
 	if err != nil {
-		return ErrManagerCompetitionNotFound
+		return 0, ErrManagerCompetitionNotFound
 	}
 
 	return competitionEngine.StartCompetition()
