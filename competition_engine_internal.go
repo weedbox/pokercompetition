@@ -433,18 +433,20 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 		// 中場休息處理
 		ce.handleBreaking(table.ID, tableIdx)
 
+		// 判斷是否要關閉賽事
+		endStatuses := []CompetitionStateStatus{
+			CompetitionStateStatus_End,
+			CompetitionStateStatus_AutoEnd,
+			CompetitionStateStatus_ForceEnd,
+		}
+		shouldCloseCompetition := !funk.Contains(endStatuses, ce.competition.State.Status) && ce.competition.State.BlindState.IsStopBuyIn() && len(alivePlayerIDs) == 1 && len(ce.competition.State.Tables) == 1
+
 		if err := timebank.NewTimeBank().NewTask(time.Second*3, func(isCancelled bool) {
 			if isCancelled {
 				return
 			}
 
-			// 結束賽事處理
-			endStatuses := []CompetitionStateStatus{
-				CompetitionStateStatus_End,
-				CompetitionStateStatus_AutoEnd,
-				CompetitionStateStatus_ForceEnd,
-			}
-			if !funk.Contains(endStatuses, ce.competition.State.Status) && ce.competition.State.BlindState.IsStopBuyIn() && len(alivePlayerIDs) == 1 && len(ce.competition.State.Tables) == 1 {
+			if shouldCloseCompetition {
 				ce.CloseCompetition(CompetitionStateStatus_End)
 			}
 		}); err != nil {
