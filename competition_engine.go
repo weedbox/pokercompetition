@@ -77,7 +77,7 @@ type competitionEngine struct {
 	mu                                  sync.RWMutex
 	competition                         *Competition
 	playerCaches                        sync.Map // key: <competitionID.playerID>, value: PlayerCache
-	gameSettledRecords                  sync.Map // key: <gameID>, value: IsSettled
+	gameSettledRecords                  sync.Map // key: <tableID.game_count>, value: IsSettled
 	tableOptions                        *pokertable.TableEngineOptions
 	tableManagerBackend                 TableManagerBackend
 	onCompetitionUpdated                func(competition *Competition)

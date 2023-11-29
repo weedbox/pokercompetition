@@ -300,10 +300,14 @@ settleCompetitionTable 桌次結算
   - 適用時機: 每手結束
 */
 func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tableIdx int) {
-	if isGameSettled, ok := ce.gameSettledRecords.Load(table.State.GameState.GameID); ok && isGameSettled.(bool) {
+	gameSettledRecordID := fmt.Sprintf("%s.%d", table.ID, table.State.GameCount)
+	ce.mu.Lock()
+	if isGameSettled, ok := ce.gameSettledRecords.Load(gameSettledRecordID); ok && isGameSettled.(bool) {
+		ce.mu.Unlock()
 		return
 	}
-	ce.gameSettledRecords.Store(table.State.GameState.GameID, true)
+	ce.gameSettledRecords.Store(gameSettledRecordID, true)
+	ce.mu.Unlock()
 
 	// 更新玩家相關賽事數據
 	ce.updatePlayerCompetitionTaleRecords(table)
