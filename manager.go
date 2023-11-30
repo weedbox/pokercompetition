@@ -58,6 +58,11 @@ func NewManager(tableManagerBackend TableManagerBackend, qm match.QueueManager) 
 }
 
 func (m *manager) Reset() {
+	m.competitionEngines.Range(func(key, value interface{}) bool {
+		_ = value.(CompetitionEngine).CloseCompetition(CompetitionStateStatus_ForceEnd)
+		return true
+	})
+
 	m.competitionEngines = sync.Map{}
 }
 
