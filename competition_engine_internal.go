@@ -438,12 +438,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 		ce.handleBreaking(table.ID, tableIdx)
 
 		// 判斷是否要關閉賽事
-		endStatuses := []CompetitionStateStatus{
-			CompetitionStateStatus_End,
-			CompetitionStateStatus_AutoEnd,
-			CompetitionStateStatus_ForceEnd,
-		}
-		shouldCloseCompetition := !funk.Contains(endStatuses, ce.competition.State.Status) && ce.competition.State.BlindState.IsStopBuyIn() && len(alivePlayerIDs) == 1 && len(ce.competition.State.Tables) == 1
+		shouldCloseCompetition := !ce.isEndStatus() && ce.competition.State.BlindState.IsStopBuyIn() && len(alivePlayerIDs) == 1 && len(ce.competition.State.Tables) == 1
 
 		if err := timebank.NewTimeBank().NewTask(time.Second*3, func(isCancelled bool) {
 			if isCancelled {
@@ -490,12 +485,7 @@ func (ce *competitionEngine) handleBreaking(tableID string, tableIdx int) {
 			return
 		}
 
-		endStatuses := []CompetitionStateStatus{
-			CompetitionStateStatus_End,
-			CompetitionStateStatus_AutoEnd,
-			CompetitionStateStatus_ForceEnd,
-		}
-		if funk.Contains(endStatuses, ce.competition.State.Status) {
+		if ce.isEndStatus() {
 			fmt.Println("[DEBUG#handleBreaking] not reopen since competition status is:", ce.competition.State.Status)
 			return
 		}
@@ -871,13 +861,28 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 					ce.emitCompetitionStateFinalPlayerRankEvent(knockoutPlayerID, rank)
 				}
 
+				// 事件通知
 				ce.emitEvent("Stopped BuyIn Knockout Players", "")
 				ce.emitCompetitionStateEvent(CompetitionStateEvent_KnockoutPlayers)
 				ce.emitCompetitionStateEvent(CompetitionStateEvent_BlindUpdated) // change Status
 
-				if ce.competition.Meta.Mode == CompetitionMode_CT && len(ce.competition.State.Tables) > 0 && len(ce.competition.State.Tables[0].AlivePlayers()) < 2 {
-					if err := ce.tableManagerBackend.CloseTable(ce.competition.State.Tables[0].ID); err != nil {
-						ce.emitErrorEvent("Stopped BuyIn auto close -> CloseTable", "", err)
+				// 處理結束賽事
+				tableEndConditions := len(ce.competition.State.Tables) == 0 || (len(ce.competition.State.Tables) == 1 && len(ce.competition.State.Tables[0].AlivePlayers()) < 2)
+				shouldCloseCompetition := !ce.isEndStatus() && tableEndConditions
+				switch ce.competition.Meta.Mode {
+				case CompetitionMode_CT:
+					fmt.Println("Stopped BuyIn auto close -> CT CloseTable")
+					if shouldCloseCompetition {
+						if err := ce.tableManagerBackend.CloseTable(ce.competition.State.Tables[0].ID); err != nil {
+							ce.emitErrorEvent("Stopped BuyIn auto close -> CT CloseTable", "", err)
+						}
+					}
+				case CompetitionMode_MTT:
+					if shouldCloseCompetition {
+						fmt.Println("Stopped BuyIn auto close -> MTT CloseCompetition")
+						if err := ce.CloseCompetition(CompetitionStateStatus_End); err != nil {
+							ce.emitErrorEvent("Stopped BuyIn auto close -> MTT CloseCompetition", "", err)
+						}
 					}
 				}
 			}

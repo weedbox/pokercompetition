@@ -252,22 +252,6 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 			if _, err := ce.addCompetitionTable(tableSetting, CompetitionPlayerStatus_Playing); err != nil {
 				return nil, err
 			}
-
-			// AutoEndTable (When Disable Time is reached)
-			disableAutoCloseTime := time.Unix(ce.competition.State.DisableAt, 0)
-			if err := timebank.NewTimeBank().NewTaskWithDeadline(disableAutoCloseTime, func(isCancelled bool) {
-				if isCancelled {
-					return
-				}
-
-				if ce.competition.State.Status == CompetitionStateStatus_Registering {
-					if len(ce.competition.State.Players) < ce.competition.Meta.MinPlayerCount {
-						ce.CloseCompetition(CompetitionStateStatus_AutoEnd)
-					}
-				}
-			}); err != nil {
-				return nil, err
-			}
 		}
 	case CompetitionMode_MTT:
 		// Table backend of match
@@ -277,8 +261,9 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 
 		if ce.match == nil {
 			// Initializing match
-			opts := match.NewOptions()
+			opts := match.NewOptions(ce.competition.ID)
 			defaultOpts := competition.NewOptions()
+			defaultOpts.TableAllocationPeriod = 3
 			opts.WaitingPeriod = defaultOpts.TableAllocationPeriod
 			opts.MaxTables = -1
 			opts.MaxSeats = defaultOpts.Table.MaxSeats
@@ -318,6 +303,22 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 		}
 	}
 
+	// AutoEnd (When Disable Time is reached)
+	disableAutoCloseTime := time.Unix(ce.competition.State.DisableAt, 0)
+	if err := timebank.NewTimeBank().NewTaskWithDeadline(disableAutoCloseTime, func(isCancelled bool) {
+		if isCancelled {
+			return
+		}
+
+		if ce.competition.State.Status == CompetitionStateStatus_Registering {
+			if len(ce.competition.State.Players) < ce.competition.Meta.MinPlayerCount {
+				ce.CloseCompetition(CompetitionStateStatus_AutoEnd)
+			}
+		}
+	}); err != nil {
+		return nil, err
+	}
+
 	ce.emitEvent("CreateCompetition", "")
 	return ce.competition, nil
 }
@@ -347,6 +348,7 @@ func (ce *competitionEngine) CloseCompetition(endStatus CompetitionStateStatus) 
 /*
 StartCompetition 開賽
   - 適用時機: MTT 手動開賽、MTT 自動開賽、CT 開賽
+    TODO: 未達開賽人數時，不啟動盲注
 */
 func (ce *competitionEngine) StartCompetition() (int64, error) {
 	if ce.competition.State.Status != CompetitionStateStatus_Registering {
@@ -390,12 +392,7 @@ func (ce *competitionEngine) StartCompetition() (int64, error) {
 			}
 
 			// 賽事已結算，不再處理
-			endStatuses := []CompetitionStateStatus{
-				CompetitionStateStatus_End,
-				CompetitionStateStatus_AutoEnd,
-				CompetitionStateStatus_ForceEnd,
-			}
-			if funk.Contains(endStatuses, ce.competition.State.Status) {
+			if ce.isEndStatus() {
 				return
 			}
 
@@ -912,7 +909,7 @@ func (ce *competitionEngine) MatchTableReservePlayerDone(tableID string) error {
 		joinPlayers = append(joinPlayers, jp)
 	}
 
-	ce.emitEvent("[MatchTableReservePlayer] players batch reserve table", "")
+	ce.emitEvent("[MatchTableReservePlayerDone] players batch reserve table", "")
 
 	// call tableEngine
 	if err := ce.tableManagerBackend.PlayersBatchReserve(tableID, joinPlayers); err != nil {
