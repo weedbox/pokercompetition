@@ -72,6 +72,7 @@ func (ce *competitionEngine) UpdateReserveTablePlayerState(tableID string, playe
 	cp.CurrentTableID = tableID
 	cp.Status = CompetitionPlayerStatus_Playing
 	ce.emitPlayerEvent("[UpdateReserveTablePlayerState] player table seat updated", cp)
+	ce.emitEvent("[UpdateReserveTablePlayerState] player table reserved", cp.PlayerID)
 }
 
 func (ce *competitionEngine) UpdateTable(table *pokertable.Table) {

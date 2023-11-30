@@ -856,7 +856,6 @@ func (ce *competitionEngine) MatchTableReservePlayer(tableID, playerID string, s
 	cp.Status = CompetitionPlayerStatus_Playing
 	cp.CurrentSeat = seat
 	ce.emitPlayerEvent("[MatchTableReservePlayer] reserve table", cp)
-	ce.emitEvent("[MatchTableReservePlayer] reserve table", cp.PlayerID)
 
 	jp := pokertable.JoinPlayer{
 		PlayerID:    playerID,
