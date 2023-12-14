@@ -395,6 +395,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 
 			// 更新晉級條件 (停買後更新)
 			if ce.competition.State.AdvanceState.Status == CompetitionAdvanceStatus_Updating {
+				// 晉級計算
 				ce.competition.State.AdvanceState.TotalTables = len(ce.competition.State.Tables)
 				shouldAdvancePauseTableGame := false
 
@@ -406,7 +407,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 				case CompetitionAdvanceRule_PlayerCount:
 					possibleAdvancePlayerCount := ce.competition.PlayingPlayerCount()
 					finalAdvancePlayerCount := ce.competition.Meta.AdvanceSetting.PlayerCount
-					if possibleAdvancePlayerCount <= finalAdvancePlayerCount {
+					if possibleAdvancePlayerCount < finalAdvancePlayerCount {
 						shouldAdvancePauseTableGame = true
 					}
 				}
@@ -417,61 +418,59 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 					} else {
 						ce.competition.State.AdvanceState.UpdatedTables++
 						ce.competition.State.AdvanceState.UpdatedTableIDs = append(ce.competition.State.AdvanceState.UpdatedTableIDs, table.ID)
+
+						// 晉級條件達成: 結束賽事
 						if ce.competition.State.AdvanceState.TotalTables == ce.competition.State.AdvanceState.UpdatedTables {
 							ce.competition.State.AdvanceState.Status = CompetitionAdvanceStatus_End
+							if err := timebank.NewTimeBank().NewTask(time.Second*3, func(isCancelled bool) {
+								if isCancelled {
+									return
+								}
+
+								// 結束賽事處理
+								ce.CloseCompetition(CompetitionStateStatus_End)
+							}); err != nil {
+								ce.emitErrorEvent("error next stage after settle competition table", "", err)
+							}
+						} else {
+							// 晉級條件未達成: 賽事繼續，更新事件
+							ce.emitEvent(fmt.Sprintf("update advancement. status: %s", ce.competition.State.AdvanceState.Status), "")
 						}
-
-						ce.emitEvent(fmt.Sprintf("update advancement. status: %s", ce.competition.State.AdvanceState.Status), "")
 					}
-					return nil
 				}
-			}
+			} else {
+				// 無晉級計算
+				// 拆併桌更新桌次狀態
+				// Preparing seat changes
+				if table.State.SeatChanges != nil {
+					sc := match.NewSeatChanges()
+					sc.Dealer = table.State.SeatChanges.NewDealer
+					sc.SB = table.State.SeatChanges.NewSB
+					sc.BB = table.State.SeatChanges.NewBB
+					sc.Seats = leftPlayerSeats
+					if err := ce.matchTableBackend.UpdateTable(table.ID, sc); err != nil {
+						ce.emitErrorEvent(fmt.Sprintf("[%s][%d] MTT Match Update Table SeatChanges", table.ID, table.State.GameCount), "", err)
+					}
+				} else {
+					ce.emitErrorEvent(fmt.Sprintf("[c: %s][t: %s] MTT Match Update Table SeatChanges is nil", ce.competition.ID, table.ID), "", errors.New("nil seat change state is not allowed when settling mtt table"))
+				}
 
-			if ce.competition.State.AdvanceState.Status == CompetitionAdvanceStatus_End {
+				// 中場休息處理
+				ce.handleBreaking(table.ID, tableIdx)
+
+				// 判斷是否要關閉賽事
+				shouldCloseCompetition := !ce.isEndStatus() && ce.competition.State.BlindState.IsStopBuyIn() && len(alivePlayerIDs) == 1 && len(ce.competition.State.Tables) == 1
 				if err := timebank.NewTimeBank().NewTask(time.Second*3, func(isCancelled bool) {
 					if isCancelled {
 						return
 					}
 
-					// 結束賽事處理
-					ce.CloseCompetition(CompetitionStateStatus_End)
+					if shouldCloseCompetition {
+						ce.CloseCompetition(CompetitionStateStatus_End)
+					}
 				}); err != nil {
 					ce.emitErrorEvent("error next stage after settle competition table", "", err)
 				}
-				return nil
-			}
-
-			// 拆併桌更新桌次狀態
-			// Preparing seat changes
-			if table.State.SeatChanges != nil {
-				sc := match.NewSeatChanges()
-				sc.Dealer = table.State.SeatChanges.NewDealer
-				sc.SB = table.State.SeatChanges.NewSB
-				sc.BB = table.State.SeatChanges.NewBB
-				sc.Seats = leftPlayerSeats
-				if err := ce.matchTableBackend.UpdateTable(table.ID, sc); err != nil {
-					ce.emitErrorEvent(fmt.Sprintf("[%s][%d] MTT Match Update Table SeatChanges", table.ID, table.State.GameCount), "", err)
-				}
-			} else {
-				ce.emitErrorEvent(fmt.Sprintf("[c: %s][t: %s] MTT Match Update Table SeatChanges is nil", ce.competition.ID, table.ID), "", errors.New("nil seat change state is not allowed when settling mtt table"))
-			}
-
-			// 中場休息處理
-			ce.handleBreaking(table.ID, tableIdx)
-
-			// 判斷是否要關閉賽事
-			shouldCloseCompetition := !ce.isEndStatus() && ce.competition.State.BlindState.IsStopBuyIn() && len(alivePlayerIDs) == 1 && len(ce.competition.State.Tables) == 1
-
-			if err := timebank.NewTimeBank().NewTask(time.Second*3, func(isCancelled bool) {
-				if isCancelled {
-					return
-				}
-
-				if shouldCloseCompetition {
-					ce.CloseCompetition(CompetitionStateStatus_End)
-				}
-			}); err != nil {
-				ce.emitErrorEvent("error next stage after settle competition table", "", err)
 			}
 		}
 
