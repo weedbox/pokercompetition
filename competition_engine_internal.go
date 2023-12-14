@@ -404,9 +404,9 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 						shouldAdvancePauseTableGame = true
 					}
 				case CompetitionAdvanceRule_PlayerCount:
-					possibleAdvancePlayerCount := ce.competition.PlayingPlayerCount() + len(ce.competition.State.Rankings)
+					possibleAdvancePlayerCount := ce.competition.PlayingPlayerCount()
 					finalAdvancePlayerCount := ce.competition.Meta.AdvanceSetting.PlayerCount
-					if possibleAdvancePlayerCount >= finalAdvancePlayerCount {
+					if possibleAdvancePlayerCount <= finalAdvancePlayerCount {
 						shouldAdvancePauseTableGame = true
 					}
 				}
