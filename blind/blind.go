@@ -123,11 +123,17 @@ func (b *blind) Start() (*BlindState, error) {
 		} else {
 			b.bs.Status.LevelEndAts[i] = b.bs.Status.LevelEndAts[i-1]
 		}
-		blindPassedSeconds := int64(b.bs.Meta.Levels[i].Duration)
-		b.bs.Status.LevelEndAts[i] += blindPassedSeconds
 
-		// update blind to all tables
-		go b.updateLevel(b.bs.Status.LevelEndAts[i])
+		if b.bs.Meta.Levels[i].Duration == -1 {
+			// unlimited duration
+			b.bs.Status.LevelEndAts[i] = int64(b.bs.Meta.Levels[i].Duration)
+		} else {
+			blindPassedSeconds := int64(b.bs.Meta.Levels[i].Duration)
+			b.bs.Status.LevelEndAts[i] += blindPassedSeconds
+
+			// update blind to all tables
+			go b.updateLevel(b.bs.Status.LevelEndAts[i])
+		}
 	}
 
 	return b.bs, nil

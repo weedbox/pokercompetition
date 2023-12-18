@@ -1,5 +1,6 @@
 package pokercompetition
 
 const (
-	UnsetValue = -1
+	UnsetValue       = -1
+	NoStopBuyInIndex = -2
 )

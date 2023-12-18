@@ -31,6 +31,7 @@ const (
 	CompetitionPlayerStatus_Playing               CompetitionPlayerStatus = "playing"                 // 比賽中
 	CompetitionPlayerStatus_ReBuyWaiting          CompetitionPlayerStatus = "re_buy_waiting"          // 等待補碼中 (已不再桌次內)
 	CompetitionPlayerStatus_Knockout              CompetitionPlayerStatus = "knockout"                // 已淘汰
+	CompetitionPlayerStatus_CashLeaving           CompetitionPlayerStatus = "cash_leaving"            // 現金桌離開中 (結算時就會離開)
 
 	// CompetitionMode
 	CompetitionMode_CT   CompetitionMode = "ct"   // 倒數錦標賽
@@ -249,9 +250,16 @@ func (c Competition) IsBreaking() bool {
 
 // BlindState Getters
 func (bs BlindState) IsStopBuyIn() bool {
+	// NoStopBuyInIndex 代表永遠都是延遲買入階段
+	if bs.FinalBuyInLevelIndex == NoStopBuyInIndex {
+		return false
+	}
+
 	// 沒有預設 FinalBuyInLevelIndex 代表不能補碼，永遠都是停止買入階段
 	if bs.FinalBuyInLevelIndex == UnsetValue {
 		return true
 	}
+
+	// 當前盲注等級索引值大於 FinalBuyInLevelIndex 代表停止買入階段
 	return bs.CurrentLevelIndex > bs.FinalBuyInLevelIndex
 }

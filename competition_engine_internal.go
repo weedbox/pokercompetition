@@ -149,6 +149,23 @@ func (ce *competitionEngine) handleCompetitionTableCreated(table *pokertable.Tab
 			ce.emitErrorEvent("CT Auto StartTableGame", "", err)
 			return
 		}
+	case CompetitionMode_Cash:
+		if !ce.canStartCash() {
+			return
+		}
+
+		// auto start game if condition is reached
+		if _, err := ce.StartCompetition(); err != nil {
+			ce.emitErrorEvent("CT Auto StartCompetition", "", err)
+			return
+		}
+
+		ce.updateTableBlind(table.ID)
+
+		if err := ce.tableManagerBackend.StartTableGame(table.ID); err != nil {
+			ce.emitErrorEvent("Cash Auto StartTableGame", "", err)
+			return
+		}
 	}
 }
 
@@ -360,9 +377,52 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 			// 結束桌
 			if ce.shouldCloseCTTable(table.State.StartAt, len(table.AlivePlayers())) {
 				if err := ce.tableManagerBackend.CloseTable(table.ID); err != nil {
-					ce.emitErrorEvent("Table Settlement Knockout Players -> CloseTable", "", err)
+					ce.emitErrorEvent("Table Settlement -> Close CT Table", "", err)
 				}
 			}
+
+		case CompetitionMode_Cash:
+			leavePlayerIDs := make([]string, 0)
+			leavePlayerIndexes := make(map[string]int)
+			for idx, cp := range ce.competition.State.Players {
+				if cp.Status == CompetitionPlayerStatus_CashLeaving {
+					leavePlayerIDs = append(leavePlayerIDs, cp.PlayerID)
+					leavePlayerIndexes[cp.PlayerID] = idx
+				}
+			}
+
+			// TableEngine Player Leave
+			if len(leavePlayerIDs) > 0 {
+				if err := ce.tableManagerBackend.PlayersLeave(table.ID, leavePlayerIDs); err != nil {
+					ce.emitErrorEvent("Table Settlement Cash Leave Players -> PlayersLeave", strings.Join(leavePlayerIDs, ","), err)
+				}
+
+				for _, leavePlayerID := range leavePlayerIDs {
+					if playerIdx, exist := leavePlayerIndexes[leavePlayerID]; exist {
+						if _, exist := ce.reBuyTimerStates[leavePlayerID]; exist {
+							ce.reBuyTimerStates[leavePlayerID].Cancel()
+						}
+
+						ce.onCompetitionPlayerCashOut(ce.competition.ID, ce.competition.State.Players[playerIdx])
+						ce.deletePlayer(playerIdx)
+						ce.deletePlayerCache(ce.competition.ID, leavePlayerID)
+						delete(ce.reBuyTimerStates, leavePlayerID)
+					}
+				}
+
+				ce.emitCompetitionStateEvent(CompetitionStateEvent_CashOutPlayers)
+			}
+
+			// 中場休息處理
+			ce.handleBreaking(table.ID, tableIdx)
+
+			// 判斷是否要關閉賽事 (現金桌)
+			if ce.shouldCloseCashTable(table.State.StartAt) {
+				if err := ce.tableManagerBackend.CloseTable(table.ID); err != nil {
+					ce.emitErrorEvent("Table Settlement -> Close Cash Table", "", err)
+				}
+			}
+
 		case CompetitionMode_MTT:
 			zeroChipPlayerIDs := make([]string, 0)
 			alivePlayerIDs := make([]string, 0)
@@ -782,6 +842,19 @@ func (ce *competitionEngine) shouldCloseCTTable(tableStartAt int64, tableAlivePl
 	return time.Now().Unix() > tableEndAt || (ce.competition.State.BlindState.IsStopBuyIn() && tableAlivePlayerCount < ce.competition.Meta.TableMinPlayerCount)
 }
 
+/*
+shouldCloseCashTable Cash 計算桌次是否已達到結束條件
+  - 結束條件 1: 達到結束時間
+*/
+func (ce *competitionEngine) shouldCloseCashTable(tableStartAt int64) bool {
+	if ce.competition.Meta.Mode != CompetitionMode_Cash {
+		return false
+	}
+
+	tableEndAt := time.Unix(tableStartAt, 0).Add(time.Second * time.Duration(ce.competition.Meta.MaxDuration)).Unix()
+	return time.Now().Unix() > tableEndAt
+}
+
 func (ce *competitionEngine) updateTableBlind(tableID string) {
 	level, ante, dealer, sb, bb := ce.competition.CurrentBlindData()
 	if err := ce.tableManagerBackend.UpdateBlind(tableID, level, ante, dealer, sb, bb); err != nil {
@@ -943,6 +1016,23 @@ func (ce *competitionEngine) canStartCT() bool {
 		}
 	}
 	return false
+}
+
+func (ce *competitionEngine) canStartCash() bool {
+	if ce.competition.State.Status != CompetitionStateStatus_Registering {
+		return false
+	}
+
+	currentPlayerCount := 0
+	for _, table := range ce.competition.State.Tables {
+		for _, player := range table.State.PlayerStates {
+			if player.IsIn && player.Bankroll > 0 {
+				currentPlayerCount++
+			}
+		}
+	}
+
+	return currentPlayerCount >= ce.competition.Meta.MinPlayerCount
 }
 
 /*

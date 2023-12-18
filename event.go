@@ -11,6 +11,7 @@ const (
 	CompetitionStateEvent_TableUpdated     = "TableUpdated"
 	CompetitionStateEvent_TableGameSettled = "TableGameSettled"
 	CompetitionStateEvent_KnockoutPlayers  = "KnockoutPlayers"
+	CompetitionStateEvent_CashOutPlayers   = "CashOutPlayers"
 	CompetitionStateEvent_Settled          = "Settled"
 )
 

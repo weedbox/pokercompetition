@@ -354,3 +354,38 @@ func Test_Blind_BreakingLevel(t *testing.T) {
 	assert.Equal(t, -1, bs.CurrentLevel().Level, "current level is wrong")
 	assert.True(t, bs.IsBreaking(), "should be breaking level")
 }
+
+func Test_Blind_InfiniteDuration(t *testing.T) {
+	// create blind
+	blind := NewBlind()
+
+	// apply options
+	options := &BlindOptions{
+		ID:                   uuid.New().String(),
+		InitialLevel:         1,
+		FinalBuyInLevelIndex: -2,
+		Levels: []BlindLevel{
+			{
+				Level: 1,
+				Ante:  10,
+				Blind: pokerface.BlindSetting{
+					Dealer: 0,
+					SB:     10,
+					BB:     20,
+				},
+				Duration: -1,
+			},
+		},
+	}
+	bs := blind.ApplyOptions(options)
+	assert.NotNil(t, bs, "blind state should not be nil")
+
+	// starting blind
+	_, err := blind.Start()
+	assert.NoError(t, err, "starting blind failed")
+
+	bs = blind.GetState()
+	assert.Equal(t, 1, bs.CurrentLevel().Level, "current level is wrong")
+	assert.Equal(t, int64(-1), bs.Status.LevelEndAts[bs.Status.CurrentLevelIndex], "current level end at is wrong")
+	assert.Equal(t, -2, bs.Status.FinalBuyInLevelIndex, "final buy in index is wrong")
+}
