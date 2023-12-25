@@ -363,7 +363,7 @@ func (ce *competitionEngine) StartCompetition() (int64, error) {
 	}
 
 	// start the competition
-	if ce.competition.Meta.Blind.FinalBuyInLevelIndex <= 0 {
+	if ce.competition.Meta.Blind.FinalBuyInLevelIndex < 0 {
 		ce.competition.State.Status = CompetitionStateStatus_StoppedBuyIn
 	} else {
 		ce.competition.State.Status = CompetitionStateStatus_DelayedBuyIn
@@ -372,7 +372,6 @@ func (ce *competitionEngine) StartCompetition() (int64, error) {
 	// update start & end at
 	ce.competition.State.StartAt = time.Now().Unix()
 
-	// TODO: decide mtt 是否需要設定 EndAt?
 	if ce.competition.Meta.Mode == CompetitionMode_CT {
 		ce.competition.State.EndAt = ce.competition.State.StartAt + int64((time.Duration(ce.competition.Meta.MaxDuration) * time.Second).Seconds())
 	} else if ce.competition.Meta.Mode == CompetitionMode_MTT {
