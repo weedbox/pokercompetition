@@ -363,7 +363,7 @@ func (ce *competitionEngine) StartCompetition() (int64, error) {
 	}
 
 	// start the competition
-	if ce.competition.Meta.Blind.FinalBuyInLevelIndex < 0 {
+	if ce.competition.Meta.Blind.FinalBuyInLevelIndex == UnsetValue || ce.competition.Meta.Blind.FinalBuyInLevelIndex < NoStopBuyInIndex {
 		ce.competition.State.Status = CompetitionStateStatus_StoppedBuyIn
 	} else {
 		ce.competition.State.Status = CompetitionStateStatus_DelayedBuyIn
