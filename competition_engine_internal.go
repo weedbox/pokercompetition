@@ -382,6 +382,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 			}
 
 		case CompetitionMode_Cash:
+			// Cash Out 處理
 			leavePlayerIDs := make([]string, 0)
 			leavePlayerIndexes := make(map[string]int)
 			for idx, cp := range ce.competition.State.Players {
@@ -391,26 +392,8 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 				}
 			}
 
-			// TableEngine Player Leave
 			if len(leavePlayerIDs) > 0 {
-				if err := ce.tableManagerBackend.PlayersLeave(table.ID, leavePlayerIDs); err != nil {
-					ce.emitErrorEvent("Table Settlement Cash Leave Players -> PlayersLeave", strings.Join(leavePlayerIDs, ","), err)
-				}
-
-				for _, leavePlayerID := range leavePlayerIDs {
-					if playerIdx, exist := leavePlayerIndexes[leavePlayerID]; exist {
-						if _, exist := ce.reBuyTimerStates[leavePlayerID]; exist {
-							ce.reBuyTimerStates[leavePlayerID].Cancel()
-						}
-
-						ce.onCompetitionPlayerCashOut(ce.competition.ID, ce.competition.State.Players[playerIdx])
-						ce.deletePlayer(playerIdx)
-						ce.deletePlayerCache(ce.competition.ID, leavePlayerID)
-						delete(ce.reBuyTimerStates, leavePlayerID)
-					}
-				}
-
-				ce.emitCompetitionStateEvent(CompetitionStateEvent_CashOutPlayers)
+				ce.handleCashOut(table.ID, leavePlayerIndexes, leavePlayerIDs)
 			}
 
 			// 中場休息處理
@@ -536,6 +519,30 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 
 		return nil
 	})
+}
+
+func (ce *competitionEngine) handleCashOut(tableID string, leavePlayerIndexes map[string]int, leavePlayerIDs []string) {
+	// TableEngine Player Leave
+	if err := ce.tableManagerBackend.PlayersLeave(tableID, leavePlayerIDs); err != nil {
+		ce.emitErrorEvent("handleCashOut -> PlayersLeave", strings.Join(leavePlayerIDs, ","), err)
+	}
+
+	// Cash Out
+	for _, leavePlayerID := range leavePlayerIDs {
+		if playerIdx, exist := leavePlayerIndexes[leavePlayerID]; exist {
+			if _, exist := ce.reBuyTimerStates[leavePlayerID]; exist {
+				ce.reBuyTimerStates[leavePlayerID].Cancel()
+			}
+
+			ce.onCompetitionPlayerCashOut(ce.competition.ID, ce.competition.State.Players[playerIdx])
+			ce.deletePlayer(playerIdx)
+			ce.deletePlayerCache(ce.competition.ID, leavePlayerID)
+			delete(ce.reBuyTimerStates, leavePlayerID)
+		}
+	}
+
+	// Emit Event
+	ce.emitCompetitionStateEvent(CompetitionStateEvent_CashOutPlayers)
 }
 
 func (ce *competitionEngine) handleBreaking(tableID string, tableIdx int) {

@@ -690,6 +690,15 @@ func (ce *competitionEngine) PlayerCashOut(tableID, playerID string) error {
 	cp := ce.competition.State.Players[playerIdx]
 	cp.Status = CompetitionPlayerStatus_CashLeaving
 
+	// 尚未開賽時，玩家直接離桌結算
+	if ce.competition.State.Status == CompetitionStateStatus_Registering {
+		leavePlayerIndexes := map[string]int{
+			playerID: playerIdx,
+		}
+		leavePlayerIDs := []string{playerID}
+		ce.handleCashOut(tableID, leavePlayerIndexes, leavePlayerIDs)
+	}
+
 	return nil
 }
 
