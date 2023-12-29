@@ -171,10 +171,16 @@ func (ce *competitionEngine) handleCompetitionTableCreated(table *pokertable.Tab
 
 func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tableIdx int) {
 	shouldReopenGame := false
+	shouldAdvancePauseTableGame := false
 	readyPlayersCount := 0
+	alivePlayerCount := 0
 	for _, p := range table.State.PlayerStates {
 		if p.IsIn && p.Bankroll > 0 {
 			readyPlayersCount++
+		}
+
+		if p.Bankroll > 0 {
+			alivePlayerCount++
 		}
 	}
 
@@ -188,6 +194,20 @@ func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tab
 		shouldReopenGame = ce.competition.State.Status == CompetitionStateStatus_DelayedBuyIn && readyPlayersCount >= ce.competition.Meta.TableMinPlayerCount
 	case CompetitionMode_MTT:
 		shouldReopenGame = readyPlayersCount >= ce.competition.Meta.TableMinPlayerCount
+
+		if ce.competition.State.AdvanceState.Status == CompetitionAdvanceStatus_Updating {
+			switch ce.competition.Meta.AdvanceSetting.Rule {
+			case CompetitionAdvanceRule_BlindLevel:
+				if ce.competition.CurrentBlindLevel().Level >= ce.competition.Meta.AdvanceSetting.BlindLevel {
+					shouldAdvancePauseTableGame = true
+				}
+			case CompetitionAdvanceRule_PlayerCount:
+				// 當該桌只剩下一人且已經開始晉級計算，該桌晉級更新
+				if alivePlayerCount == 1 {
+					shouldAdvancePauseTableGame = true
+				}
+			}
+		}
 	}
 
 	// re-open game
@@ -197,6 +217,11 @@ func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tab
 			return
 		}
 		ce.emitEvent("Game Reopen:", "")
+	}
+
+	// 晉級條件更新 (停買後)
+	if shouldAdvancePauseTableGame {
+		ce.handleAdvanceUpdate(table.ID)
 	}
 }
 
@@ -450,6 +475,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 				case CompetitionAdvanceRule_PlayerCount:
 					possibleAdvancePlayerCount := ce.competition.PlayingPlayerCount()
 					finalAdvancePlayerCount := ce.competition.Meta.AdvanceSetting.PlayerCount
+					// 如果要取晉級人數 n 人 (finalAdvancePlayerCount)，必須要活著的人數 (possibleAdvancePlayerCount) 小於 n 人才暫停該桌
 					if possibleAdvancePlayerCount < finalAdvancePlayerCount {
 						shouldAdvancePauseTableGame = true
 					}
@@ -459,26 +485,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 					if err := ce.tableManagerBackend.PauseTable(table.ID); err != nil {
 						ce.emitErrorEvent(fmt.Sprintf("[%s][%d] Advance Pause Table", table.ID, table.State.GameCount), "", err)
 					} else {
-						ce.competition.State.AdvanceState.UpdatedTables++
-						ce.competition.State.AdvanceState.UpdatedTableIDs = append(ce.competition.State.AdvanceState.UpdatedTableIDs, table.ID)
-
-						// 晉級條件達成: 結束賽事
-						if ce.competition.State.AdvanceState.TotalTables == ce.competition.State.AdvanceState.UpdatedTables {
-							ce.competition.State.AdvanceState.Status = CompetitionAdvanceStatus_End
-							if err := timebank.NewTimeBank().NewTask(time.Second*3, func(isCancelled bool) {
-								if isCancelled {
-									return
-								}
-
-								// 結束賽事處理
-								ce.CloseCompetition(CompetitionStateStatus_End)
-							}); err != nil {
-								ce.emitErrorEvent("error next stage after settle competition table", "", err)
-							}
-						} else {
-							// 晉級條件未達成: 賽事繼續，更新事件
-							ce.emitEvent(fmt.Sprintf("update advancement. status: %s", ce.competition.State.AdvanceState.Status), "")
-						}
+						ce.handleAdvanceUpdate(table.ID)
 					}
 				}
 			} else {
@@ -519,6 +526,29 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 
 		return nil
 	})
+}
+
+func (ce *competitionEngine) handleAdvanceUpdate(tableID string) {
+	ce.competition.State.AdvanceState.UpdatedTables++
+	ce.competition.State.AdvanceState.UpdatedTableIDs = append(ce.competition.State.AdvanceState.UpdatedTableIDs, tableID)
+
+	// 晉級條件達成: 結束賽事
+	if ce.competition.State.AdvanceState.TotalTables == ce.competition.State.AdvanceState.UpdatedTables {
+		ce.competition.State.AdvanceState.Status = CompetitionAdvanceStatus_End
+		if err := timebank.NewTimeBank().NewTask(time.Second*3, func(isCancelled bool) {
+			if isCancelled {
+				return
+			}
+
+			// 結束賽事處理
+			ce.CloseCompetition(CompetitionStateStatus_End)
+		}); err != nil {
+			ce.emitErrorEvent("error next stage after settle competition table", "", err)
+		}
+	} else {
+		// 晉級條件未達成: 賽事繼續，更新事件
+		ce.emitEvent(fmt.Sprintf("update advancement. status: %s", ce.competition.State.AdvanceState.Status), "")
+	}
 }
 
 func (ce *competitionEngine) handleCashOut(tableID string, leavePlayerIndexes map[string]int, leavePlayerIDs []string) {
