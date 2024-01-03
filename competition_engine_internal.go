@@ -171,7 +171,7 @@ func (ce *competitionEngine) handleCompetitionTableCreated(table *pokertable.Tab
 
 func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tableIdx int) {
 	shouldReOpenGame := false
-	shouldAdvancePauseTableGame := false
+	// shouldAdvancePauseTableGame := false
 	readyPlayersCount := 0
 	alivePlayerCount := 0
 	for _, p := range table.State.PlayerStates {
@@ -199,19 +199,19 @@ func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tab
 	case CompetitionMode_MTT:
 		shouldReOpenGame = readyPlayersCount >= ce.competition.Meta.TableMinPlayerCount
 
-		if ce.competition.State.AdvanceState.Status == CompetitionAdvanceStatus_Updating {
-			switch ce.competition.Meta.AdvanceSetting.Rule {
-			case CompetitionAdvanceRule_BlindLevel:
-				if ce.competition.CurrentBlindLevel().Level >= ce.competition.Meta.AdvanceSetting.BlindLevel {
-					shouldAdvancePauseTableGame = true
-				}
-			case CompetitionAdvanceRule_PlayerCount:
-				// 當該桌只剩下一人且已經開始晉級計算，該桌晉級更新
-				if alivePlayerCount == 1 {
-					shouldAdvancePauseTableGame = true
-				}
-			}
-		}
+		// if ce.competition.State.AdvanceState.Status == CompetitionAdvanceStatus_Updating {
+		// 	switch ce.competition.Meta.AdvanceSetting.Rule {
+		// 	case CompetitionAdvanceRule_BlindLevel:
+		// 		if ce.competition.CurrentBlindLevel().Level >= ce.competition.Meta.AdvanceSetting.BlindLevel {
+		// 			shouldAdvancePauseTableGame = true
+		// 		}
+		// 	case CompetitionAdvanceRule_PlayerCount:
+		// 		// 當該桌只剩下一人且已經開始晉級計算，該桌晉級更新
+		// 		if alivePlayerCount == 1 {
+		// 			shouldAdvancePauseTableGame = true
+		// 		}
+		// 	}
+		// }
 	}
 
 	// re-open game
@@ -224,9 +224,9 @@ func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tab
 	}
 
 	// 晉級條件更新 (停買後)
-	if shouldAdvancePauseTableGame {
-		ce.handleAdvanceUpdate(table.ID)
-	}
+	// if shouldAdvancePauseTableGame {
+	// 	ce.handleAdvanceUpdate(table.ID)
+	// }
 }
 
 func (ce *competitionEngine) addCompetitionTable(tableSetting TableSetting, playerStatus CompetitionPlayerStatus) (string, error) {
@@ -490,6 +490,19 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 						ce.emitErrorEvent(fmt.Sprintf("[%s][%d] Advance Pause Table", table.ID, table.State.GameCount), "", err)
 					} else {
 						ce.handleAdvanceUpdate(table.ID)
+					}
+				} else {
+					if table.State.SeatChanges != nil {
+						sc := match.NewSeatChanges()
+						sc.Dealer = table.State.SeatChanges.NewDealer
+						sc.SB = table.State.SeatChanges.NewSB
+						sc.BB = table.State.SeatChanges.NewBB
+						sc.Seats = leftPlayerSeats
+						if err := ce.matchTableBackend.UpdateTable(table.ID, sc); err != nil {
+							ce.emitErrorEvent(fmt.Sprintf("[%s][%d] Advance MTT Match Update Table SeatChanges", table.ID, table.State.GameCount), "", err)
+						}
+					} else {
+						ce.emitErrorEvent(fmt.Sprintf("[c: %s][t: %s] Advance MTT Match Update Table SeatChanges is nil", ce.competition.ID, table.ID), "", errors.New("nil seat change state is not allowed when settling mtt table"))
 					}
 				}
 			} else {
