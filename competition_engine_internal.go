@@ -170,7 +170,7 @@ func (ce *competitionEngine) handleCompetitionTableCreated(table *pokertable.Tab
 }
 
 func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tableIdx int) {
-	shouldReopenGame := false
+	shouldReOpenGame := false
 	shouldAdvancePauseTableGame := false
 	readyPlayersCount := 0
 	alivePlayerCount := 0
@@ -191,9 +191,13 @@ func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tab
 			return
 		}
 
-		shouldReopenGame = ce.competition.State.Status == CompetitionStateStatus_DelayedBuyIn && readyPlayersCount >= ce.competition.Meta.TableMinPlayerCount
+		shouldReOpenGame = ce.competition.State.Status == CompetitionStateStatus_DelayedBuyIn && readyPlayersCount >= ce.competition.Meta.TableMinPlayerCount
+
+	case CompetitionMode_Cash:
+		shouldReOpenGame = readyPlayersCount >= ce.competition.Meta.TableMinPlayerCount
+
 	case CompetitionMode_MTT:
-		shouldReopenGame = readyPlayersCount >= ce.competition.Meta.TableMinPlayerCount
+		shouldReOpenGame = readyPlayersCount >= ce.competition.Meta.TableMinPlayerCount
 
 		if ce.competition.State.AdvanceState.Status == CompetitionAdvanceStatus_Updating {
 			switch ce.competition.Meta.AdvanceSetting.Rule {
@@ -211,7 +215,7 @@ func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tab
 	}
 
 	// re-open game
-	if shouldReopenGame && !ce.competition.IsBreaking() {
+	if shouldReOpenGame && !ce.competition.IsBreaking() {
 		if err := ce.tableManagerBackend.TableGameOpen(table.ID); err != nil {
 			ce.emitErrorEvent("Game Reopen", "", err)
 			return
@@ -703,6 +707,7 @@ func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
 		}
 	}
 
+	// TODO: 考慮 cash out
 	if len(reBuyPlayerIDs) > 0 && ce.competition.Meta.Mode == CompetitionMode_CT {
 		// AutoKnockout Player (When ReBuyEnd Time is reached)
 		reBuyEndAtTime := time.Unix(reBuyEndAt, 0)
@@ -720,7 +725,7 @@ func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
 
 				playerCache, exist := ce.getPlayerCache(ce.competition.ID, reBuyPlayerID)
 				if !exist {
-					fmt.Println("[playerID] is not in the cache")
+					fmt.Println("[handleReBuy] playerID is not in the cache")
 					return
 				}
 
@@ -734,15 +739,24 @@ func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
 					return
 				}
 
-				cp.Status = CompetitionPlayerStatus_ReBuyWaiting
-				cp.IsReBuying = false
-				cp.ReBuyEndAt = UnsetValue
-				cp.CurrentSeat = UnsetValue
-				ce.emitPlayerEvent("re buy leave", cp)
-				ce.emitEvent("re buy leave", reBuyPlayerID)
+				switch ce.competition.Meta.Mode {
+				case CompetitionMode_CT:
+					cp.Status = CompetitionPlayerStatus_ReBuyWaiting
+					cp.IsReBuying = false
+					cp.ReBuyEndAt = UnsetValue
+					cp.CurrentSeat = UnsetValue
+					ce.emitPlayerEvent("re buy leave", cp)
+					ce.emitEvent("re buy leave", reBuyPlayerID)
 
-				if err := ce.tableManagerBackend.PlayersLeave(table.ID, []string{reBuyPlayerID}); err != nil {
-					ce.emitErrorEvent("re buy Knockout Players -> PlayersLeave", reBuyPlayerID, err)
+					if err := ce.tableManagerBackend.PlayersLeave(table.ID, []string{reBuyPlayerID}); err != nil {
+						ce.emitErrorEvent("re buy Knockout Players -> PlayersLeave", reBuyPlayerID, err)
+					}
+
+				case CompetitionMode_Cash:
+					leavePlayerIDs := []string{cp.PlayerID}
+					leavePlayerIndexes := map[string]int{cp.PlayerID: playerCache.PlayerIdx}
+					ce.handleCashOut(table.ID, leavePlayerIndexes, leavePlayerIDs)
+
 				}
 			}); err != nil {
 				ce.emitErrorEvent("Players ReBuy Add Timer", "", err)
