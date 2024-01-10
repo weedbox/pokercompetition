@@ -209,6 +209,15 @@ func (c Competition) PlayingPlayerCount() int {
 	}).([]*CompetitionPlayer))
 }
 
+func (c Competition) IsTableExist(tableID string) bool {
+	for _, table := range c.State.Tables {
+		if table.ID == tableID {
+			return true
+		}
+	}
+	return false
+}
+
 func (c Competition) FindTableIdx(predicate func(*pokertable.Table) bool) int {
 	for idx, table := range c.State.Tables {
 		if predicate(table) {

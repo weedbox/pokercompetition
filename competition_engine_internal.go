@@ -375,11 +375,11 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 	ce.gameSettledRecords.Store(gameSettledRecordID, true)
 	ce.mu.Unlock()
 
+	// 更新玩家相關賽事數據
+	ce.updatePlayerCompetitionTaleRecords(table)
+
 	// FIXME: Workaround 解法，前端需要等待一段時間保證先收到 table_update 事件後才能收到 competition 結算事件
 	ce.delay(time.Millisecond*500, func() error {
-		// 更新玩家相關賽事數據
-		ce.updatePlayerCompetitionTaleRecords(table)
-
 		// 根據是否達到停止買入做處理
 		ce.handleReBuy(table)
 
@@ -401,7 +401,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 			}
 
 			// 中場休息處理
-			ce.handleBreaking(table.ID, tableIdx)
+			ce.handleBreaking(table.ID)
 
 			// 結束桌
 			if ce.shouldCloseCTTable(table.State.StartAt, len(table.AlivePlayers())) {
@@ -426,7 +426,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 			}
 
 			// 中場休息處理
-			ce.handleBreaking(table.ID, tableIdx)
+			ce.handleBreaking(table.ID)
 
 			// 判斷是否要關閉賽事 (現金桌)
 			if ce.shouldCloseCashTable(table.State.StartAt) {
@@ -523,7 +523,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 				}
 
 				// 中場休息處理
-				ce.handleBreaking(table.ID, tableIdx)
+				ce.handleBreaking(table.ID)
 
 				// 判斷是否要關閉賽事
 				shouldCloseCompetition := !ce.isEndStatus() && ce.competition.State.BlindState.IsStopBuyIn() && len(alivePlayerIDs) == 1 && len(ce.competition.State.Tables) == 1
@@ -577,22 +577,31 @@ func (ce *competitionEngine) handleCashOut(tableID string, leavePlayerIndexes ma
 	// Cash Out
 	for _, leavePlayerID := range leavePlayerIDs {
 		if playerIdx, exist := leavePlayerIndexes[leavePlayerID]; exist {
-			if _, exist := ce.reBuyTimerStates[leavePlayerID]; exist {
+			// delete timer
+			if _, reBuyTimerStateExist := ce.reBuyTimerStates[leavePlayerID]; reBuyTimerStateExist {
 				ce.reBuyTimerStates[leavePlayerID].Cancel()
 			}
+			delete(ce.reBuyTimerStates, leavePlayerID)
 
 			ce.onCompetitionPlayerCashOut(ce.competition.ID, ce.competition.State.Players[playerIdx])
-			ce.deletePlayer(playerIdx)
 			ce.deletePlayerCache(ce.competition.ID, leavePlayerID)
-			delete(ce.reBuyTimerStates, leavePlayerID)
 		}
 	}
+
+	// keep players that are cashing out
+	newPlayers := make([]*CompetitionPlayer, 0)
+	for _, cp := range ce.competition.State.Players {
+		if _, exist := leavePlayerIndexes[cp.PlayerID]; !exist {
+			newPlayers = append(newPlayers, cp)
+		}
+	}
+	ce.competition.State.Players = newPlayers
 
 	// Emit Event
 	ce.emitCompetitionStateEvent(CompetitionStateEvent_CashOutPlayers)
 }
 
-func (ce *competitionEngine) handleBreaking(tableID string, tableIdx int) {
+func (ce *competitionEngine) handleBreaking(tableID string) {
 	ce.mu.Lock()
 	defer ce.mu.Unlock()
 
@@ -632,18 +641,22 @@ func (ce *competitionEngine) handleBreaking(tableID string, tableIdx int) {
 			return
 		}
 
-		if len(ce.competition.State.Tables) > tableIdx {
+		tableIdx := ce.competition.FindTableIdx(func(t *pokertable.Table) bool {
+			return t.ID == tableID
+		})
+		if len(ce.competition.State.Tables) > tableIdx && tableIdx > 0 {
 			t := ce.competition.State.Tables[tableIdx]
 
 			autoOpenGame := t.State.Status == pokertable.TableStateStatus_TablePausing && len(t.AlivePlayers()) >= t.Meta.TableMinPlayerCount
 			if !autoOpenGame {
 				return
 			}
+
 			if err := ce.tableManagerBackend.TableGameOpen(tableID); err != nil {
 				ce.emitErrorEvent("resume game from breaking & auto open next game", "", err)
+			} else {
+				ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] = true
 			}
-
-			ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] = true
 		} else {
 			fmt.Println("[DEBUG#handleBreaking] not find table at index:", tableIdx)
 		}
@@ -792,6 +805,9 @@ func (ce *competitionEngine) updatePlayerCompetitionTaleRecords(table *pokertabl
 			continue
 		}
 
+		if playerCache.PlayerIdx >= len(ce.competition.State.Players) {
+			continue
+		}
 		cp := ce.competition.State.Players[playerCache.PlayerIdx]
 		cp.TotalGameCounts++
 		if player.GameStatistics.IsFold {
@@ -828,6 +844,10 @@ func (ce *competitionEngine) updatePlayerCompetitionTaleRecords(table *pokertabl
 			continue
 		}
 
+		if playerCache.PlayerIdx >= len(ce.competition.State.Players) {
+			continue
+		}
+
 		cp := ce.competition.State.Players[playerCache.PlayerIdx]
 		cp.TotalProfitTimes++
 
@@ -857,6 +877,10 @@ func (ce *competitionEngine) updatePlayerCompetitionTaleRecords(table *pokertabl
 	for playerID, rankData := range playerRankingData {
 		playerCache, exist := ce.getPlayerCache(ce.competition.ID, playerID)
 		if !exist {
+			continue
+		}
+
+		if playerCache.PlayerIdx >= len(ce.competition.State.Players) {
 			continue
 		}
 
@@ -965,9 +989,9 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 
 		ce.competition.State.BlindState.CurrentLevelIndex = bs.Status.CurrentLevelIndex
 		fmt.Println("[DEBUG#initBlind] BlindState.CurrentLevelIndex:", ce.competition.State.BlindState.CurrentLevelIndex)
-		for idx, table := range ce.competition.State.Tables {
+		for _, table := range ce.competition.State.Tables {
 			ce.updateTableBlind(table.ID)
-			ce.handleBreaking(table.ID, idx)
+			ce.handleBreaking(table.ID)
 		}
 
 		ce.emitCompetitionStateEvent(CompetitionStateEvent_BlindUpdated) // change CurrentLevelIndex
@@ -1032,8 +1056,8 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 				shouldCloseCompetition := !ce.isEndStatus() && tableEndConditions
 				switch ce.competition.Meta.Mode {
 				case CompetitionMode_CT:
-					fmt.Println("Stopped BuyIn auto close -> CT CloseTable")
-					if shouldCloseCompetition {
+					if shouldCloseCompetition && len(ce.competition.State.Tables) == 1 {
+						fmt.Println("Stopped BuyIn auto close -> CT CloseTable")
 						if err := ce.tableManagerBackend.CloseTable(ce.competition.State.Tables[0].ID); err != nil {
 							ce.emitErrorEvent("Stopped BuyIn auto close -> CT CloseTable", "", err)
 						}
