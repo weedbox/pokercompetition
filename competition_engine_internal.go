@@ -317,7 +317,7 @@ func (ce *competitionEngine) closeCompetitionTable(table *pokertable.Table, tabl
 	ce.emitEvent("closeCompetitionTable", "")
 	ce.emitCompetitionStateEvent(CompetitionStateEvent_TableUpdated)
 
-	if len(ce.competition.State.Tables) == 0 {
+	if len(ce.competition.State.Tables) == 0 && !ce.isEndStatus() {
 		ce.CloseCompetition(CompetitionStateStatus_End)
 	}
 }
@@ -469,6 +469,7 @@ func (ce *competitionEngine) handleMTTTableSettlement(table *pokertable.Table) b
 			possibleAdvancePlayerCount := ce.competition.PlayingPlayerCount()
 			finalAdvancePlayerCount := ce.competition.Meta.AdvanceSetting.PlayerCount
 			// 如果要取晉級人數 n 人 (finalAdvancePlayerCount)，必須要活著的人數 (possibleAdvancePlayerCount) 小於 n 人才暫停該桌
+			// TODO: 如果 M 取 N 剛好整除，要是 possibleAdvancePlayerCount <= finalAdvancePlayerCount，沒整除才是 possibleAdvancePlayerCount < finalAdvancePlayerCount
 			if possibleAdvancePlayerCount < finalAdvancePlayerCount {
 				shouldAdvancePauseTableGame = true
 			}
@@ -523,17 +524,6 @@ func (ce *competitionEngine) handleMTTTableSettlement(table *pokertable.Table) b
 
 		// 判斷是否要關閉賽事
 		shouldCloseCompetition = !ce.isEndStatus() && ce.competition.State.BlindState.IsStopBuyIn() && len(alivePlayerIDs) == 1 && len(ce.competition.State.Tables) == 1
-		if err := timebank.NewTimeBank().NewTask(time.Second*3, func(isCancelled bool) {
-			if isCancelled {
-				return
-			}
-
-			if shouldCloseCompetition {
-				ce.CloseCompetition(CompetitionStateStatus_End)
-			}
-		}); err != nil {
-			ce.emitErrorEvent("error next stage after settle competition table", "", err)
-		}
 	}
 
 	return shouldCloseCompetition
