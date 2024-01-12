@@ -667,7 +667,7 @@ func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
 
 	// 延遲買入: 處理可補碼玩家
 	reBuyEndAt := time.Now().Add(time.Second * time.Duration(ce.competition.Meta.ReBuySetting.WaitingTime)).Unix()
-	reBuyPlayerIDs := make([]string, 0)
+	reBuyEndAtTime := time.Unix(reBuyEndAt, 0)
 	for _, player := range table.State.PlayerStates {
 		if player.Bankroll > 0 {
 			continue
@@ -689,60 +689,55 @@ func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
 					cp.ReBuyEndAt = UnsetValue
 				}
 				ce.emitPlayerEvent("re-buying", cp)
-				reBuyPlayerIDs = append(reBuyPlayerIDs, player.PlayerID)
 			}
 		}
-	}
 
-	// CT/Cash 保留座位時間到後處理
-	if len(reBuyPlayerIDs) > 0 && (ce.competition.Meta.Mode == CompetitionMode_CT || ce.competition.Meta.Mode == CompetitionMode_Cash) {
-		reBuyEndAtTime := time.Unix(reBuyEndAt, 0)
-
-		for _, reBuyPlayerID := range reBuyPlayerIDs {
-			if _, exist := ce.reBuyTimerStates[reBuyPlayerID]; !exist {
-				ce.reBuyTimerStates[reBuyPlayerID] = timebank.NewTimeBank()
+		// CT/Cash 保留座位時間到後處理
+		if ce.competition.Meta.Mode == CompetitionMode_CT || ce.competition.Meta.Mode == CompetitionMode_Cash {
+			if _, exist := ce.reBuyTimerStates[player.PlayerID]; !exist {
+				ce.reBuyTimerStates[player.PlayerID] = timebank.NewTimeBank()
 			}
 
-			ce.reBuyTimerStates[reBuyPlayerID].Cancel()
-			if err := ce.reBuyTimerStates[reBuyPlayerID].NewTaskWithDeadline(reBuyEndAtTime, func(isCancelled bool) {
+			ce.reBuyTimerStates[player.PlayerID].Cancel()
+			if err := ce.reBuyTimerStates[player.PlayerID].NewTaskWithDeadline(reBuyEndAtTime, func(isCancelled bool) {
 				if isCancelled {
 					return
 				}
 
-				rebuyPlayerIdx := ce.competition.FindPlayerIdx(func(cp *CompetitionPlayer) bool {
-					return cp.PlayerID == reBuyPlayerID
+				rebuyPlayerIdx := ce.competition.FindPlayerIdx(func(competitionPlayer *CompetitionPlayer) bool {
+					return player.PlayerID == competitionPlayer.PlayerID
 				})
 				if rebuyPlayerIdx == UnsetValue {
 					fmt.Println("[handleReBuy] player is not in the competition")
 					return
 				}
 
-				cp := ce.competition.State.Players[rebuyPlayerIdx]
-				if cp.Chips > 0 {
+				rebuyCP := ce.competition.State.Players[rebuyPlayerIdx]
+				if rebuyCP.Chips > 0 {
 					return
 				}
 
 				switch ce.competition.Meta.Mode {
 				case CompetitionMode_CT:
 					// 玩家已經被淘汰了 (停止買入階段觸發淘汰)
-					if cp.Status == CompetitionPlayerStatus_Knockout {
+					if rebuyCP.Status == CompetitionPlayerStatus_Knockout {
 						return
 					}
 
-					cp.Status = CompetitionPlayerStatus_ReBuyWaiting
-					cp.IsReBuying = false
-					cp.ReBuyEndAt = UnsetValue
-					cp.CurrentSeat = UnsetValue
-					ce.emitPlayerEvent("re buy leave", cp)
-					ce.emitEvent("re buy leave", reBuyPlayerID)
+					rebuyCP.Status = CompetitionPlayerStatus_ReBuyWaiting
+					rebuyCP.IsReBuying = false
+					rebuyCP.ReBuyEndAt = UnsetValue
+					rebuyCP.CurrentSeat = UnsetValue
+					ce.emitPlayerEvent("re buy leave", rebuyCP)
+					ce.emitEvent("re buy leave", rebuyCP.PlayerID)
 
-					if err := ce.tableManagerBackend.PlayersLeave(table.ID, []string{reBuyPlayerID}); err != nil {
-						ce.emitErrorEvent("re buy Knockout Players -> PlayersLeave", reBuyPlayerID, err)
+					if err := ce.tableManagerBackend.PlayersLeave(table.ID, []string{rebuyCP.PlayerID}); err != nil {
+						ce.emitErrorEvent("re buy Knockout Players -> PlayersLeave", rebuyCP.PlayerID, err)
 					}
 
 				case CompetitionMode_Cash:
-					leavePlayerIDs := []string{cp.PlayerID}
-					leavePlayerIndexes := map[string]int{cp.PlayerID: rebuyPlayerIdx}
+					leavePlayerIDs := []string{rebuyCP.PlayerID}
+					leavePlayerIndexes := map[string]int{rebuyCP.PlayerID: rebuyPlayerIdx}
 					ce.handleCashOut(table.ID, leavePlayerIndexes, leavePlayerIDs)
 
 				}
