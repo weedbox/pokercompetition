@@ -166,11 +166,6 @@ func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tab
 
 	switch ce.competition.Meta.Mode {
 	case CompetitionMode_CT:
-		if ce.shouldCloseCTTable(table.State.StartAt, len(table.AlivePlayers())) {
-			ce.closeCompetitionTable(table, tableIdx)
-			return
-		}
-
 		shouldReOpenGame = ce.competition.State.Status == CompetitionStateStatus_DelayedBuyIn && readyPlayersCount >= ce.competition.Meta.TableMinPlayerCount
 
 	case CompetitionMode_Cash:
