@@ -93,8 +93,7 @@ type competitionEngine struct {
 	match                               match.Match
 	matchTableBackend                   match.TableBackend
 	qm                                  match.QueueManager
-	tablePlayerWaitingQueue             map[string]map[int]int        // key: tableID, value: (k,v): playerIdx, seat
-	reBuyTimerStates                    map[string]*timebank.TimeBank // key: playerID, value: *timebank.TimeBank
+	tablePlayerWaitingQueue             map[string]map[int]int // key: tableID, value: (k,v): playerIdx, seat
 
 	onTableCreated func(table *pokertable.Table) // TODO: test only, delete it later on
 	onTableClosed  func(table *pokertable.Table) // TODO: test only, delete it later on
@@ -114,7 +113,6 @@ func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
 		breakingPauseResumeStates:           make(map[string]map[int]bool),
 		blind:                               pokerblind.NewBlind(),
 		tablePlayerWaitingQueue:             make(map[string]map[int]int),
-		reBuyTimerStates:                    make(map[string]*timebank.TimeBank),
 
 		onTableCreated: func(table *pokertable.Table) {}, // TODO: test only, delete it later on
 		onTableClosed:  func(table *pokertable.Table) {}, // TODO: test only, delete it later on
@@ -516,12 +514,11 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 
 	// do logic
 	if isBuyIn {
-		ce.reBuyTimerStates[joinPlayer.PlayerID] = timebank.NewTimeBank()
 		player, playerCache := ce.newDefaultCompetitionPlayerData(tableID, joinPlayer.PlayerID, joinPlayer.RedeemChips, playerStatus)
 		ce.competition.State.Players = append(ce.competition.State.Players, &player)
 		playerCache.PlayerIdx = len(ce.competition.State.Players) - 1
 		ce.insertPlayerCache(ce.competition.ID, joinPlayer.PlayerID, playerCache)
-		ce.emitEvent("PlayerBuyIn -> Buy In", joinPlayer.PlayerID)
+		ce.emitEvent(fmt.Sprintf("PlayerBuyIn -> %s Buy In", joinPlayer.PlayerID), joinPlayer.PlayerID)
 		ce.emitPlayerEvent("PlayerBuyIn -> Buy In", &player)
 	} else {
 		// ReBuy logic
@@ -529,11 +526,6 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 		if !exist {
 			return ErrCompetitionPlayerNotFound
 		}
-
-		if _, exist := ce.reBuyTimerStates[joinPlayer.PlayerID]; !exist {
-			ce.reBuyTimerStates[joinPlayer.PlayerID] = timebank.NewTimeBank()
-		}
-		ce.reBuyTimerStates[joinPlayer.PlayerID].Cancel()
 
 		cp := ce.competition.State.Players[playerIdx]
 		cp.Status = playerStatus
@@ -551,7 +543,7 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 			playerCache.TableID = ""
 			cp.CurrentTableID = "" // re-buy 時要清空 CurrentTableID 等待重新配桌
 		}
-		ce.emitEvent("PlayerBuyIn -> Re Buy", joinPlayer.PlayerID)
+		ce.emitEvent(fmt.Sprintf("PlayerBuyIn -> %s Re Buy", joinPlayer.PlayerID), joinPlayer.PlayerID)
 		ce.emitPlayerEvent("PlayerBuyIn -> Re Buy", cp)
 	}
 
@@ -664,7 +656,6 @@ func (ce *competitionEngine) PlayerRefund(playerID string) error {
 	// refund logic
 	ce.deletePlayer(playerIdx)
 	ce.deletePlayerCache(ce.competition.ID, playerID)
-	delete(ce.reBuyTimerStates, playerID)
 
 	ce.emitEvent("PlayerRefund", playerID)
 	return nil
@@ -722,39 +713,22 @@ func (ce *competitionEngine) PlayerQuit(tableID, playerID string) error {
 		return ErrCompetitionQuitRejected
 	}
 
-	if _, exist := ce.reBuyTimerStates[playerID]; !exist {
-		ce.reBuyTimerStates[playerID] = timebank.NewTimeBank()
+	// 停止買入時會自動淘汰沒籌碼玩家，不讓玩家主動棄賽
+	if ce.competition.State.BlindState.IsStopBuyIn() {
+		return ErrCompetitionQuitRejected
 	}
-	ce.reBuyTimerStates[playerID].Cancel()
 
 	cp := ce.competition.State.Players[playerIdx]
 	cp.Status = CompetitionPlayerStatus_ReBuyWaiting
 	cp.IsReBuying = false
 	cp.ReBuyEndAt = UnsetValue
+	cp.CurrentSeat = UnsetValue
 	ce.emitPlayerEvent("quit knockout", cp)
-
-	if ce.competition.State.BlindState.IsStopBuyIn() {
-		// 更新賽事排名
-		ce.competition.State.Rankings = append(ce.competition.State.Rankings, &CompetitionRank{
-			PlayerID:   playerID,
-			FinalChips: 0,
-		})
-		rank := ce.competition.PlayingPlayerCount() + 1
-		ce.emitCompetitionStateFinalPlayerRankEvent(playerID, rank)
-	}
 	ce.emitEvent("Player Quit", "")
 	ce.emitCompetitionStateEvent(CompetitionStateEvent_KnockoutPlayers)
 
 	if err := ce.tableManagerBackend.PlayersLeave(tableID, []string{playerID}); err != nil {
 		ce.emitErrorEvent("Player Quit Knockout Players -> PlayersLeave", playerID, err)
-	}
-
-	// 結束桌
-	table := ce.competition.State.Tables[tableIdx]
-	if ce.competition.Meta.Mode == CompetitionMode_CT && ce.shouldCloseCTTable(table.State.StartAt, len(table.AlivePlayers())) {
-		if err := ce.tableManagerBackend.CloseTable(tableID); err != nil {
-			ce.emitErrorEvent("Player Quit Knockout Players -> CloseTable", "", err)
-		}
 	}
 
 	return nil

@@ -272,3 +272,11 @@ func (bs BlindState) IsStopBuyIn() bool {
 	// 當前盲注等級索引值大於 FinalBuyInLevelIndex 代表停止買入階段
 	return bs.CurrentLevelIndex > bs.FinalBuyInLevelIndex
 }
+
+// CompetitionPlayer Getters
+func (cp CompetitionPlayer) IsOverReBuyWaitingTime() bool {
+	if !cp.IsReBuying && cp.ReBuyEndAt == UnsetValue {
+		return true
+	}
+	return false
+}
