@@ -677,6 +677,7 @@ func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
 				cp.IsReBuying = true
 				cp.ReBuyEndAt = reBuyEndAt
 				if ce.competition.Meta.Mode == CompetitionMode_MTT {
+					cp.ReBuyEndAt = UnsetValue
 					cp.CurrentSeat = UnsetValue
 					cp.ReBuyEndAt = UnsetValue
 				}
