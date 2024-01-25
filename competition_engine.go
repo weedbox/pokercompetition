@@ -682,8 +682,16 @@ func (ce *competitionEngine) PlayerCashOut(tableID, playerID string) error {
 	cp.Status = CompetitionPlayerStatus_CashLeaving
 	ce.emitPlayerEvent("PlayerCashOut -> Cash Leaving", cp)
 
-	// 尚未開賽時，玩家直接離桌結算
-	if ce.competition.State.Status == CompetitionStateStatus_Registering {
+	// 尚未開賽時 or 已經開賽但是賽事只剩一人，則直接結算，玩家直接離桌結算
+	competitionNotStart := ce.competition.State.Status == CompetitionStateStatus_Registering
+	pauseCompetition := false
+	if ce.competition.State.Status == CompetitionStateStatus_DelayedBuyIn && len(ce.competition.State.Tables) > 0 {
+		if ce.competition.State.Tables[0].State.Status == pokertable.TableStateStatus_TablePausing {
+			pauseCompetition = true
+		}
+	}
+
+	if competitionNotStart || pauseCompetition {
 		leavePlayerIndexes := map[string]int{
 			playerID: playerIdx,
 		}
