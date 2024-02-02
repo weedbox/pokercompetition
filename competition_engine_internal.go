@@ -118,6 +118,9 @@ func (ce *competitionEngine) handleCompetitionTableCreated(table *pokertable.Tab
 			return
 		}
 
+		// 啟動盲注系統
+		ce.activateBlind()
+
 		// auto start game if condition is reached
 		if _, err := ce.StartCompetition(); err != nil {
 			ce.emitErrorEvent("CT Auto StartCompetition", "", err)
@@ -134,6 +137,9 @@ func (ce *competitionEngine) handleCompetitionTableCreated(table *pokertable.Tab
 		if !ce.canStartCash() {
 			return
 		}
+
+		// 啟動盲注系統
+		ce.activateBlind()
 
 		// auto start game if condition is reached
 		if _, err := ce.StartCompetition(); err != nil {
@@ -1039,6 +1045,21 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 	ce.blind.OnErrorUpdated(func(bs *pokerblind.BlindState, err error) {
 		ce.emitErrorEvent("Blind Update Error", "", err)
 	})
+}
+
+/*
+activateBlind 啟動盲注系統
+*/
+func (ce *competitionEngine) activateBlind() {
+	// 啟動盲注系統
+	bs, err := ce.blind.Start()
+	if err != nil {
+		ce.emitErrorEvent("Start Blind Error", "", err)
+	} else {
+		ce.competition.State.BlindState.CurrentLevelIndex = bs.Status.CurrentLevelIndex
+		ce.competition.State.BlindState.FinalBuyInLevelIndex = bs.Status.FinalBuyInLevelIndex
+		copy(ce.competition.State.BlindState.EndAts, bs.Status.LevelEndAts)
+	}
 }
 
 func (ce *competitionEngine) canStartCT() bool {

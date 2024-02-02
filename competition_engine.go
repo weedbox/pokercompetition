@@ -353,7 +353,6 @@ func (ce *competitionEngine) CloseCompetition(endStatus CompetitionStateStatus) 
 /*
 StartCompetition 開賽
   - 適用時機: MTT 手動開賽、MTT 自動開賽、CT 開賽
-    TODO: 未達開賽人數時，不啟動盲注
 */
 func (ce *competitionEngine) StartCompetition() (int64, error) {
 	if ce.competition.State.Status != CompetitionStateStatus_Registering {
@@ -375,16 +374,6 @@ func (ce *competitionEngine) StartCompetition() (int64, error) {
 	} else if ce.competition.Meta.Mode == CompetitionMode_MTT {
 		ce.competition.State.EndAt = -1
 	}
-
-	// 初始化盲注
-	bs, err := ce.blind.Start()
-	if err != nil {
-		ce.emitErrorEvent("Start Blind Error", "", err)
-		return 0, err
-	}
-	ce.competition.State.BlindState.CurrentLevelIndex = bs.Status.CurrentLevelIndex
-	ce.competition.State.BlindState.FinalBuyInLevelIndex = bs.Status.FinalBuyInLevelIndex
-	copy(ce.competition.State.BlindState.EndAts, bs.Status.LevelEndAts)
 
 	switch ce.competition.Meta.Mode {
 	case CompetitionMode_CT:
@@ -872,6 +861,11 @@ MatchTableReservePlayerDone 拆併桌玩家配桌完成
 func (ce *competitionEngine) MatchTableReservePlayerDone(tableID string) error {
 	ce.mu.Lock()
 	defer ce.mu.Unlock()
+
+	// MTT 等湊齊開第一桌條件後才開始啟動盲注系統
+	if len(ce.competition.State.Tables) == 1 && !ce.blind.IsStarted() {
+		ce.activateBlind()
+	}
 
 	targetPlayerIndexes, exist := ce.tablePlayerWaitingQueue[tableID]
 	if !exist {
