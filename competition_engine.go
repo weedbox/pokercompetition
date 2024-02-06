@@ -353,6 +353,7 @@ func (ce *competitionEngine) CloseCompetition(endStatus CompetitionStateStatus) 
 /*
 StartCompetition 開賽
   - 適用時機: MTT 手動開賽、MTT 自動開賽、CT 開賽
+    TODO: remove useless return value startedAt(int64)
 */
 func (ce *competitionEngine) StartCompetition() (int64, error) {
 	if ce.competition.State.Status != CompetitionStateStatus_Registering {
