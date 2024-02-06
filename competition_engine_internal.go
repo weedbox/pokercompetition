@@ -60,6 +60,25 @@ func (ce *competitionEngine) newDefaultCompetitionPlayerData(tableID, playerID s
 	return player, playerCache
 }
 
+func (ce *competitionEngine) delay(interval time.Duration, fn func() error) error {
+	var err error
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	timebank.NewTimeBank().NewTask(interval, func(isCancelled bool) {
+		defer wg.Done()
+
+		if isCancelled {
+			return
+		}
+
+		err = fn()
+	})
+
+	wg.Wait()
+	return err
+}
+
 func (ce *competitionEngine) UpdateReserveTablePlayerState(tableID string, playerState *pokertable.TablePlayerState) {
 	// 更新玩家狀態
 	playerCache, exist := ce.getPlayerCache(ce.competition.ID, playerState.PlayerID)
@@ -331,60 +350,64 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 	ce.gameSettledRecords.Store(gameSettledRecordID, true)
 	ce.mu.Unlock()
 
-	// 更新玩家相關賽事數據
-	ce.updatePlayerCompetitionTaleRecords(table)
+	_ = ce.delay(time.Millisecond*500, func() error {
+		// 更新玩家相關賽事數據
+		ce.updatePlayerCompetitionTaleRecords(table)
 
-	// 根據是否達到停止買入做處理
-	ce.handleReBuy(table)
+		// 根據是否達到停止買入做處理
+		ce.handleReBuy(table)
 
-	// 處理淘汰玩家
-	knockoutPlayerIDs := ce.handleTableKnockoutPlayers(table)
+		// 處理淘汰玩家
+		knockoutPlayerIDs := ce.handleTableKnockoutPlayers(table)
 
-	// 桌次處理
-	shouldCloseMTTCompetition := false
-	switch ce.competition.Meta.Mode {
-	case CompetitionMode_CT:
-		ce.handleCTTableSettlement(knockoutPlayerIDs, table)
-	case CompetitionMode_Cash:
-		ce.handleCashTableSettlement(table)
-	case CompetitionMode_MTT:
-		shouldCloseMTTCompetition = ce.handleMTTTableSettlement(table)
-	}
-
-	// 事件更新
-	ce.emitEvent("Table Settlement", "")
-	ce.emitCompetitionStateEvent(CompetitionStateEvent_TableGameSettled)
-
-	// 賽數結算條件達成處理
-	switch ce.competition.Meta.Mode {
-	case CompetitionMode_CT:
-		// 結束桌
-		if ce.shouldCloseCTTable(table.State.StartAt, len(table.AlivePlayers())) {
-			if err := ce.tableManagerBackend.CloseTable(table.ID); err != nil {
-				ce.emitErrorEvent("Table Settlement -> Close CT Table", "", err)
-			}
+		// 桌次處理
+		shouldCloseMTTCompetition := false
+		switch ce.competition.Meta.Mode {
+		case CompetitionMode_CT:
+			ce.handleCTTableSettlement(knockoutPlayerIDs, table)
+		case CompetitionMode_Cash:
+			ce.handleCashTableSettlement(table)
+		case CompetitionMode_MTT:
+			shouldCloseMTTCompetition = ce.handleMTTTableSettlement(table)
 		}
-	case CompetitionMode_Cash:
-		// 判斷是否要關閉賽事 (現金桌)
-		if ce.shouldCloseCashTable(table.State.StartAt) {
-			if err := ce.tableManagerBackend.CloseTable(table.ID); err != nil {
-				ce.emitErrorEvent("Table Settlement -> Close Cash Table", "", err)
-			}
-		}
-	case CompetitionMode_MTT:
-		if shouldCloseMTTCompetition {
-			if err := timebank.NewTimeBank().NewTask(time.Second*3, func(isCancelled bool) {
-				if isCancelled {
-					return
+
+		// 事件更新
+		ce.emitEvent("Table Settlement", "")
+		ce.emitCompetitionStateEvent(CompetitionStateEvent_TableGameSettled)
+
+		// 賽數結算條件達成處理
+		switch ce.competition.Meta.Mode {
+		case CompetitionMode_CT:
+			// 結束桌
+			if ce.shouldCloseCTTable(table.State.StartAt, len(table.AlivePlayers())) {
+				if err := ce.tableManagerBackend.CloseTable(table.ID); err != nil {
+					ce.emitErrorEvent("Table Settlement -> Close CT Table", "", err)
 				}
+			}
+		case CompetitionMode_Cash:
+			// 判斷是否要關閉賽事 (現金桌)
+			if ce.shouldCloseCashTable(table.State.StartAt) {
+				if err := ce.tableManagerBackend.CloseTable(table.ID); err != nil {
+					ce.emitErrorEvent("Table Settlement -> Close Cash Table", "", err)
+				}
+			}
+		case CompetitionMode_MTT:
+			if shouldCloseMTTCompetition {
+				if err := timebank.NewTimeBank().NewTask(time.Second*3, func(isCancelled bool) {
+					if isCancelled {
+						return
+					}
 
-				// 結束賽事處理
-				ce.CloseCompetition(CompetitionStateStatus_End)
-			}); err != nil {
-				ce.emitErrorEvent("error next stage after settle competition table", "", err)
+					// 結束賽事處理
+					ce.CloseCompetition(CompetitionStateStatus_End)
+				}); err != nil {
+					ce.emitErrorEvent("error next stage after settle competition table", "", err)
+				}
 			}
 		}
-	}
+
+		return nil
+	})
 }
 
 func (ce *competitionEngine) handleCTTableSettlement(knockoutPlayerIDs []string, table *pokertable.Table) {
