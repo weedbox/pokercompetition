@@ -10,8 +10,9 @@ import (
 )
 
 var (
-	ErrBlindNoOptions = errors.New("blind: options not available")
-	ErrBlindNoState   = errors.New("blind: state not available")
+	ErrBlindNoOptions      = errors.New("blind: options not available")
+	ErrBlindNoState        = errors.New("blind: state not available")
+	ErrBlindAlreadyStarted = errors.New("blind: already started")
 )
 
 type Blind interface {
@@ -26,6 +27,7 @@ type Blind interface {
 	UpdateInitialLevel(level int) error
 	Start() (*BlindState, error)
 	End()
+	IsStarted() bool
 }
 
 type blind struct {
@@ -103,6 +105,10 @@ func (b *blind) UpdateInitialLevel(level int) error {
 }
 
 func (b *blind) Start() (*BlindState, error) {
+	if b.IsStarted() {
+		return nil, ErrBlindAlreadyStarted
+	}
+
 	if b.options == nil {
 		return nil, ErrBlindNoOptions
 	}
@@ -141,6 +147,10 @@ func (b *blind) Start() (*BlindState, error) {
 
 func (b *blind) End() {
 	b.isEnd = true
+}
+
+func (b *blind) IsStarted() bool {
+	return b.bs.IsActive()
 }
 
 func (b *blind) updateLevel(endAt int64) {

@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/weedbox/pokercompetition"
+	pokertable "github.com/weedbox/pokertable"
 )
 
 func NewCTCompetitionSetting_Breaking() pokercompetition.CompetitionSetting {
@@ -283,7 +284,7 @@ func NewCTCompetitionSetting_Breaking() pokercompetition.CompetitionSetting {
 		TableSettings: []pokercompetition.TableSetting{
 			{
 				TableID:     uuid.New().String(),
-				JoinPlayers: []pokercompetition.JoinPlayer{},
+				JoinPlayers: []pokertable.JoinPlayer{},
 			},
 		},
 	}
@@ -346,7 +347,7 @@ func NewCTCompetitionSetting_Normal() pokercompetition.CompetitionSetting {
 		TableSettings: []pokercompetition.TableSetting{
 			{
 				TableID:     uuid.New().String(),
-				JoinPlayers: []pokercompetition.JoinPlayer{},
+				JoinPlayers: []pokertable.JoinPlayer{},
 			},
 		},
 	}

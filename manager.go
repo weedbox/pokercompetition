@@ -4,7 +4,6 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/weedbox/pokerface/match"
 	"github.com/weedbox/pokertable"
 )
 
@@ -42,10 +41,9 @@ type manager struct {
 	tableOptions        *pokertable.TableEngineOptions
 	competitionEngines  sync.Map
 	tableManagerBackend TableManagerBackend
-	qm                  match.QueueManager
 }
 
-func NewManager(tableManagerBackend TableManagerBackend, qm match.QueueManager) Manager {
+func NewManager(tableManagerBackend TableManagerBackend) Manager {
 	tableOptions := pokertable.NewTableEngineOptions()
 	tableOptions.Interval = 6
 
@@ -53,7 +51,6 @@ func NewManager(tableManagerBackend TableManagerBackend, qm match.QueueManager) 
 		tableOptions:        tableOptions,
 		competitionEngines:  sync.Map{},
 		tableManagerBackend: tableManagerBackend,
-		qm:                  qm,
 	}
 }
 
@@ -78,7 +75,6 @@ func (m *manager) CreateCompetition(competitionSetting CompetitionSetting, optio
 	competitionEngine := NewCompetitionEngine(
 		WithTableManagerBackend(m.tableManagerBackend),
 		WithTableOptions(m.tableOptions),
-		WithQueueManagerOptions(m.qm),
 	)
 	competitionEngine.OnCompetitionUpdated(options.OnCompetitionUpdated)
 	competitionEngine.OnCompetitionErrorUpdated(options.OnCompetitionErrorUpdated)
