@@ -359,12 +359,14 @@ func (ce *competitionEngine) StartCompetition() (int64, error) {
 		for playerID := range ce.waitingRoomPlayerIDs {
 			waitingRoomPlayerIDs = append(waitingRoomPlayerIDs, playerID)
 		}
-		err := ce.regulatorAddPlayers(waitingRoomPlayerIDs)
-		if err != nil {
-			ce.emitErrorEvent("StartCompetition -> AddPlayers to regulator failed", strings.Join(waitingRoomPlayerIDs, ","), err)
-			return ce.competition.State.StartAt, err
+		if len(waitingRoomPlayerIDs) > 0 {
+			err := ce.regulatorAddPlayers(waitingRoomPlayerIDs)
+			if err != nil {
+				ce.emitErrorEvent("StartCompetition -> AddPlayers to regulator failed", strings.Join(waitingRoomPlayerIDs, ","), err)
+				return ce.competition.State.StartAt, err
+			}
+			ce.waitingRoomPlayerIDs = make(map[string]bool)
 		}
-		ce.waitingRoomPlayerIDs = make(map[string]bool)
 	}
 
 	ce.emitEvent("StartCompetition", "")

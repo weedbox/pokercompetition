@@ -174,6 +174,11 @@ func (ce *competitionEngine) handleCompetitionTableCreated(table *pokertable.Tab
 		}
 
 	case CompetitionMode_MTT:
+		if !ce.blind.IsStarted() {
+			// 啟動盲注系統
+			ce.activateBlind()
+		}
+
 		ce.updateTableBlind(table.ID)
 	}
 }
