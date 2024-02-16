@@ -11,22 +11,23 @@ type TableManagerBackend interface {
 	OnTableUpdated(fn func(table *pokertable.Table))
 	OnTablePlayerReserved(fn func(tableID string, playerState *pokertable.TablePlayerState))
 
-	// TableManager Actions
+	// TableManager Table Actions
 	CreateTable(options *pokertable.TableEngineOptions, setting pokertable.TableSetting) (*pokertable.Table, error)
+	PauseTable(tableID string) error
 	CloseTable(tableID string) error
-	PlayersBatchReserve(tableID string, joinPlayers []pokertable.JoinPlayer) error
-	PlayersLeave(tableID string, playerIDs []string) error
-	PlayerRedeemChips(tableID string, joinPlayer pokertable.JoinPlayer) error
-	PlayerReserve(tableID string, joinPlayer pokertable.JoinPlayer) error
 	StartTableGame(tableID string) error
 	TableGameOpen(tableID string) error
-	BalanceTable(tableID string) error
-	PauseTable(tableID string) error
 	UpdateBlind(tableID string, level int, ante, dealer, sb, bb int64) error
+	UpdateTablePlayers(tableID string, joinPlayers []pokertable.JoinPlayer, leavePlayerIDs []string) (map[string]int, error)
 
-	// TODO: test only, should remove this
-	UpdateTable(table *pokertable.Table)
-	PlayerJoin(tableID, playerID string) error
+	// TableManager Player Table Actions
+	PlayerReserve(tableID string, joinPlayer pokertable.JoinPlayer) error
+	PlayerJoin(tableID, playerID string) error // TODO: test only, should remove this
+	PlayerRedeemChips(tableID string, joinPlayer pokertable.JoinPlayer) error
+	PlayersLeave(tableID string, playerIDs []string) error
+
+	// Others
+	UpdateTable(table *pokertable.Table) // TODO: test only, should remove this
 }
 
 func NewNativeTableManagerBackend(manager pokertable.Manager) TableManagerBackend {
@@ -91,24 +92,12 @@ func (ntmb *nativeTableManagerBackend) CreateTable(options *pokertable.TableEngi
 	return table, nil
 }
 
+func (ntbm *nativeTableManagerBackend) PauseTable(tableID string) error {
+	return ntbm.manager.PauseTable(tableID)
+}
+
 func (ntmb *nativeTableManagerBackend) CloseTable(tableID string) error {
 	return ntmb.manager.CloseTable(tableID)
-}
-
-func (ntmb *nativeTableManagerBackend) PlayersBatchReserve(tableID string, joinPlayers []pokertable.JoinPlayer) error {
-	return ntmb.manager.PlayersBatchReserve(tableID, joinPlayers)
-}
-
-func (ntmb *nativeTableManagerBackend) PlayersLeave(tableID string, playerIDs []string) error {
-	return ntmb.manager.PlayersLeave(tableID, playerIDs)
-}
-
-func (ntmb *nativeTableManagerBackend) PlayerRedeemChips(tableID string, joinPlayer pokertable.JoinPlayer) error {
-	return ntmb.manager.PlayerRedeemChips(tableID, joinPlayer)
-}
-
-func (ntbm *nativeTableManagerBackend) PlayerReserve(tableID string, joinPlayer pokertable.JoinPlayer) error {
-	return ntbm.manager.PlayerReserve(tableID, joinPlayer)
 }
 
 func (ntbm *nativeTableManagerBackend) StartTableGame(tableID string) error {
@@ -119,22 +108,30 @@ func (ntbm *nativeTableManagerBackend) TableGameOpen(tableID string) error {
 	return ntbm.manager.TableGameOpen(tableID)
 }
 
-func (ntbm *nativeTableManagerBackend) BalanceTable(tableID string) error {
-	return ntbm.manager.BalanceTable(tableID)
-}
-
-func (ntbm *nativeTableManagerBackend) PauseTable(tableID string) error {
-	return ntbm.manager.PauseTable(tableID)
-}
-
 func (ntbm *nativeTableManagerBackend) UpdateBlind(tableID string, level int, ante, dealer, sb, bb int64) error {
 	return ntbm.manager.UpdateBlind(tableID, level, ante, dealer, sb, bb)
 }
 
-func (ntbm *nativeTableManagerBackend) UpdateTable(table *pokertable.Table) {
-	ntbm.onTableUpdated(table)
+func (ntbm *nativeTableManagerBackend) UpdateTablePlayers(tableID string, joinPlayers []pokertable.JoinPlayer, leavePlayerIDs []string) (map[string]int, error) {
+	return ntbm.manager.UpdateTablePlayers(tableID, joinPlayers, leavePlayerIDs)
+}
+
+func (ntbm *nativeTableManagerBackend) PlayerReserve(tableID string, joinPlayer pokertable.JoinPlayer) error {
+	return ntbm.manager.PlayerReserve(tableID, joinPlayer)
 }
 
 func (ntbm *nativeTableManagerBackend) PlayerJoin(tableID, playerID string) error {
 	return ntbm.manager.PlayerJoin(tableID, playerID)
+}
+
+func (ntmb *nativeTableManagerBackend) PlayerRedeemChips(tableID string, joinPlayer pokertable.JoinPlayer) error {
+	return ntmb.manager.PlayerRedeemChips(tableID, joinPlayer)
+}
+
+func (ntmb *nativeTableManagerBackend) PlayersLeave(tableID string, playerIDs []string) error {
+	return ntmb.manager.PlayersLeave(tableID, playerIDs)
+}
+
+func (ntbm *nativeTableManagerBackend) UpdateTable(table *pokertable.Table) {
+	ntbm.onTableUpdated(table)
 }

@@ -1,8 +1,6 @@
 package actor
 
 import (
-	"time"
-
 	"github.com/weedbox/pokerface"
 	pokertable "github.com/weedbox/pokertable"
 )
@@ -12,6 +10,7 @@ type Adapter interface {
 	UpdateTableState(t *pokertable.Table) error
 	GetGamePlayerIndex(playerID string) int
 	GetGameState() *pokerface.GameState
+	GetTableState() *pokertable.Table
 
 	// Player actions
 	Pass(playerID string) error
@@ -23,5 +22,6 @@ type Adapter interface {
 	Fold(playerID string) error
 	Allin(playerID string) error
 	Raise(playerID string, chipLevel int64) error
-	ExtendTime(playerID string, duration time.Duration) error
+	ShowCard(playerID string, holeCards []string) error
+	AutoMode(playerID string, isOn bool) error
 }

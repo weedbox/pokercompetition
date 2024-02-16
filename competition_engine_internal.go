@@ -2,7 +2,6 @@ package pokercompetition
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -11,7 +10,7 @@ import (
 	"github.com/thoas/go-funk"
 	pokerblind "github.com/weedbox/pokercompetition/blind"
 	"github.com/weedbox/pokerface"
-	"github.com/weedbox/pokerface/match"
+	"github.com/weedbox/pokerface/regulator"
 	"github.com/weedbox/pokertable"
 	"github.com/weedbox/timebank"
 )
@@ -152,6 +151,7 @@ func (ce *competitionEngine) handleCompetitionTableCreated(table *pokertable.Tab
 			ce.emitErrorEvent("CT Auto StartTableGame", "", err)
 			return
 		}
+
 	case CompetitionMode_Cash:
 		if !ce.canStartCash() {
 			return
@@ -172,6 +172,9 @@ func (ce *competitionEngine) handleCompetitionTableCreated(table *pokertable.Tab
 			ce.emitErrorEvent("Cash Auto StartTableGame", "", err)
 			return
 		}
+
+	case CompetitionMode_MTT:
+		ce.updateTableBlind(table.ID)
 	}
 }
 
@@ -218,63 +221,26 @@ func (ce *competitionEngine) addCompetitionTable(tableSetting TableSetting, play
 		return "", err
 	}
 
-	// TODO: test only
-	fmt.Printf("[DEBUG#addCompetitionTable] create table: %s, total tables: %d\n", table.ID, len(ce.competition.State.Tables)+1)
-	ce.onTableCreated(table)
-
 	// add table
 	ce.competition.State.Tables = append(ce.competition.State.Tables, table)
 	ce.emitCompetitionStateEvent(CompetitionStateEvent_TableUpdated)
-
-	// update players
-	newPlayerData := make(map[string]int64)
-	for _, ps := range table.State.PlayerStates {
-		newPlayerData[ps.PlayerID] = ps.Bankroll
-	}
-
-	// find existing players
-	existingPlayerData := make(map[string]int64)
-	for _, player := range ce.competition.State.Players {
-		if bankroll, exist := newPlayerData[player.PlayerID]; exist {
-			existingPlayerData[player.PlayerID] = bankroll
-		}
-	}
-
-	// remove existing player data from new player data
-	for playerID := range existingPlayerData {
-		delete(newPlayerData, playerID)
-	}
-
-	// update existing player data
-	if len(existingPlayerData) > 0 {
-		for i := 0; i < len(ce.competition.State.Players); i++ {
-			player := ce.competition.State.Players[i]
-			if bankroll, exist := existingPlayerData[player.PlayerID]; exist {
-				player.Chips = bankroll
-				player.Status = playerStatus
-				ce.emitPlayerEvent("[addCompetitionTable] existing player", player)
-				ce.emitEvent(fmt.Sprintf("[addCompetitionTable] add existing player to (%s)", table.ID), player.PlayerID)
-			}
-		}
-	}
+	ce.emitEvent("[addCompetitionTable]", "")
 
 	// add new player data
-	if len(newPlayerData) > 0 {
+	if len(table.State.PlayerStates) > 0 {
 		newPlayerIdx := len(ce.competition.State.Players)
 		newPlayers := make([]*CompetitionPlayer, 0)
-		for playerID, bankroll := range newPlayerData {
-			player, playerCache := ce.newDefaultCompetitionPlayerData(table.ID, playerID, bankroll, playerStatus)
+		for _, tablePlayer := range table.State.PlayerStates {
+			player, playerCache := ce.newDefaultCompetitionPlayerData(table.ID, tablePlayer.PlayerID, tablePlayer.Bankroll, playerStatus)
 			newPlayers = append(newPlayers, &player)
 			playerCache.PlayerIdx = newPlayerIdx
 			ce.insertPlayerCache(ce.competition.ID, playerCache.PlayerID, playerCache)
 			newPlayerIdx++
 			ce.emitPlayerEvent("[addCompetitionTable] new player", &player)
-			ce.emitEvent(fmt.Sprintf("[addCompetitionTable] add new player to (%s)", table.ID), playerID)
+			ce.emitEvent(fmt.Sprintf("[addCompetitionTable] add new player to (%s)", table.ID), tablePlayer.PlayerID)
 		}
 		ce.competition.State.Players = append(ce.competition.State.Players, newPlayers...)
 	}
-
-	ce.emitEvent("[addCompetitionTable]", "")
 
 	return table.ID, nil
 }
@@ -303,13 +269,6 @@ func (ce *competitionEngine) settleCompetition(endCompetitionStatus CompetitionS
 	// clear caches
 	ce.deletePlayerCachesByCompetition(ce.competition.ID)
 	ce.gameSettledRecords = sync.Map{}
-
-	if ce.competition.Meta.Mode == CompetitionMode_MTT {
-		// close match
-		if err := ce.match.Close(); err != nil {
-			ce.emitErrorEvent("close mtt match", "", err)
-		}
-	}
 }
 
 func (ce *competitionEngine) deleteTable(tableIdx int) {
@@ -325,10 +284,6 @@ closeCompetitionTable 桌次關閉
   - 適用時機: 桌次結束已發生
 */
 func (ce *competitionEngine) closeCompetitionTable(table *pokertable.Table, tableIdx int) {
-	// TODO: test only
-	fmt.Printf("[DEBUG#closeCompetitionTable] close table: %s, total tables: %d, alive players: %d\n", table.ID, len(ce.competition.State.Tables)-1, ce.competition.PlayingPlayerCount())
-	ce.onTableClosed(table)
-
 	// clean data
 	delete(ce.breakingPauseResumeStates, table.ID)
 
@@ -374,8 +329,11 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 		case CompetitionMode_Cash:
 			ce.handleCashTableSettlement(table)
 		case CompetitionMode_MTT:
-			shouldCloseMTTCompetition = ce.handleMTTTableSettlement(table)
+			shouldCloseMTTCompetition = ce.handleMTTTableSettlement(tableIdx, table)
 		}
+
+		// 中場休息處理
+		ce.handleBreaking(table.ID)
 
 		// 事件更新
 		ce.emitEvent("Table Settlement", "")
@@ -423,9 +381,6 @@ func (ce *competitionEngine) handleCTTableSettlement(knockoutPlayerIDs []string,
 			ce.emitErrorEvent("Table Settlement Knockout Players -> PlayersLeave", strings.Join(knockoutPlayerIDs, ","), err)
 		}
 	}
-
-	// 中場休息處理
-	ce.handleBreaking(table.ID)
 }
 
 func (ce *competitionEngine) handleCashTableSettlement(table *pokertable.Table) {
@@ -442,27 +397,16 @@ func (ce *competitionEngine) handleCashTableSettlement(table *pokertable.Table) 
 	if len(leavePlayerIDs) > 0 {
 		ce.handleCashOut(table.ID, leavePlayerIndexes, leavePlayerIDs)
 	}
-
-	// 中場休息處理
-	ce.handleBreaking(table.ID)
 }
 
-func (ce *competitionEngine) handleMTTTableSettlement(table *pokertable.Table) bool {
+func (ce *competitionEngine) handleMTTTableSettlement(tableIdx int, table *pokertable.Table) bool {
 	zeroChipPlayerIDs := make([]string, 0)
 	alivePlayerIDs := make([]string, 0)
-	leftPlayerSeats := make(map[int]string)
 	for _, p := range table.State.PlayerStates {
 		if p.Bankroll <= 0 {
 			zeroChipPlayerIDs = append(zeroChipPlayerIDs, p.PlayerID)
-			leftPlayerSeats[p.Seat] = "left"
 		} else {
 			alivePlayerIDs = append(alivePlayerIDs, p.PlayerID)
-		}
-	}
-
-	if len(zeroChipPlayerIDs) > 0 {
-		if err := ce.tableManagerBackend.PlayersLeave(table.ID, zeroChipPlayerIDs); err != nil {
-			ce.emitErrorEvent(fmt.Sprintf("[%s][%d] Clean 0 chip Players -> PlayersLeave", table.ID, table.State.GameCount), strings.Join(zeroChipPlayerIDs, ","), err)
 		}
 	}
 
@@ -513,44 +457,171 @@ func (ce *competitionEngine) handleMTTTableSettlement(table *pokertable.Table) b
 				}
 			}
 		} else {
-			if table.State.SeatChanges != nil {
-				sc := match.NewSeatChanges()
-				sc.Dealer = table.State.SeatChanges.NewDealer
-				sc.SB = table.State.SeatChanges.NewSB
-				sc.BB = table.State.SeatChanges.NewBB
-				sc.Seats = leftPlayerSeats
-				if err := ce.matchTableBackend.UpdateTable(table.ID, sc); err != nil {
-					ce.emitErrorEvent(fmt.Sprintf("[%s][%d] Advance MTT Match Update Table SeatChanges", table.ID, table.State.GameCount), "", err)
-				}
-			} else {
-				ce.emitErrorEvent(fmt.Sprintf("[c: %s][t: %s] Advance MTT Match Update Table SeatChanges is nil", ce.competition.ID, table.ID), "", errors.New("nil seat change state is not allowed when settling mtt table"))
-			}
+			ce.handleMTTTableSettlementNextStep(tableIdx, table, alivePlayerIDs, zeroChipPlayerIDs)
 		}
 	} else {
 		// 無晉級計算
 		// 拆併桌更新桌次狀態
-		// Preparing seat changes
-		if table.State.SeatChanges != nil {
-			sc := match.NewSeatChanges()
-			sc.Dealer = table.State.SeatChanges.NewDealer
-			sc.SB = table.State.SeatChanges.NewSB
-			sc.BB = table.State.SeatChanges.NewBB
-			sc.Seats = leftPlayerSeats
-			if err := ce.matchTableBackend.UpdateTable(table.ID, sc); err != nil {
-				ce.emitErrorEvent(fmt.Sprintf("[%s][%d] MTT Match Update Table SeatChanges", table.ID, table.State.GameCount), "", err)
-			}
-		} else {
-			ce.emitErrorEvent(fmt.Sprintf("[c: %s][t: %s] MTT Match Update Table SeatChanges is nil", ce.competition.ID, table.ID), "", errors.New("nil seat change state is not allowed when settling mtt table"))
-		}
-
-		// 中場休息處理
-		ce.handleBreaking(table.ID)
+		ce.handleMTTTableSettlementNextStep(tableIdx, table, alivePlayerIDs, zeroChipPlayerIDs)
 
 		// 判斷是否要關閉賽事
 		shouldCloseCompetition = !ce.isEndStatus() && ce.competition.State.BlindState.IsStopBuyIn() && len(alivePlayerIDs) == 1 && len(ce.competition.State.Tables) == 1
 	}
 
 	return shouldCloseCompetition
+}
+
+func (ce *competitionEngine) handleMTTTableSettlementNextStep(tableIdx int, table *pokertable.Table, alivePlayerIDs, zeroChipPlayerIDs []string) {
+	// 拆併桌監管器釋放玩家
+	if len(zeroChipPlayerIDs) > 0 {
+		if err := ce.regulator.ReleasePlayers(table.ID, zeroChipPlayerIDs); err != nil {
+			ce.emitErrorEvent(fmt.Sprintf("[%s][%d] MTT Regulator Clean 0 chip Players -> ReleasePlayers", table.ID, table.State.GameCount), strings.Join(zeroChipPlayerIDs, ","), err)
+		}
+	}
+
+	// 拆併桌監管器更新狀態
+	if releaseCount, newPlayerIDs, err := ce.regulator.SyncState(table.ID, len(alivePlayerIDs)); err != nil {
+		ce.emitErrorEvent(fmt.Sprintf("[%s][%d] MTT Regulator Sync State", table.ID, table.State.GameCount), "", err)
+	} else {
+		/*
+			- 建立桌次平衡資料
+			1. releasePlayerIDs 要離開該桌次到等待區的玩家
+			2. zeroChipPlayerIDs 沒籌碼要離開該桌次的玩家
+			3. newPlayerIDs 要被配到該該桌次的玩家
+
+			- 桌次平衡
+			1. 該桌次加入玩家 (newPlayerIDs) & 離開玩家 (leavePlayerIDs = releasePlayerIDs + zeroChipPlayerIDs)
+			2. newPlayerIDs 原屬桌次要去離開該玩家
+			3. 如果該桌最後沒人，關閉桌次
+		*/
+		releasePlayerIDs := make([]string, 0)
+		releasePlayerCaches := make(map[string]*PlayerCache)             // key: playerID, value: PlayerCache
+		releaseCompetitionPlayers := make(map[string]*CompetitionPlayer) // key: playerID, value: CompetitionPlayer
+
+		newJoinPlayers := make([]pokertable.JoinPlayer, 0)
+		newJoinPlayerCaches := make(map[string]*PlayerCache)             // key: playerID, value: PlayerCache
+		newJoinCompetitionPlayers := make(map[string]*CompetitionPlayer) // key: playerID, value: CompetitionPlayer
+
+		newJoinPlayerCurrentTableIDs := make(map[string][]string) // key: tableID, value: PlayerIDs
+
+		leavePlayerIDs := make([]string, 0) // leavePlayerIDs = releasePlayerIDs + zeroChipPlayerIDs
+
+		if releaseCount > 0 {
+			// pick release players from table
+			for idx, playerID := range table.State.NextBBOrderPlayerIDs {
+				if idx < releaseCount {
+					releasePlayerIDs = append(releasePlayerIDs, playerID)
+				}
+			}
+
+			// leave players
+			leavePlayerIDs = append(leavePlayerIDs, releasePlayerIDs...)
+			leavePlayerIDs = append(leavePlayerIDs, zeroChipPlayerIDs...)
+		}
+
+		if len(releasePlayerIDs) > 0 {
+			for _, releasePlayerID := range releasePlayerIDs {
+				releasePlayerIdx := ce.competition.FindPlayerIdx(func(competitionPlayer *CompetitionPlayer) bool {
+					return competitionPlayer.PlayerID == releasePlayerID
+				})
+				if releasePlayerIdx == UnsetValue {
+					continue
+				}
+
+				releasePlayerCache, exist := ce.getPlayerCache(ce.competition.ID, releasePlayerID)
+				if !exist {
+					continue
+				}
+
+				releaseCompetitionPlayer := ce.competition.State.Players[releasePlayerIdx]
+
+				// prepare data
+				releasePlayerCaches[releasePlayerID] = releasePlayerCache
+				releaseCompetitionPlayers[releasePlayerID] = releaseCompetitionPlayer
+			}
+		}
+
+		if len(newPlayerIDs) > 0 {
+			for _, playerID := range newPlayerIDs {
+				playerIdx := ce.competition.FindPlayerIdx(func(competitionPlayer *CompetitionPlayer) bool {
+					return competitionPlayer.PlayerID == playerID
+				})
+				if playerIdx == UnsetValue {
+					continue
+				}
+
+				playerCache, exist := ce.getPlayerCache(ce.competition.ID, playerID)
+				if !exist {
+					continue
+				}
+
+				cp := ce.competition.State.Players[playerIdx]
+				if cp.Chips <= 0 {
+					fmt.Printf("[DEBUG#MTT] attempt to join zero chip player (%s) to table (%s)\n", cp.PlayerID, table.ID)
+					continue
+				}
+
+				// prepare data
+				if _, exist := newJoinPlayerCurrentTableIDs[cp.CurrentTableID]; !exist {
+					newJoinPlayerCurrentTableIDs[cp.CurrentTableID] = make([]string, 0)
+				}
+				newJoinPlayerCurrentTableIDs[cp.CurrentTableID] = append(newJoinPlayerCurrentTableIDs[cp.CurrentTableID], cp.CurrentTableID)
+
+				newJoinPlayerCaches[playerID] = playerCache
+				newJoinCompetitionPlayers[playerID] = cp
+				newJoinPlayers = append(newJoinPlayers, pokertable.JoinPlayer{
+					PlayerID:    playerID,
+					RedeemChips: cp.Chips,
+					Seat:        pokertable.UnsetValue,
+				})
+			}
+		}
+
+		// balance table players
+		if tablePlayerSeatMap, err := ce.tableManagerBackend.UpdateTablePlayers(table.ID, newJoinPlayers, leavePlayerIDs); err != nil {
+			ce.emitErrorEvent(fmt.Sprintf("[%s][%d] UpdateTablePlayers", table.ID, table.State.GameCount), "", err)
+		} else {
+			// release 玩家進等待區
+			for playerID, playerCache := range releasePlayerCaches {
+				if cp, ok := releaseCompetitionPlayers[playerID]; ok {
+					playerCache.TableID = ""
+					cp.CurrentTableID = ""
+					cp.Status = CompetitionPlayerStatus_WaitingTableBalancing
+					ce.emitPlayerEvent(fmt.Sprintf("[Regulator] player (%s) is moving to the waiting room", cp.PlayerID), cp)
+				}
+			}
+
+			// newPlayerID 從舊桌次離開
+			for tableID, playerIDs := range newJoinPlayerCurrentTableIDs {
+				if len(playerIDs) > 0 {
+					if err := ce.tableManagerBackend.PlayersLeave(tableID, playerIDs); err != nil {
+						ce.emitErrorEvent(fmt.Sprintf("Leave new join player from old table (%s) -> PlayersLeave", tableID), strings.Join(playerIDs, ","), err)
+					}
+				}
+			}
+
+			// 更新該桌次玩家資訊
+			for playerID, seat := range tablePlayerSeatMap {
+				if playerCache, ok := newJoinPlayerCaches[playerID]; ok {
+					playerCache.TableID = table.ID
+
+					if cp, ok := newJoinCompetitionPlayers[playerID]; ok {
+						cp.CurrentTableID = table.ID
+						cp.Status = CompetitionPlayerStatus_Playing
+						cp.CurrentSeat = seat
+						ce.emitPlayerEvent("[UpdateTablePlayers] reserve table", cp)
+					}
+				}
+			}
+		}
+
+		// updateTableAlivePlayerCount = 目前桌次存活人數 - releaseCount (要進入等待區人數) + newPlayerCount (預計進入桌次人數)
+		updatedTableAlivePlayerCount := len(alivePlayerIDs) - releaseCount + len(newPlayerIDs)
+		if updatedTableAlivePlayerCount <= 0 {
+			// close table
+			ce.closeCompetitionTable(table, tableIdx)
+		}
+	}
 }
 
 func (ce *competitionEngine) handleCashOut(tableID string, leavePlayerIndexes map[string]int, leavePlayerIDs []string) {
@@ -1000,9 +1071,9 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 
 				ce.competition.State.Status = CompetitionStateStatus_StoppedBuyIn
 
-				// MTT 在停止買入階段，停止拆併桌機制
+				// MTT 在停止買入階段，更新拆併桌監管器狀態
 				if ce.competition.Meta.Mode == CompetitionMode_MTT {
-					ce.match.DisableRegistration()
+					ce.regulator.SetStatus(regulator.CompetitionStatus_AfterRegDeadline)
 				}
 
 				// 淘汰沒資格玩家

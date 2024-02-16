@@ -3,14 +3,13 @@ package pokercompetition
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/thoas/go-funk"
 	pokerblind "github.com/weedbox/pokercompetition/blind"
-	"github.com/weedbox/pokerface/competition"
-	"github.com/weedbox/pokerface/match"
+	"github.com/weedbox/pokerface/regulator"
 	"github.com/weedbox/pokertable"
 	"github.com/weedbox/timebank"
 )
@@ -37,9 +36,6 @@ var (
 type CompetitionEngineOpt func(*competitionEngine)
 
 type CompetitionEngine interface {
-	OnTableCreated(fn func(table *pokertable.Table)) // TODO: test only, delete it later on
-	OnTableClosed(fn func(table *pokertable.Table))  // TODO: test only, delete it later on
-
 	// Others
 	UpdateTable(table *pokertable.Table)                                                    // 桌次更新
 	UpdateReserveTablePlayerState(tableID string, playerState *pokertable.TablePlayerState) // 更新 Reserve 桌次玩家狀態
@@ -49,7 +45,7 @@ type CompetitionEngine interface {
 	OnCompetitionErrorUpdated(fn func(competition *Competition, err error))                         // 賽事錯誤更新事件監聽器
 	OnCompetitionPlayerUpdated(fn func(competitionID string, competitionPlayer *CompetitionPlayer)) // 賽事玩家更新事件監聽器
 	OnCompetitionFinalPlayerRankUpdated(fn func(competitionID, playerID string, rank int))          // 賽事玩家最終名次監聽器
-	OnCompetitionStateUpdated(fn func(competitionID string, competition *Competition))              // 賽事狀態監聽器
+	OnCompetitionStateUpdated(fn func(event string, competition *Competition))                      // 賽事狀態監聽器
 	OnAdvancePlayerCountUpdated(fn func(competitionID string, totalBuyInCount int) int)             // 賽事晉級人數更新監聽器
 	OnCompetitionPlayerCashOut(fn func(competitionID string, competitionPlayer *CompetitionPlayer)) // 現金桌賽事玩家結算事件監聽器
 
@@ -66,12 +62,6 @@ type CompetitionEngine interface {
 	PlayerRefund(playerID string) error                      // 玩家退賽
 	PlayerCashOut(tableID, playerID string) error            // 玩家離桌結算 (現金桌)
 	PlayerQuit(tableID, playerID string) error               // 玩家棄賽淘汰
-
-	// Match Apis
-	MatchCreateTable() (string, error)                                // 拆併桌自動開桌
-	MatchCloseTable(tableID string) error                             // 拆併桌自動關桌
-	MatchTableReservePlayer(tableID, playerID string, seat int) error // 拆併桌玩家配至新桌
-	MatchTableReservePlayerDone(tableID string) error                 // 拆併桌玩家配桌完成
 }
 
 type competitionEngine struct {
@@ -85,18 +75,13 @@ type competitionEngine struct {
 	onCompetitionErrorUpdated           func(competition *Competition, err error)
 	onCompetitionPlayerUpdated          func(competitionID string, competitionPlayer *CompetitionPlayer)
 	onCompetitionFinalPlayerRankUpdated func(competitionID, playerID string, rank int)
-	onCompetitionStateUpdated           func(competitionID string, competition *Competition)
+	onCompetitionStateUpdated           func(event string, competition *Competition)
 	onAdvancePlayerCountUpdated         func(competitionID string, totalBuyInCount int) int
 	onCompetitionPlayerCashOut          func(competitionID string, competitionPlayer *CompetitionPlayer)
 	breakingPauseResumeStates           map[string]map[int]bool // key: tableID, value: (k,v): (breaking blind level index, is resume from pause)
 	blind                               pokerblind.Blind
-	match                               match.Match
-	matchTableBackend                   match.TableBackend
-	qm                                  match.QueueManager
-	tablePlayerWaitingQueue             map[string]map[int]int // key: tableID, value: (k,v): playerIdx, seat
-
-	onTableCreated func(table *pokertable.Table) // TODO: test only, delete it later on
-	onTableClosed  func(table *pokertable.Table) // TODO: test only, delete it later on
+	regulator                           regulator.Regulator
+	waitingRoomPlayerIDs                map[string]bool
 }
 
 func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
@@ -107,15 +92,12 @@ func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
 		onCompetitionErrorUpdated:           func(competition *Competition, err error) {},
 		onCompetitionPlayerUpdated:          func(competitionID string, competitionPlayer *CompetitionPlayer) {},
 		onCompetitionFinalPlayerRankUpdated: func(competitionID, playerID string, rank int) {},
-		onCompetitionStateUpdated:           func(competitionID string, competition *Competition) {},
+		onCompetitionStateUpdated:           func(event string, competition *Competition) {},
 		onAdvancePlayerCountUpdated:         func(competitionID string, totalBuyInCount int) int { return 0 },
 		onCompetitionPlayerCashOut:          func(competitionID string, competitionPlayer *CompetitionPlayer) {},
 		breakingPauseResumeStates:           make(map[string]map[int]bool),
 		blind:                               pokerblind.NewBlind(),
-		tablePlayerWaitingQueue:             make(map[string]map[int]int),
-
-		onTableCreated: func(table *pokertable.Table) {}, // TODO: test only, delete it later on
-		onTableClosed:  func(table *pokertable.Table) {}, // TODO: test only, delete it later on
+		waitingRoomPlayerIDs:                make(map[string]bool),
 	}
 
 	for _, opt := range opts {
@@ -143,28 +125,6 @@ func WithTableManagerBackend(tmb TableManagerBackend) CompetitionEngineOpt {
 	}
 }
 
-func WithMatchBackend(m match.Match) CompetitionEngineOpt {
-	return func(ce *competitionEngine) {
-		ce.match = m
-	}
-}
-
-func WithQueueManagerOptions(qm match.QueueManager) CompetitionEngineOpt {
-	return func(ce *competitionEngine) {
-		ce.qm = qm
-	}
-}
-
-// TODO: test only, delete it later on
-func (ce *competitionEngine) OnTableCreated(fn func(table *pokertable.Table)) {
-	ce.onTableCreated = fn
-}
-
-// TODO: test only, delete it later on
-func (ce *competitionEngine) OnTableClosed(fn func(table *pokertable.Table)) {
-	ce.onTableClosed = fn
-}
-
 func (ce *competitionEngine) OnCompetitionUpdated(fn func(competition *Competition)) {
 	ce.onCompetitionUpdated = fn
 }
@@ -181,7 +141,7 @@ func (ce *competitionEngine) OnCompetitionFinalPlayerRankUpdated(fn func(competi
 	ce.onCompetitionFinalPlayerRankUpdated = fn
 }
 
-func (ce *competitionEngine) OnCompetitionStateUpdated(fn func(competitionID string, competition *Competition)) {
+func (ce *competitionEngine) OnCompetitionStateUpdated(fn func(event string, competition *Competition)) {
 	ce.onCompetitionStateUpdated = fn
 }
 
@@ -259,36 +219,17 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 			}
 		}
 	case CompetitionMode_MTT:
-		// Table backend of match
-		if ce.matchTableBackend == nil {
-			ce.matchTableBackend = NewNativeMatchTableBackend(ce)
-		}
-
-		if ce.match == nil {
-			// Initializing match
-			opts := match.NewOptions(ce.competition.ID)
-			defaultOpts := competition.NewOptions()
-			defaultOpts.TableAllocationPeriod = 3
-			opts.WaitingPeriod = defaultOpts.TableAllocationPeriod
-			opts.MaxTables = -1
-			opts.MaxSeats = defaultOpts.Table.MaxSeats
-
-			if ce.qm == nil {
-				ce.match = match.NewMatch(
-					opts,
-					match.WithTableBackend(ce.matchTableBackend),
-				)
-			} else {
-				ce.match = match.NewMatch(
-					opts,
-					match.WithTableBackend(ce.matchTableBackend),
-					match.WithQueueManager(ce.qm),
-				)
-			}
-		}
-
-		if ce.match == nil {
-			return nil, ErrMatchInitFailed
+		// 初始化拆併桌監管器
+		if ce.regulator == nil {
+			ce.regulator = regulator.NewRegulator(
+				regulator.WithRequestTableFn(func(playerIDs []string) (string, error) {
+					return ce.regulatorCreateAndDistributePlayers(playerIDs)
+				}),
+				regulator.WithAssignPlayersFn(func(tableID string, playerIDs []string) error {
+					return ce.regulatorDistributePlayers(tableID, playerIDs)
+				}),
+			)
+			ce.regulator.SetStatus(regulator.CompetitionStatus_Pending)
 		}
 	}
 
@@ -353,7 +294,6 @@ func (ce *competitionEngine) CloseCompetition(endStatus CompetitionStateStatus) 
 /*
 StartCompetition 開賽
   - 適用時機: MTT 手動開賽、MTT 自動開賽、CT 開賽
-    TODO: remove useless return value startedAt(int64)
 */
 func (ce *competitionEngine) StartCompetition() (int64, error) {
 	if ce.competition.State.Status != CompetitionStateStatus_Registering {
@@ -411,19 +351,20 @@ func (ce *competitionEngine) StartCompetition() (int64, error) {
 			return ce.competition.State.StartAt, err
 		}
 	case CompetitionMode_MTT:
-		ce.mu.RLock()
+		// 設定拆併桌監管器狀態
+		ce.regulator.SetStatus(regulator.CompetitionStatus_Normal)
 
-		// 拆併桌加入玩家
-		for _, player := range ce.competition.State.Players {
-			err := ce.match.Register(player.PlayerID)
-			if err != nil {
-				ce.emitErrorEvent("MTT StartCompetition Register Player to Match failed", player.PlayerID, err)
-				ce.mu.RUnlock()
-				return ce.competition.State.StartAt, err
-			}
+		// 把等待區玩家丟到拆併桌監管器配桌
+		waitingRoomPlayerIDs := make([]string, 0)
+		for playerID := range ce.waitingRoomPlayerIDs {
+			waitingRoomPlayerIDs = append(waitingRoomPlayerIDs, playerID)
 		}
-
-		ce.mu.RUnlock()
+		err := ce.regulatorAddPlayers(waitingRoomPlayerIDs)
+		if err != nil {
+			ce.emitErrorEvent("StartCompetition -> AddPlayers to regulator failed", strings.Join(waitingRoomPlayerIDs, ","), err)
+			return ce.competition.State.StartAt, err
+		}
+		ce.waitingRoomPlayerIDs = make(map[string]bool)
 	}
 
 	ce.emitEvent("StartCompetition", "")
@@ -554,10 +495,14 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 			ce.emitErrorEvent("PlayerBuyIn -> PlayerReserve", joinPlayer.PlayerID, err)
 		}
 	case CompetitionMode_MTT:
-		// 比賽開打後 MTT 一律丟到拆併桌程式配桌
-		if ce.competition.State.Status == CompetitionStateStatus_DelayedBuyIn {
-			if err := ce.match.Register(joinPlayer.PlayerID); err != nil {
-				ce.emitErrorEvent("PlayerBuyIn -> Register Player to Match failed", joinPlayer.PlayerID, err)
+		if ce.competition.State.Status == CompetitionStateStatus_Registering {
+			// MTT 開賽前放到 waitingRoomPlayers
+			ce.waitingRoomPlayerIDs[joinPlayer.PlayerID] = true
+		} else if ce.competition.State.Status == CompetitionStateStatus_DelayedBuyIn {
+			// 開賽後一律丟到等待區等待拆併桌監管器配桌
+			err := ce.regulatorAddPlayers([]string{joinPlayer.PlayerID})
+			if err != nil {
+				ce.emitErrorEvent("PlayerBuyIn -> AddPlayers to regulator failed", joinPlayer.PlayerID, err)
 				return err
 			}
 		}
@@ -646,6 +591,7 @@ func (ce *competitionEngine) PlayerRefund(playerID string) error {
 	// refund logic
 	ce.deletePlayer(playerIdx)
 	ce.deletePlayerCache(ce.competition.ID, playerID)
+	delete(ce.waitingRoomPlayerIDs, playerID)
 
 	ce.emitEvent("PlayerRefund", playerID)
 	return nil
@@ -728,184 +674,6 @@ func (ce *competitionEngine) PlayerQuit(tableID, playerID string) error {
 	if err := ce.tableManagerBackend.PlayersLeave(tableID, []string{playerID}); err != nil {
 		ce.emitErrorEvent("Player Quit Knockout Players -> PlayersLeave", playerID, err)
 	}
-
-	return nil
-}
-
-/*
-MatchCreateTable 拆併桌自動開桌
-  - 適用時機: 拆併桌自動觸發
-*/
-func (ce *competitionEngine) MatchCreateTable() (string, error) {
-	ce.mu.Lock()
-	defer ce.mu.Unlock()
-
-	tableSetting := TableSetting{
-		TableID:     uuid.New().String(),
-		JoinPlayers: []JoinPlayer{},
-	}
-	tableID, err := ce.addCompetitionTable(tableSetting, CompetitionPlayerStatus_WaitingTableBalancing)
-	if err != nil {
-		return "", err
-	}
-
-	ce.updateTableBlind(tableID)
-	ce.tablePlayerWaitingQueue[tableID] = make(map[int]int)
-
-	return tableID, nil
-}
-
-/*
-MatchCloseTable 拆併桌自動關桌
-  - 適用時機: 拆併桌自動觸發
-*/
-func (ce *competitionEngine) MatchCloseTable(tableID string) error {
-	ce.mu.Lock()
-	defer ce.mu.Unlock()
-
-	delete(ce.tablePlayerWaitingQueue, tableID)
-
-	tableIdx := ce.competition.FindTableIdx(func(t *pokertable.Table) bool {
-		return t.ID == tableID
-	})
-	if tableIdx == UnsetValue {
-		return ErrCompetitionTableNotFound
-	}
-
-	for _, player := range ce.competition.State.Tables[tableIdx].State.PlayerStates {
-		playerCache, exist := ce.getPlayerCache(ce.competition.ID, player.PlayerID)
-		if !exist {
-			continue
-		}
-		playerCache.TableID = ""
-
-		cp := ce.competition.State.Players[playerCache.PlayerIdx]
-		cp.CurrentTableID = ""
-
-		// 只有有籌碼玩家才會改變狀態
-		if cp.Chips > 0 {
-			cp.Status = CompetitionPlayerStatus_WaitingTableBalancing
-		}
-		ce.emitPlayerEvent("[MatchCloseTable] table is closed, wait for allocate to new table", cp)
-	}
-	ce.emitEvent("[MatchCloseTable]", "")
-
-	return ce.tableManagerBackend.CloseTable(tableID)
-}
-
-/*
-MatchTableReservePlayer 拆併桌玩家配至新桌
-  - 適用時機: 拆併桌自動觸發
-*/
-func (ce *competitionEngine) MatchTableReservePlayer(tableID, playerID string, seat int) error {
-	ce.mu.Lock()
-	defer ce.mu.Unlock()
-
-	fmt.Printf("[DEBUG#MTT#MatchTableReservePlayer] [%s][%s] Seat: %d\n", tableID, playerID, seat)
-
-	tableIdx := ce.competition.FindTableIdx(func(t *pokertable.Table) bool {
-		return t.ID == tableID
-	})
-	if tableIdx == UnsetValue {
-		return ErrCompetitionTableNotFound
-	}
-
-	playerCache, exist := ce.getPlayerCache(ce.competition.ID, playerID)
-	if !exist {
-		return ErrCompetitionPlayerNotFound
-	}
-
-	cp := ce.competition.State.Players[playerCache.PlayerIdx]
-	if cp.Chips <= 0 {
-		fmt.Printf("[DEBUG#MTT#MatchTableReservePlayer#ErrMatchTableReservePlayerFailed] competition (%s), table (%s), seat (%d), player (%s), chips (%d)\n", ce.competition.ID, tableID, seat, playerID, cp.Chips)
-		return ErrMatchTableReservePlayerFailed
-	}
-
-	if ce.competition.State.Tables[tableIdx].State.GameCount <= 0 {
-		// 桌次還未開打，將玩家先暫時放在等待配桌的隊列中，等到配桌完成後再一次性丟到桌次中
-		_, exist = ce.tablePlayerWaitingQueue[tableID]
-		if !exist {
-			ce.tablePlayerWaitingQueue[tableID] = make(map[int]int)
-		}
-
-		ce.tablePlayerWaitingQueue[tableID][playerCache.PlayerIdx] = seat
-		return nil
-	}
-
-	// 桌次已開打，直接將玩家丟到桌次中
-	// update cache & competition players
-	playerCache.TableID = tableID
-	cp.CurrentTableID = tableID
-	cp.Status = CompetitionPlayerStatus_Playing
-	cp.CurrentSeat = seat
-	ce.emitPlayerEvent("[MatchTableReservePlayer] reserve table", cp)
-
-	jp := pokertable.JoinPlayer{
-		PlayerID:    playerID,
-		RedeemChips: cp.Chips,
-		Seat:        seat,
-	}
-
-	// call tableEngine
-	if err := ce.tableManagerBackend.PlayerReserve(tableID, jp); err != nil {
-		ce.emitErrorEvent("MatchTableReservePlayer -> PlayerReserve", jp.PlayerID, err)
-		return err
-	}
-
-	return nil
-}
-
-/*
-MatchTableReservePlayerDone 拆併桌玩家配桌完成
-  - 適用時機: 拆併桌自動觸發
-*/
-func (ce *competitionEngine) MatchTableReservePlayerDone(tableID string) error {
-	ce.mu.Lock()
-	defer ce.mu.Unlock()
-
-	// MTT 等湊齊開第一桌條件後才開始啟動盲注系統
-	if len(ce.competition.State.Tables) == 1 && !ce.blind.IsStarted() {
-		ce.activateBlind()
-	}
-
-	targetPlayerIndexes, exist := ce.tablePlayerWaitingQueue[tableID]
-	if !exist {
-		return ErrCompetitionTableNotFound
-	}
-
-	joinPlayers := make([]pokertable.JoinPlayer, 0)
-	for playerIdx, seat := range targetPlayerIndexes {
-		cp := ce.competition.State.Players[playerIdx]
-		playerCache, exist := ce.getPlayerCache(ce.competition.ID, cp.PlayerID)
-		if !exist {
-			return ErrCompetitionPlayerNotFound
-		}
-
-		// update cache & competition players
-		playerCache.TableID = tableID
-		cp.CurrentTableID = tableID
-		cp.Status = CompetitionPlayerStatus_Playing
-		cp.CurrentSeat = seat
-		ce.emitPlayerEvent("[MatchTableReservePlayer] wait balance table", cp)
-
-		jp := pokertable.JoinPlayer{
-			PlayerID:    cp.PlayerID,
-			RedeemChips: cp.Chips,
-			Seat:        seat,
-		}
-		joinPlayers = append(joinPlayers, jp)
-	}
-
-	ce.emitEvent("[MatchTableReservePlayerDone] players batch reserve table", "")
-
-	// call tableEngine
-	if err := ce.tableManagerBackend.PlayersBatchReserve(tableID, joinPlayers); err != nil {
-		ce.emitErrorEvent("PlayersBatchReserve", "", err)
-		return err
-	}
-
-	// clear queue
-	ce.tablePlayerWaitingQueue[tableID] = make(map[int]int)
 
 	return nil
 }

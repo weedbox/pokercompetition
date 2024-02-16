@@ -1,7 +1,6 @@
 package pokercompetition
 
 import (
-	"github.com/thoas/go-funk"
 	"github.com/weedbox/pokertable"
 )
 
@@ -14,8 +13,8 @@ type CompetitionSetting struct {
 }
 
 type TableSetting struct {
-	TableID     string       `json:"table_id"`
-	JoinPlayers []JoinPlayer `json:"join_players"`
+	TableID     string                  `json:"table_id"`
+	JoinPlayers []pokertable.JoinPlayer `json:"join_players"`
 }
 
 type JoinPlayer struct {
@@ -36,11 +35,6 @@ func NewPokerTableSetting(competitionID string, competitionMeta CompetitionMeta,
 			MinChipUnit:         competitionMeta.MinChipUnit,
 			ActionTime:          competitionMeta.ActionTime,
 		},
-		JoinPlayers: funk.Map(tableSetting.JoinPlayers, func(joinPlayer JoinPlayer) pokertable.JoinPlayer {
-			return pokertable.JoinPlayer{
-				PlayerID:    joinPlayer.PlayerID,
-				RedeemChips: joinPlayer.RedeemChips,
-			}
-		}).([]pokertable.JoinPlayer),
+		JoinPlayers: tableSetting.JoinPlayers,
 	}
 }

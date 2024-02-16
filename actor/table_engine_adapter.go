@@ -2,7 +2,6 @@ package actor
 
 import (
 	"encoding/json"
-	"time"
 
 	"github.com/weedbox/pokerface"
 	"github.com/weedbox/pokertable"
@@ -50,6 +49,10 @@ func (tea *tableEngineAdapter) GetGameState() *pokerface.GameState {
 	return tea.table.State.GameState
 }
 
+func (tea *tableEngineAdapter) GetTableState() *pokertable.Table {
+	return tea.table
+}
+
 func (tea *tableEngineAdapter) GetGamePlayerIndex(playerID string) int {
 	return tea.table.GamePlayerIndex(playerID)
 }
@@ -90,7 +93,12 @@ func (tea *tableEngineAdapter) Raise(playerID string, chipLevel int64) error {
 	return tea.engine.PlayerRaise(playerID, chipLevel)
 }
 
-func (tea *tableEngineAdapter) ExtendTime(playerID string, duration time.Duration) error {
-	//TODO: need to be implemented
+func (tea *tableEngineAdapter) ShowCard(playerID string, cards []string) error {
+	// need to be implemented
+	return nil
+}
+
+func (tea *tableEngineAdapter) AutoMode(playerID string, isOn bool) error {
+	// need to be implemented
 	return nil
 }
