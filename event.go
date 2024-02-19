@@ -6,6 +6,7 @@ import (
 )
 
 const (
+	CompetitionStateEvent_BlindActivated   = "BlindActivated"
 	CompetitionStateEvent_BlindUpdated     = "BlindUpdated"
 	CompetitionStateEvent_Started          = "Started"
 	CompetitionStateEvent_TableUpdated     = "TableUpdated"

@@ -62,6 +62,9 @@ type CompetitionEngine interface {
 	PlayerRefund(playerID string) error                      // 玩家退賽
 	PlayerCashOut(tableID, playerID string) error            // 玩家離桌結算 (現金桌)
 	PlayerQuit(tableID, playerID string) error               // 玩家棄賽淘汰
+
+	// TODO: Test Only
+	OnTableCreated(fn func(table *pokertable.Table))
 }
 
 type competitionEngine struct {
@@ -82,6 +85,9 @@ type competitionEngine struct {
 	blind                               pokerblind.Blind
 	regulator                           regulator.Regulator
 	waitingRoomPlayerIDs                map[string]bool
+
+	// TODO: Test Only
+	onTableCreated func(table *pokertable.Table)
 }
 
 func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
@@ -98,6 +104,9 @@ func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
 		breakingPauseResumeStates:           make(map[string]map[int]bool),
 		blind:                               pokerblind.NewBlind(),
 		waitingRoomPlayerIDs:                make(map[string]bool),
+
+		// TODO: Test Only
+		onTableCreated: func(table *pokertable.Table) {},
 	}
 
 	for _, opt := range opts {
@@ -155,6 +164,11 @@ func (ce *competitionEngine) OnCompetitionPlayerCashOut(fn func(competitionID st
 
 func (ce *competitionEngine) GetCompetition() *Competition {
 	return ce.competition
+}
+
+// TODO: Test Only
+func (ce *competitionEngine) OnTableCreated(fn func(table *pokertable.Table)) {
+	ce.onTableCreated = fn
 }
 
 func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSetting) (*Competition, error) {

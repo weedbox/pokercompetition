@@ -1,6 +1,8 @@
 package pokercompetition
 
 import (
+	"fmt"
+
 	"github.com/google/uuid"
 	"github.com/weedbox/pokertable"
 )
@@ -38,6 +40,7 @@ func (ce *competitionEngine) regulatorCreateAndDistributePlayers(playerIDs []str
 		return "", err
 	}
 
+	fmt.Printf("[MTT#DEBUG#regulatorCreateAndDistributePlayers] Table (%s), Players: %d\n", tableID, len(playerIDs))
 	return tableID, nil
 }
 
@@ -67,9 +70,11 @@ func (ce *competitionEngine) regulatorDistributePlayers(tableID string, playerID
 		return err
 	}
 
+	fmt.Printf("[MTT#DEBUG#regulatorDistributePlayers] Table (%s), Players: %d\n", tableID, len(playerIDs))
 	return nil
 }
 
 func (ce *competitionEngine) regulatorAddPlayers(playerIDs []string) error {
+	fmt.Printf("[MTT#DEBUG#regulatorAddPlayers] Players: %d\n", len(playerIDs))
 	return ce.regulator.AddPlayers(playerIDs)
 }

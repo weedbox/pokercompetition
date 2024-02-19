@@ -378,7 +378,7 @@ func TestActor_CT_Normal(t *testing.T) {
 // 	competitionEngine, err := manager.GetCompetitionEngine(competition.ID)
 // 	assert.Nil(t, err, "get competition engine engine failed")
 
-// 	// blinding actors & table engines
+// 	// binding actors & table engines
 // 	tablePlayers := make(map[string]map[string]interface{})
 // 	tableEngines := make(map[string]pokertable.TableEngine, 0)
 // 	actors := make(map[string]Actor, 0)

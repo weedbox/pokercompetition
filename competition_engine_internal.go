@@ -90,7 +90,7 @@ func (ce *competitionEngine) UpdateReserveTablePlayerState(tableID string, playe
 	cp.CurrentTableID = tableID
 	cp.Status = CompetitionPlayerStatus_Playing
 	ce.emitPlayerEvent("[UpdateReserveTablePlayerState] player table seat updated", cp)
-	ce.emitEvent("[UpdateReserveTablePlayerState] player table reserved", cp.PlayerID)
+	ce.emitEvent(fmt.Sprintf("[UpdateReserveTablePlayerState] player (%s) is reserved to table (%s) at seat (%d)", cp.CurrentTableID, cp.PlayerID, cp.CurrentSeat), cp.PlayerID)
 }
 
 func (ce *competitionEngine) UpdateTable(table *pokertable.Table) {
@@ -118,6 +118,7 @@ func (ce *competitionEngine) UpdateTable(table *pokertable.Table) {
 	// 處理因 table status 產生的變化
 	tableStatusHandlerMap := map[pokertable.TableStateStatus]func(*pokertable.Table, int){
 		pokertable.TableStateStatus_TableCreated:     ce.handleCompetitionTableCreated,
+		pokertable.TableStateStatus_TableBalancing:   ce.handleCompetitionTableBalancing,
 		pokertable.TableStateStatus_TablePausing:     ce.updatePauseCompetition,
 		pokertable.TableStateStatus_TableClosed:      ce.closeCompetitionTable,
 		pokertable.TableStateStatus_TableGameSettled: ce.settleCompetitionTable,
@@ -172,15 +173,20 @@ func (ce *competitionEngine) handleCompetitionTableCreated(table *pokertable.Tab
 			ce.emitErrorEvent("Cash Auto StartTableGame", "", err)
 			return
 		}
-
-	case CompetitionMode_MTT:
-		if !ce.blind.IsStarted() {
-			// 啟動盲注系統
-			ce.activateBlind()
-		}
-
-		ce.updateTableBlind(table.ID)
 	}
+}
+
+func (ce *competitionEngine) handleCompetitionTableBalancing(table *pokertable.Table, tableIdx int) {
+	if ce.competition.Meta.Mode != CompetitionMode_MTT {
+		return
+	}
+
+	if !ce.blind.IsStarted() {
+		// 啟動盲注系統
+		ce.activateBlind()
+	}
+
+	ce.updateTableBlind(table.ID)
 }
 
 func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tableIdx int) {
@@ -231,21 +237,8 @@ func (ce *competitionEngine) addCompetitionTable(tableSetting TableSetting, play
 	ce.emitCompetitionStateEvent(CompetitionStateEvent_TableUpdated)
 	ce.emitEvent("[addCompetitionTable]", "")
 
-	// add new player data
-	if len(table.State.PlayerStates) > 0 {
-		newPlayerIdx := len(ce.competition.State.Players)
-		newPlayers := make([]*CompetitionPlayer, 0)
-		for _, tablePlayer := range table.State.PlayerStates {
-			player, playerCache := ce.newDefaultCompetitionPlayerData(table.ID, tablePlayer.PlayerID, tablePlayer.Bankroll, playerStatus)
-			newPlayers = append(newPlayers, &player)
-			playerCache.PlayerIdx = newPlayerIdx
-			ce.insertPlayerCache(ce.competition.ID, playerCache.PlayerID, playerCache)
-			newPlayerIdx++
-			ce.emitPlayerEvent("[addCompetitionTable] new player", &player)
-			ce.emitEvent(fmt.Sprintf("[addCompetitionTable] add new player to (%s)", table.ID), tablePlayer.PlayerID)
-		}
-		ce.competition.State.Players = append(ce.competition.State.Players, newPlayers...)
-	}
+	// TODO: Test Only
+	ce.onTableCreated(table)
 
 	return table.ID, nil
 }
@@ -316,9 +309,9 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 	ce.gameSettledRecords.Store(gameSettledRecordID, true)
 	ce.mu.Unlock()
 
-	_ = ce.delay(time.Millisecond*500, func() error {
+	ce.delay(time.Millisecond*500, func() error {
 		// 更新玩家相關賽事數據
-		ce.updatePlayerCompetitionTaleRecords(table)
+		ce.updatePlayerCompetitionTableRecords(table)
 
 		// 根據是否達到停止買入做處理
 		ce.handleReBuy(table)
@@ -344,7 +337,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 		ce.emitEvent("Table Settlement", "")
 		ce.emitCompetitionStateEvent(CompetitionStateEvent_TableGameSettled)
 
-		// 賽數結算條件達成處理
+		// 賽事結算條件達成處理
 		switch ce.competition.Meta.Mode {
 		case CompetitionMode_CT:
 			// 結束桌
@@ -481,6 +474,8 @@ func (ce *competitionEngine) handleMTTTableSettlementNextStep(tableIdx int, tabl
 	if len(zeroChipPlayerIDs) > 0 {
 		if err := ce.regulator.ReleasePlayers(table.ID, zeroChipPlayerIDs); err != nil {
 			ce.emitErrorEvent(fmt.Sprintf("[%s][%d] MTT Regulator Clean 0 chip Players -> ReleasePlayers", table.ID, table.State.GameCount), strings.Join(zeroChipPlayerIDs, ","), err)
+		} else {
+			fmt.Printf("[MTT#DEBUG#handleMTTTableSettlementNextStep] regulator release (%d) zero chip players %+v\n", len(zeroChipPlayerIDs), zeroChipPlayerIDs)
 		}
 	}
 
@@ -601,6 +596,8 @@ func (ce *competitionEngine) handleMTTTableSettlementNextStep(tableIdx int, tabl
 				if len(playerIDs) > 0 {
 					if err := ce.tableManagerBackend.PlayersLeave(tableID, playerIDs); err != nil {
 						ce.emitErrorEvent(fmt.Sprintf("Leave new join player from old table (%s) -> PlayersLeave", tableID), strings.Join(playerIDs, ","), err)
+					} else {
+						fmt.Printf("[MTT#DEBUG#handleMTTTableSettlementNextStep] 舊桌次 (%s) 離開 (%d) players %+v\n", tableID, len(playerIDs), playerIDs)
 					}
 				}
 			}
@@ -864,7 +861,7 @@ func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
 	}
 }
 
-func (ce *competitionEngine) updatePlayerCompetitionTaleRecords(table *pokertable.Table) {
+func (ce *competitionEngine) updatePlayerCompetitionTableRecords(table *pokertable.Table) {
 	// 更新玩家統計數據
 	gamePlayerPreflopFoldTimes := 0
 	for _, player := range table.State.PlayerStates {
@@ -876,7 +873,7 @@ func (ce *competitionEngine) updatePlayerCompetitionTaleRecords(table *pokertabl
 			return competitionPlayer.PlayerID == player.PlayerID
 		})
 		if playerIdx == UnsetValue {
-			fmt.Printf("[updatePlayerCompetitionTaleRecords#statistic] player (%s) is not in the competition\n", player.PlayerID)
+			fmt.Printf("[updatePlayerCompetitionTableRecords#statistic] player (%s) is not in the competition\n", player.PlayerID)
 			continue
 		}
 
@@ -916,7 +913,7 @@ func (ce *competitionEngine) updatePlayerCompetitionTaleRecords(table *pokertabl
 			return competitionPlayer.PlayerID == tablePlayer.PlayerID
 		})
 		if playerIdx == UnsetValue {
-			fmt.Printf("[updatePlayerCompetitionTaleRecords#winner] player (%s) is not in the competition\n", tablePlayer.PlayerID)
+			fmt.Printf("[updatePlayerCompetitionTableRecords#winner] player (%s) is not in the competition\n", tablePlayer.PlayerID)
 			continue
 		}
 
@@ -951,7 +948,7 @@ func (ce *competitionEngine) updatePlayerCompetitionTaleRecords(table *pokertabl
 			return competitionPlayer.PlayerID == playerID
 		})
 		if playerIdx == UnsetValue {
-			fmt.Printf("[updatePlayerCompetitionTaleRecords#table-settlement] player (%s) is not in the competition\n", playerID)
+			fmt.Printf("[updatePlayerCompetitionTableRecords#table-settlement] player (%s) is not in the competition\n", playerID)
 			continue
 		}
 
@@ -1158,6 +1155,7 @@ func (ce *competitionEngine) activateBlind() {
 		ce.competition.State.BlindState.CurrentLevelIndex = bs.Status.CurrentLevelIndex
 		ce.competition.State.BlindState.FinalBuyInLevelIndex = bs.Status.FinalBuyInLevelIndex
 		copy(ce.competition.State.BlindState.EndAts, bs.Status.LevelEndAts)
+		ce.emitCompetitionStateEvent(CompetitionStateEvent_BlindActivated)
 	}
 }
 
