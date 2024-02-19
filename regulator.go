@@ -12,9 +12,6 @@ regulatorCreateAndDistributePlayers 建立新桌次並分配玩家至該桌次
 - 適用時機: 拆併桌監管器自動觸發
 */
 func (ce *competitionEngine) regulatorCreateAndDistributePlayers(playerIDs []string) (string, error) {
-	ce.mu.Lock()
-	defer ce.mu.Unlock()
-
 	joinPlayers := make([]pokertable.JoinPlayer, 0)
 	for _, playerID := range playerIDs {
 		playerIdx := ce.competition.FindPlayerIdx(func(cp *CompetitionPlayer) bool {
@@ -49,9 +46,6 @@ regulatorDistributePlayers 分配玩家至某桌次
 - 適用時機: 拆併桌監管器自動觸發
 */
 func (ce *competitionEngine) regulatorDistributePlayers(tableID string, playerIDs []string) error {
-	ce.mu.Lock()
-	defer ce.mu.Unlock()
-
 	joinPlayers := make([]pokertable.JoinPlayer, 0)
 	for _, playerID := range playerIDs {
 		playerIdx := ce.competition.FindPlayerIdx(func(cp *CompetitionPlayer) bool {
