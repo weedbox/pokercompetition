@@ -266,7 +266,6 @@ func (ce *competitionEngine) settleCompetition(endCompetitionStatus CompetitionS
 
 	// clear caches
 	ce.deletePlayerCachesByCompetition(ce.competition.ID)
-	ce.gameSettledRecords = sync.Map{}
 }
 
 func (ce *competitionEngine) deleteTable(tableIdx int) {
@@ -300,15 +299,6 @@ settleCompetitionTable 桌次結算
   - 適用時機: 每手結束
 */
 func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tableIdx int) {
-	gameSettledRecordID := fmt.Sprintf("%s.%d", table.ID, table.State.GameCount)
-	ce.mu.Lock()
-	if isGameSettled, ok := ce.gameSettledRecords.Load(gameSettledRecordID); ok && isGameSettled.(bool) {
-		ce.mu.Unlock()
-		return
-	}
-	ce.gameSettledRecords.Store(gameSettledRecordID, true)
-	ce.mu.Unlock()
-
 	ce.delay(time.Millisecond*500, func() error {
 		// 更新玩家相關賽事數據
 		ce.updatePlayerCompetitionTableRecords(table)
@@ -408,17 +398,6 @@ func (ce *competitionEngine) handleMTTTableSettlement(tableIdx int, table *poker
 		}
 	}
 
-	fmt.Printf("---------- [c: %s][t: %s] 第 (%d) 手結算, 停止買入: %+v, [離開 %d 人 (%s), 活著: %d 人 (%s)] ----------\n",
-		ce.competition.ID,
-		table.ID,
-		table.State.GameCount,
-		ce.competition.State.BlindState.IsStopBuyIn(),
-		len(zeroChipPlayerIDs),
-		strings.Join(zeroChipPlayerIDs, ","),
-		len(alivePlayerIDs),
-		strings.Join(alivePlayerIDs, ","),
-	)
-
 	// 更新晉級條件 (停買後更新)
 	shouldCloseCompetition := false
 	if ce.competition.State.AdvanceState.Status == CompetitionAdvanceStatus_Updating {
@@ -511,6 +490,8 @@ func (ce *competitionEngine) handleMTTTableSettlementNextStep(tableIdx int, tabl
 			for idx, playerID := range table.State.NextBBOrderPlayerIDs {
 				if idx < releaseCount {
 					releasePlayerIDs = append(releasePlayerIDs, playerID)
+				} else {
+					break
 				}
 			}
 
@@ -565,7 +546,7 @@ func (ce *competitionEngine) handleMTTTableSettlementNextStep(tableIdx int, tabl
 				if _, exist := newJoinPlayerCurrentTableIDs[cp.CurrentTableID]; !exist {
 					newJoinPlayerCurrentTableIDs[cp.CurrentTableID] = make([]string, 0)
 				}
-				newJoinPlayerCurrentTableIDs[cp.CurrentTableID] = append(newJoinPlayerCurrentTableIDs[cp.CurrentTableID], cp.CurrentTableID)
+				newJoinPlayerCurrentTableIDs[cp.CurrentTableID] = append(newJoinPlayerCurrentTableIDs[cp.CurrentTableID], playerID)
 
 				newJoinPlayerCaches[playerID] = playerCache
 				newJoinCompetitionPlayers[playerID] = cp
@@ -623,6 +604,21 @@ func (ce *competitionEngine) handleMTTTableSettlementNextStep(tableIdx int, tabl
 			// close table
 			ce.closeCompetitionTable(table, tableIdx)
 		}
+
+		fmt.Printf("---------- [c: %s][t: %s] 第 (%d) 手結算, 停止買入: %+v, [沒籌碼離開 %d 人 (%s), 有籌碼活著: %d 人 (%s), 配桌平衡加入 %d 人 (%s), 配桌平衡離開至等待區 %d 人 (%s)] ----------\n",
+			ce.competition.ID,
+			table.ID,
+			table.State.GameCount,
+			ce.competition.State.BlindState.IsStopBuyIn(),
+			len(zeroChipPlayerIDs),
+			strings.Join(zeroChipPlayerIDs, ","),
+			len(alivePlayerIDs),
+			strings.Join(alivePlayerIDs, ","),
+			len(newPlayerIDs),
+			strings.Join(newPlayerIDs, ","),
+			len(releasePlayerIDs),
+			strings.Join(releasePlayerIDs, ","),
+		)
 	}
 }
 

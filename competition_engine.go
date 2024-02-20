@@ -3,7 +3,6 @@ package pokercompetition
 import (
 	"errors"
 	"fmt"
-	"strings"
 	"sync"
 	"time"
 
@@ -71,7 +70,6 @@ type competitionEngine struct {
 	mu                                  sync.RWMutex
 	competition                         *Competition
 	playerCaches                        sync.Map // key: <competitionID.playerID>, value: PlayerCache
-	gameSettledRecords                  sync.Map // key: <tableID.game_count>, value: IsSettled
 	tableOptions                        *pokertable.TableEngineOptions
 	tableManagerBackend                 TableManagerBackend
 	onCompetitionUpdated                func(competition *Competition)
@@ -84,7 +82,6 @@ type competitionEngine struct {
 	breakingPauseResumeStates           map[string]map[int]bool // key: tableID, value: (k,v): (breaking blind level index, is resume from pause)
 	blind                               pokerblind.Blind
 	regulator                           regulator.Regulator
-	waitingRoomPlayerIDs                map[string]bool
 
 	// TODO: Test Only
 	onTableCreated func(table *pokertable.Table)
@@ -93,7 +90,6 @@ type competitionEngine struct {
 func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
 	ce := &competitionEngine{
 		playerCaches:                        sync.Map{},
-		gameSettledRecords:                  sync.Map{},
 		onCompetitionUpdated:                func(competition *Competition) {},
 		onCompetitionErrorUpdated:           func(competition *Competition, err error) {},
 		onCompetitionPlayerUpdated:          func(competitionID string, competitionPlayer *CompetitionPlayer) {},
@@ -103,7 +99,6 @@ func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
 		onCompetitionPlayerCashOut:          func(competitionID string, competitionPlayer *CompetitionPlayer) {},
 		breakingPauseResumeStates:           make(map[string]map[int]bool),
 		blind:                               pokerblind.NewBlind(),
-		waitingRoomPlayerIDs:                make(map[string]bool),
 
 		// TODO: Test Only
 		onTableCreated: func(table *pokertable.Table) {},
@@ -327,7 +322,7 @@ func (ce *competitionEngine) StartCompetition() (int64, error) {
 	if ce.competition.Meta.Mode == CompetitionMode_CT {
 		ce.competition.State.EndAt = ce.competition.State.StartAt + int64((time.Duration(ce.competition.Meta.MaxDuration) * time.Second).Seconds())
 	} else if ce.competition.Meta.Mode == CompetitionMode_MTT {
-		ce.competition.State.EndAt = -1
+		ce.competition.State.EndAt = UnsetValue
 	}
 
 	switch ce.competition.Meta.Mode {
@@ -351,7 +346,7 @@ func (ce *competitionEngine) StartCompetition() (int64, error) {
 					pokertable.TableStateStatus_TableGamePlaying,
 					pokertable.TableStateStatus_TableGameSettled,
 
-					// close
+					// not playing
 					pokertable.TableStateStatus_TableClosed,
 				}
 				// 桌次尚未結束，處理關桌
@@ -365,22 +360,8 @@ func (ce *competitionEngine) StartCompetition() (int64, error) {
 			return ce.competition.State.StartAt, err
 		}
 	case CompetitionMode_MTT:
-		// 設定拆併桌監管器狀態
+		// 更新拆併桌監管器狀態
 		ce.regulator.SetStatus(regulator.CompetitionStatus_Normal)
-
-		// 把等待區玩家丟到拆併桌監管器配桌
-		waitingRoomPlayerIDs := make([]string, 0)
-		for playerID := range ce.waitingRoomPlayerIDs {
-			waitingRoomPlayerIDs = append(waitingRoomPlayerIDs, playerID)
-		}
-		if len(waitingRoomPlayerIDs) > 0 {
-			err := ce.regulatorAddPlayers(waitingRoomPlayerIDs)
-			if err != nil {
-				ce.emitErrorEvent("StartCompetition -> AddPlayers to regulator failed", strings.Join(waitingRoomPlayerIDs, ","), err)
-				return ce.competition.State.StartAt, err
-			}
-			ce.waitingRoomPlayerIDs = make(map[string]bool)
-		}
 	}
 
 	ce.emitEvent("StartCompetition", "")
@@ -459,6 +440,11 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 		playerStatus = CompetitionPlayerStatus_WaitingTableBalancing
 	}
 
+	// 更新統計數據 (CT & MTT)
+	if ce.competition.Meta.Mode == CompetitionMode_CT || ce.competition.Meta.Mode == CompetitionMode_MTT {
+		ce.competition.State.Statistic.TotalBuyInCount++
+	}
+
 	// do logic
 	if isBuyIn {
 		player, playerCache := ce.newDefaultCompetitionPlayerData(tableID, joinPlayer.PlayerID, joinPlayer.RedeemChips, playerStatus)
@@ -494,11 +480,6 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 		ce.emitPlayerEvent("PlayerBuyIn -> Re Buy", cp)
 	}
 
-	// 更新統計數據 (CT & MTT)
-	if ce.competition.Meta.Mode == CompetitionMode_CT || ce.competition.Meta.Mode == CompetitionMode_MTT {
-		ce.competition.State.Statistic.TotalBuyInCount++
-	}
-
 	switch ce.competition.Meta.Mode {
 	case CompetitionMode_CT, CompetitionMode_Cash:
 		// call tableEngine
@@ -511,16 +492,11 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 			ce.emitErrorEvent("PlayerBuyIn -> PlayerReserve", joinPlayer.PlayerID, err)
 		}
 	case CompetitionMode_MTT:
-		if ce.competition.State.Status == CompetitionStateStatus_Registering {
-			// MTT 開賽前放到 waitingRoomPlayers
-			ce.waitingRoomPlayerIDs[joinPlayer.PlayerID] = true
-		} else if ce.competition.State.Status == CompetitionStateStatus_DelayedBuyIn {
-			// 開賽後一律丟到等待區等待拆併桌監管器配桌
-			err := ce.regulatorAddPlayers([]string{joinPlayer.PlayerID})
-			if err != nil {
-				ce.emitErrorEvent("PlayerBuyIn -> AddPlayers to regulator failed", joinPlayer.PlayerID, err)
-				return err
-			}
+		// 一律丟到拆併桌監管器等待配桌
+		err := ce.regulatorAddPlayers([]string{joinPlayer.PlayerID})
+		if err != nil {
+			ce.emitErrorEvent("PlayerBuyIn -> AddPlayers to regulator failed", joinPlayer.PlayerID, err)
+			return err
 		}
 	}
 
@@ -607,7 +583,6 @@ func (ce *competitionEngine) PlayerRefund(playerID string) error {
 	// refund logic
 	ce.deletePlayer(playerIdx)
 	ce.deletePlayerCache(ce.competition.ID, playerID)
-	delete(ce.waitingRoomPlayerIDs, playerID)
 
 	ce.emitEvent("PlayerRefund", playerID)
 	return nil
