@@ -488,6 +488,9 @@ func (ce *competitionEngine) handleMTTTableSettlementNextStep(tableIdx int, tabl
 
 			// leave players
 			leavePlayerIDs = append(leavePlayerIDs, releasePlayerIDs...)
+		}
+
+		if len(zeroChipPlayerIDs) > 0 {
 			leavePlayerIDs = append(leavePlayerIDs, zeroChipPlayerIDs...)
 		}
 
