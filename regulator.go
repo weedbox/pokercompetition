@@ -21,9 +21,14 @@ func (ce *competitionEngine) regulatorCreateAndDistributePlayers(playerIDs []str
 			continue
 		}
 
+		chips := ce.competition.State.Players[playerIdx].Chips
+		if chips <= 0 {
+			return "", fmt.Errorf("competition: failed to regulate player (%s) to new table", playerID)
+		}
+
 		joinPlayers = append(joinPlayers, pokertable.JoinPlayer{
 			PlayerID:    playerID,
-			RedeemChips: ce.competition.State.Players[playerIdx].Chips,
+			RedeemChips: chips,
 			Seat:        pokertable.UnsetValue,
 		})
 	}
@@ -55,9 +60,14 @@ func (ce *competitionEngine) regulatorDistributePlayers(tableID string, playerID
 			return ErrCompetitionPlayerNotFound
 		}
 
+		chips := ce.competition.State.Players[playerIdx].Chips
+		if chips <= 0 {
+			return fmt.Errorf("competition: failed to regulate player (%s) to table (%s)", playerID, tableID)
+		}
 		joinPlayers = append(joinPlayers, pokertable.JoinPlayer{
 			PlayerID:    playerID,
-			RedeemChips: ce.competition.State.Players[playerIdx].Chips,
+			RedeemChips: chips,
+			Seat:        UnsetValue,
 		})
 	}
 	if _, err := ce.tableManagerBackend.UpdateTablePlayers(tableID, joinPlayers, []string{}); err != nil {

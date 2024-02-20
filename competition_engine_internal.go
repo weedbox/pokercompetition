@@ -558,41 +558,43 @@ func (ce *competitionEngine) handleMTTTableSettlementNextStep(tableIdx int, tabl
 			}
 		}
 
-		// balance table players
-		if tablePlayerSeatMap, err := ce.tableManagerBackend.UpdateTablePlayers(table.ID, newJoinPlayers, leavePlayerIDs); err != nil {
-			ce.emitErrorEvent(fmt.Sprintf("[%s][%d] UpdateTablePlayers", table.ID, table.State.GameCount), "", err)
-		} else {
-			// release 玩家進等待區
-			for playerID, playerCache := range releasePlayerCaches {
-				if cp, ok := releaseCompetitionPlayers[playerID]; ok {
-					playerCache.TableID = ""
-					cp.CurrentTableID = ""
-					cp.Status = CompetitionPlayerStatus_WaitingTableBalancing
-					ce.emitPlayerEvent(fmt.Sprintf("[Regulator] player (%s) is moving to the waiting room", cp.PlayerID), cp)
-				}
-			}
-
-			// newPlayerID 從舊桌次離開
-			for tableID, playerIDs := range newJoinPlayerCurrentTableIDs {
-				if len(playerIDs) > 0 {
-					if err := ce.tableManagerBackend.PlayersLeave(tableID, playerIDs); err != nil {
-						ce.emitErrorEvent(fmt.Sprintf("Leave new join player from old table (%s) -> PlayersLeave", tableID), strings.Join(playerIDs, ","), err)
-					} else {
-						fmt.Printf("[MTT#DEBUG#handleMTTTableSettlementNextStep] 舊桌次 (%s) 離開 (%d) players %+v\n", tableID, len(playerIDs), playerIDs)
+		// balance table players (有 newJoinPlayers && leavePlayerIDs)
+		if !(len(newJoinPlayers) == 0 && len(leavePlayerIDs) == 0) {
+			if tablePlayerSeatMap, err := ce.tableManagerBackend.UpdateTablePlayers(table.ID, newJoinPlayers, leavePlayerIDs); err != nil {
+				ce.emitErrorEvent(fmt.Sprintf("[%s][%d] UpdateTablePlayers", table.ID, table.State.GameCount), "", err)
+			} else {
+				// release 玩家進等待區
+				for playerID, playerCache := range releasePlayerCaches {
+					if cp, ok := releaseCompetitionPlayers[playerID]; ok {
+						playerCache.TableID = ""
+						cp.CurrentTableID = ""
+						cp.Status = CompetitionPlayerStatus_WaitingTableBalancing
+						ce.emitPlayerEvent(fmt.Sprintf("[Regulator] player (%s) is moving to the waiting room", cp.PlayerID), cp)
 					}
 				}
-			}
 
-			// 更新該桌次玩家資訊
-			for playerID, seat := range tablePlayerSeatMap {
-				if playerCache, ok := newJoinPlayerCaches[playerID]; ok {
-					playerCache.TableID = table.ID
+				// newPlayerID 從舊桌次離開
+				for tableID, playerIDs := range newJoinPlayerCurrentTableIDs {
+					if len(playerIDs) > 0 {
+						if err := ce.tableManagerBackend.PlayersLeave(tableID, playerIDs); err != nil {
+							ce.emitErrorEvent(fmt.Sprintf("Leave new join player from old table (%s) -> PlayersLeave", tableID), strings.Join(playerIDs, ","), err)
+						} else {
+							fmt.Printf("[MTT#DEBUG#handleMTTTableSettlementNextStep] 舊桌次 (%s) 離開 (%d) players %+v\n", tableID, len(playerIDs), playerIDs)
+						}
+					}
+				}
 
-					if cp, ok := newJoinCompetitionPlayers[playerID]; ok {
-						cp.CurrentTableID = table.ID
-						cp.Status = CompetitionPlayerStatus_Playing
-						cp.CurrentSeat = seat
-						ce.emitPlayerEvent("[UpdateTablePlayers] reserve table", cp)
+				// 更新該桌次玩家資訊
+				for playerID, seat := range tablePlayerSeatMap {
+					if playerCache, ok := newJoinPlayerCaches[playerID]; ok {
+						playerCache.TableID = table.ID
+
+						if cp, ok := newJoinCompetitionPlayers[playerID]; ok {
+							cp.CurrentTableID = table.ID
+							cp.Status = CompetitionPlayerStatus_Playing
+							cp.CurrentSeat = seat
+							ce.emitPlayerEvent("[UpdateTablePlayers] reserve table", cp)
+						}
 					}
 				}
 			}
