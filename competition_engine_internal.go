@@ -449,15 +449,6 @@ func (ce *competitionEngine) handleMTTTableSettlement(tableIdx int, table *poker
 }
 
 func (ce *competitionEngine) handleMTTTableSettlementNextStep(tableIdx int, table *pokertable.Table, alivePlayerIDs, zeroChipPlayerIDs []string) {
-	// 拆併桌監管器釋放玩家
-	if len(zeroChipPlayerIDs) > 0 {
-		if err := ce.regulator.ReleasePlayers(table.ID, zeroChipPlayerIDs); err != nil {
-			ce.emitErrorEvent(fmt.Sprintf("[%s][%d] MTT Regulator Clean 0 chip Players -> ReleasePlayers", table.ID, table.State.GameCount), strings.Join(zeroChipPlayerIDs, ","), err)
-		} else {
-			fmt.Printf("[MTT#DEBUG#handleMTTTableSettlementNextStep] regulator release (%d) zero chip players %+v\n", len(zeroChipPlayerIDs), zeroChipPlayerIDs)
-		}
-	}
-
 	// 拆併桌監管器更新狀態
 	if releaseCount, newPlayerIDs, err := ce.regulator.SyncState(table.ID, len(alivePlayerIDs)); err != nil {
 		ce.emitErrorEvent(fmt.Sprintf("[%s][%d] MTT Regulator Sync State", table.ID, table.State.GameCount), "", err)
@@ -563,11 +554,21 @@ func (ce *competitionEngine) handleMTTTableSettlementNextStep(tableIdx int, tabl
 			if tablePlayerSeatMap, err := ce.tableManagerBackend.UpdateTablePlayers(table.ID, newJoinPlayers, leavePlayerIDs); err != nil {
 				ce.emitErrorEvent(fmt.Sprintf("[%s][%d] UpdateTablePlayers", table.ID, table.State.GameCount), "", err)
 			} else {
+				// 拆併桌監管器釋放玩家
+				if len(releasePlayerIDs) > 0 {
+					if err := ce.regulator.ReleasePlayers(table.ID, releasePlayerIDs); err != nil {
+						ce.emitErrorEvent(fmt.Sprintf("[%s][%d] MTT Regulator Release Players", table.ID, table.State.GameCount), strings.Join(releasePlayerIDs, ","), err)
+					} else {
+						fmt.Printf("[MTT#DEBUG#handleMTTTableSettlementNextStep] regulator release (%d) players %+v\n", len(releasePlayerIDs), releasePlayerIDs)
+					}
+				}
+
 				// release 玩家進等待區
 				for playerID, playerCache := range releasePlayerCaches {
 					if cp, ok := releaseCompetitionPlayers[playerID]; ok {
 						playerCache.TableID = ""
 						cp.CurrentTableID = ""
+						cp.CurrentSeat = UnsetValue
 						cp.Status = CompetitionPlayerStatus_WaitingTableBalancing
 						ce.emitPlayerEvent(fmt.Sprintf("[Regulator] player (%s) is moving to the waiting room", cp.PlayerID), cp)
 					}

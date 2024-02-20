@@ -475,6 +475,7 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 		if ce.competition.Meta.Mode == CompetitionMode_MTT {
 			playerCache.TableID = ""
 			cp.CurrentTableID = "" // re-buy 時要清空 CurrentTableID 等待重新配桌
+			cp.CurrentSeat = UnsetValue
 		}
 		ce.emitEvent(fmt.Sprintf("PlayerBuyIn -> %s Re Buy", joinPlayer.PlayerID), joinPlayer.PlayerID)
 		ce.emitPlayerEvent("PlayerBuyIn -> Re Buy", cp)
