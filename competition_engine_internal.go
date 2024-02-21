@@ -537,10 +537,13 @@ func (ce *competitionEngine) handleMTTTableSettlementNextStep(tableIdx int, tabl
 				}
 
 				// prepare data
-				if _, exist := newJoinPlayerCurrentTableIDs[cp.CurrentTableID]; !exist {
-					newJoinPlayerCurrentTableIDs[cp.CurrentTableID] = make([]string, 0)
+				if cp.CurrentTableID != "" {
+					// only record player who has CurrentTableID (in the game, not in the waiting room)
+					if _, exist := newJoinPlayerCurrentTableIDs[cp.CurrentTableID]; !exist {
+						newJoinPlayerCurrentTableIDs[cp.CurrentTableID] = make([]string, 0)
+					}
+					newJoinPlayerCurrentTableIDs[cp.CurrentTableID] = append(newJoinPlayerCurrentTableIDs[cp.CurrentTableID], playerID)
 				}
-				newJoinPlayerCurrentTableIDs[cp.CurrentTableID] = append(newJoinPlayerCurrentTableIDs[cp.CurrentTableID], playerID)
 
 				newJoinPlayerCaches[playerID] = playerCache
 				newJoinCompetitionPlayers[playerID] = cp
