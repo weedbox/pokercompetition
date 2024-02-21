@@ -608,7 +608,9 @@ func (ce *competitionEngine) handleMTTTableSettlementNextStep(tableIdx int, tabl
 		updatedTableAlivePlayerCount := len(alivePlayerIDs) - releaseCount + len(newPlayerIDs)
 		if updatedTableAlivePlayerCount <= 0 {
 			// close table
-			ce.closeCompetitionTable(table, tableIdx)
+			if err := ce.tableManagerBackend.CloseTable(table.ID); err != nil {
+				ce.emitErrorEvent("Table Settlement -> MTT Close Table", "", err)
+			}
 		}
 
 		fmt.Printf("---------- [c: %s][t: %s] 第 (%d) 手結算, 停止買入: %+v, [沒籌碼離開 %d 人 (%s), 有籌碼活著: %d 人 (%s), 配桌平衡加入 %d 人 (%s), 配桌平衡離開至等待區 %d 人 (%s)] ----------\n",
