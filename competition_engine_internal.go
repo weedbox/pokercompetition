@@ -90,7 +90,7 @@ func (ce *competitionEngine) UpdateReserveTablePlayerState(tableID string, playe
 	cp.CurrentTableID = tableID
 	cp.Status = CompetitionPlayerStatus_Playing
 	ce.emitPlayerEvent("[UpdateReserveTablePlayerState] player table seat updated", cp)
-	ce.emitEvent(fmt.Sprintf("[UpdateReserveTablePlayerState] player (%s) is reserved to table (%s) at seat (%d)", cp.CurrentTableID, cp.PlayerID, cp.CurrentSeat), cp.PlayerID)
+	ce.emitEvent(fmt.Sprintf("[UpdateReserveTablePlayerState] player (%s) is reserved to table (%s) at seat (%d)", cp.PlayerID, cp.CurrentTableID, cp.CurrentSeat), cp.PlayerID)
 }
 
 func (ce *competitionEngine) UpdateTable(table *pokertable.Table) {
@@ -562,7 +562,7 @@ func (ce *competitionEngine) handleMTTTableSettlementNextStep(tableIdx int, tabl
 					if err := ce.regulator.ReleasePlayers(table.ID, releasePlayerIDs); err != nil {
 						ce.emitErrorEvent(fmt.Sprintf("[%s][%d] MTT Regulator Release Players", table.ID, table.State.GameCount), strings.Join(releasePlayerIDs, ","), err)
 					} else {
-						fmt.Printf("[MTT#DEBUG#handleMTTTableSettlementNextStep] regulator release (%d) players %+v\n", len(releasePlayerIDs), releasePlayerIDs)
+						fmt.Printf("[MTT#DEBUG#handleMTTTableSettlementNextStep] regulator release (%d) players %+v at table (%s)\n", len(releasePlayerIDs), releasePlayerIDs, table.ID)
 					}
 				}
 
