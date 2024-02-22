@@ -146,7 +146,7 @@ func (ce *competitionEngine) handleCompetitionTableCreated(table *pokertable.Tab
 			return
 		}
 
-		ce.updateTableBlind(table.ID)
+		ce.updateTableBlind("handleCompetitionTableCreated#ct", table.ID)
 
 		if err := ce.tableManagerBackend.StartTableGame(table.ID); err != nil {
 			ce.emitErrorEvent("CT Auto StartTableGame", "", err)
@@ -167,7 +167,7 @@ func (ce *competitionEngine) handleCompetitionTableCreated(table *pokertable.Tab
 			return
 		}
 
-		ce.updateTableBlind(table.ID)
+		ce.updateTableBlind("handleCompetitionTableCreated#cash", table.ID)
 
 		if err := ce.tableManagerBackend.StartTableGame(table.ID); err != nil {
 			ce.emitErrorEvent("Cash Auto StartTableGame", "", err)
@@ -186,7 +186,7 @@ func (ce *competitionEngine) handleCompetitionTableBalancing(table *pokertable.T
 		ce.activateBlind()
 	}
 
-	ce.updateTableBlind(table.ID)
+	ce.updateTableBlind("handleCompetitionTableBalancing#mtt", table.ID)
 }
 
 func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tableIdx int) {
@@ -1000,7 +1000,8 @@ func (ce *competitionEngine) shouldCloseCashTable(tableStartAt int64) bool {
 	return time.Now().Unix() > tableEndAt
 }
 
-func (ce *competitionEngine) updateTableBlind(tableID string) {
+func (ce *competitionEngine) updateTableBlind(caller string, tableID string) {
+	fmt.Printf("[DEBUG#MTT] [%s] call updateTableBlind\n", caller)
 	level, ante, dealer, sb, bb := ce.competition.CurrentBlindData()
 	if err := ce.tableManagerBackend.UpdateBlind(tableID, level, ante, dealer, sb, bb); err != nil {
 		ce.emitErrorEvent("update blind", "", err)
@@ -1047,7 +1048,7 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 		ce.competition.State.BlindState.CurrentLevelIndex = bs.Status.CurrentLevelIndex
 		fmt.Println("[DEBUG#initBlind] BlindState.CurrentLevelIndex:", ce.competition.State.BlindState.CurrentLevelIndex)
 		for _, table := range ce.competition.State.Tables {
-			ce.updateTableBlind(table.ID)
+			ce.updateTableBlind("initBlind", table.ID)
 			ce.handleBreaking(table.ID)
 		}
 
