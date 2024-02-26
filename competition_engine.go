@@ -370,9 +370,6 @@ func (ce *competitionEngine) StartCompetition() (int64, error) {
 }
 
 func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
-	ce.mu.Lock()
-	defer ce.mu.Unlock()
-
 	// validate join player data
 	if joinPlayer.RedeemChips <= 0 {
 		return ErrCompetitionNoRedeemChips
@@ -446,6 +443,7 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 	}
 
 	// do logic
+	ce.mu.Lock()
 	if isBuyIn {
 		player, playerCache := ce.newDefaultCompetitionPlayerData(tableID, joinPlayer.PlayerID, joinPlayer.RedeemChips, playerStatus)
 		ce.competition.State.Players = append(ce.competition.State.Players, &player)
@@ -480,6 +478,7 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 		ce.emitEvent(fmt.Sprintf("PlayerBuyIn -> %s Re Buy", joinPlayer.PlayerID), joinPlayer.PlayerID)
 		ce.emitPlayerEvent("PlayerBuyIn -> Re Buy", cp)
 	}
+	defer ce.mu.Unlock()
 
 	switch ce.competition.Meta.Mode {
 	case CompetitionMode_CT, CompetitionMode_Cash:
@@ -505,9 +504,6 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 }
 
 func (ce *competitionEngine) PlayerAddon(tableID string, joinPlayer JoinPlayer) error {
-	ce.mu.Lock()
-	defer ce.mu.Unlock()
-
 	// validate join player data
 	if joinPlayer.RedeemChips <= 0 {
 		return ErrCompetitionNoRedeemChips
@@ -535,10 +531,16 @@ func (ce *competitionEngine) PlayerAddon(tableID string, joinPlayer JoinPlayer) 
 	}
 
 	// do logic
+	ce.mu.Lock()
 	cp.CurrentTableID = tableID
 	cp.Chips += joinPlayer.RedeemChips
 	cp.AddonTimes++
 	cp.TotalRedeemChips += joinPlayer.RedeemChips
+	defer ce.mu.Unlock()
+
+	// emit events
+	ce.emitEvent("PlayerAddon", joinPlayer.PlayerID)
+	ce.emitPlayerEvent("PlayerAddon", cp)
 
 	// call tableEngine
 	jp := pokertable.JoinPlayer{
@@ -550,15 +552,10 @@ func (ce *competitionEngine) PlayerAddon(tableID string, joinPlayer JoinPlayer) 
 		return err
 	}
 
-	ce.emitEvent("PlayerAddon", joinPlayer.PlayerID)
-	ce.emitPlayerEvent("PlayerAddon", cp)
 	return nil
 }
 
 func (ce *competitionEngine) PlayerRefund(playerID string) error {
-	ce.mu.Lock()
-	defer ce.mu.Unlock()
-
 	// validate refund conditions
 	playerIdx := ce.competition.FindPlayerIdx(func(player *CompetitionPlayer) bool {
 		return player.PlayerID == playerID
@@ -571,29 +568,35 @@ func (ce *competitionEngine) PlayerRefund(playerID string) error {
 		return ErrCompetitionRefundRejected
 	}
 
+	playerTableID := ""
 	if ce.competition.Meta.Mode == CompetitionMode_CT {
 		playerCache, exist := ce.getPlayerCache(ce.competition.ID, playerID)
 		if !exist {
 			return ErrCompetitionPlayerNotFound
 		}
-		// call tableEngine
-		if err := ce.tableManagerBackend.PlayersLeave(playerCache.TableID, []string{playerID}); err != nil {
+		playerTableID = playerCache.TableID
+	}
+
+	// refund logic
+	ce.mu.Lock()
+	ce.deletePlayer(playerIdx)
+	ce.deletePlayerCache(ce.competition.ID, playerID)
+	defer ce.mu.Unlock()
+
+	// emit events
+	ce.emitEvent("PlayerRefund", playerID)
+
+	// call tableEngine
+	if playerTableID != "" {
+		if err := ce.tableManagerBackend.PlayersLeave(playerTableID, []string{playerID}); err != nil {
 			return err
 		}
 	}
 
-	// refund logic
-	ce.deletePlayer(playerIdx)
-	ce.deletePlayerCache(ce.competition.ID, playerID)
-
-	ce.emitEvent("PlayerRefund", playerID)
 	return nil
 }
 
 func (ce *competitionEngine) PlayerCashOut(tableID, playerID string) error {
-	ce.mu.Lock()
-	defer ce.mu.Unlock()
-
 	// validate leave conditions
 	playerIdx := ce.competition.FindPlayerIdx(func(player *CompetitionPlayer) bool {
 		return player.PlayerID == playerID
@@ -632,9 +635,6 @@ func (ce *competitionEngine) PlayerCashOut(tableID, playerID string) error {
 }
 
 func (ce *competitionEngine) PlayerQuit(tableID, playerID string) error {
-	ce.mu.Lock()
-	defer ce.mu.Unlock()
-
 	// validate quit conditions
 	playerIdx := ce.competition.FindPlayerIdx(func(player *CompetitionPlayer) bool {
 		return player.PlayerID == playerID
@@ -655,11 +655,14 @@ func (ce *competitionEngine) PlayerQuit(tableID, playerID string) error {
 		return ErrCompetitionQuitRejected
 	}
 
+	ce.mu.Lock()
 	cp := ce.competition.State.Players[playerIdx]
 	cp.Status = CompetitionPlayerStatus_ReBuyWaiting
 	cp.IsReBuying = false
 	cp.ReBuyEndAt = UnsetValue
 	cp.CurrentSeat = UnsetValue
+	defer ce.mu.Unlock()
+
 	ce.emitPlayerEvent("quit knockout", cp)
 	ce.emitEvent("Player Quit", "")
 	ce.emitCompetitionStateEvent(CompetitionStateEvent_KnockoutPlayers)

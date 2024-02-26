@@ -643,9 +643,6 @@ func (ce *competitionEngine) handleCashOut(tableID string, leavePlayerIndexes ma
 }
 
 func (ce *competitionEngine) handleBreaking(tableID string) {
-	ce.mu.Lock()
-	defer ce.mu.Unlock()
-
 	if !ce.competition.IsBreaking() {
 		return
 	}
@@ -738,9 +735,6 @@ func (ce *competitionEngine) handleTableKnockoutPlayers(table *pokertable.Table)
 }
 
 func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
-	ce.mu.Lock()
-	defer ce.mu.Unlock()
-
 	if ce.competition.State.BlindState.IsStopBuyIn() {
 		return
 	}
