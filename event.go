@@ -26,7 +26,6 @@ func (ce *competitionEngine) emitEvent(eventName string, playerID string) {
 	ce.onCompetitionUpdated(ce.competition)
 }
 
-// TODO: replace err(error) with errMsg(string)
 func (ce *competitionEngine) emitErrorEvent(eventName string, playerID string, err error) {
 	fmt.Printf("->[Competition][#%d][%s] emit ERROR Event: %s, Error: %v\n", ce.competition.UpdateSerial, playerID, eventName, err)
 	ce.onCompetitionErrorUpdated(ce.competition, err)

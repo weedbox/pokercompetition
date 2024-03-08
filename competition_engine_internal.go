@@ -102,7 +102,7 @@ func (ce *competitionEngine) UpdateTable(table *pokertable.Table) {
 	}
 
 	if ce.isEndStatus() {
-		fmt.Println("[DEBUG#UpdateTable] status is end, no need to update table. Status:", string(ce.competition.State.Status))
+		// fmt.Println("[DEBUG#UpdateTable] status is end, no need to update table. Status:", string(ce.competition.State.Status))
 		return
 	}
 
@@ -146,7 +146,7 @@ func (ce *competitionEngine) handleCompetitionTableCreated(table *pokertable.Tab
 			return
 		}
 
-		ce.updateTableBlind("handleCompetitionTableCreated#ct", table.ID)
+		ce.updateTableBlind(table.ID)
 
 		if err := ce.tableManagerBackend.StartTableGame(table.ID); err != nil {
 			ce.emitErrorEvent("CT Auto StartTableGame", "", err)
@@ -167,7 +167,7 @@ func (ce *competitionEngine) handleCompetitionTableCreated(table *pokertable.Tab
 			return
 		}
 
-		ce.updateTableBlind("handleCompetitionTableCreated#cash", table.ID)
+		ce.updateTableBlind(table.ID)
 
 		if err := ce.tableManagerBackend.StartTableGame(table.ID); err != nil {
 			ce.emitErrorEvent("Cash Auto StartTableGame", "", err)
@@ -186,7 +186,7 @@ func (ce *competitionEngine) handleCompetitionTableBalancing(table *pokertable.T
 		ce.activateBlind()
 	}
 
-	ce.updateTableBlind("handleCompetitionTableBalancing#mtt", table.ID)
+	ce.updateTableBlind(table.ID)
 }
 
 func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tableIdx int) {
@@ -224,7 +224,7 @@ func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tab
 	}
 }
 
-func (ce *competitionEngine) addCompetitionTable(tableSetting TableSetting, playerStatus CompetitionPlayerStatus) (string, error) {
+func (ce *competitionEngine) addCompetitionTable(tableSetting TableSetting) (string, error) {
 	// create table
 	setting := NewPokerTableSetting(ce.competition.ID, ce.competition.Meta, tableSetting)
 	table, err := ce.tableManagerBackend.CreateTable(ce.tableOptions, setting)
@@ -654,7 +654,7 @@ func (ce *competitionEngine) handleBreaking(tableID string) {
 	if _, exist := ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex]; !exist {
 		ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] = false
 	} else {
-		fmt.Println("[DEBUG#handleBreaking] already handle breaking & start timer")
+		// fmt.Println("[DEBUG#handleBreaking] already handle breaking & start timer")
 		return
 	}
 
@@ -671,7 +671,7 @@ func (ce *competitionEngine) handleBreaking(tableID string) {
 		}
 
 		if ce.isEndStatus() {
-			fmt.Println("[DEBUG#handleBreaking] not reopen since competition status is:", ce.competition.State.Status)
+			// fmt.Println("[DEBUG#handleBreaking] not reopen since competition status is:", ce.competition.State.Status)
 			return
 		}
 
@@ -696,7 +696,7 @@ func (ce *competitionEngine) handleBreaking(tableID string) {
 				ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] = true
 			}
 		} else {
-			fmt.Println("[DEBUG#handleBreaking] not find table at index:", tableIdx)
+			// fmt.Println("[DEBUG#handleBreaking] not find table at index:", tableIdx)
 		}
 	}); err != nil {
 		ce.emitErrorEvent("new resume game task from breaking", "", err)
@@ -751,7 +751,7 @@ func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
 			return competitionPlayer.PlayerID == player.PlayerID
 		})
 		if rebuyPlayerIdx == UnsetValue {
-			fmt.Printf("[handleReBuy#start] player (%s) is not in the competition\n", player.PlayerID)
+			// fmt.Printf("[handleReBuy#start] player (%s) is not in the competition\n", player.PlayerID)
 			continue
 		}
 
@@ -787,7 +787,7 @@ func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
 		reBuyEndAtTime := time.Unix(reBuyEndAt, 0)
 		if err := timebank.NewTimeBank().NewTaskWithDeadline(reBuyEndAtTime, func(isCancelled bool) {
 			if isCancelled {
-				fmt.Println("[handleReBuy#after] rebuy timer is cancelled")
+				// fmt.Println("[handleReBuy#after] rebuy timer is cancelled")
 				return
 			}
 
@@ -798,13 +798,13 @@ func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
 					return competitionPlayer.PlayerID == reBuyPlayerID
 				})
 				if reBuyPlayerIdx == UnsetValue {
-					fmt.Printf("[handleReBuy#after] player (%s) is not in the competition\n", reBuyPlayerID)
+					// fmt.Printf("[handleReBuy#after] player (%s) is not in the competition\n", reBuyPlayerID)
 					continue
 				}
 
 				cp := ce.competition.State.Players[reBuyPlayerIdx]
 				if cp.Chips > 0 {
-					fmt.Printf("[handleReBuy#after] player (%s) is already re buy (%d) chips\n", reBuyPlayerID, cp.Chips)
+					// fmt.Printf("[handleReBuy#after] player (%s) is already re buy (%d) chips\n", reBuyPlayerID, cp.Chips)
 					continue
 				}
 
@@ -856,7 +856,7 @@ func (ce *competitionEngine) updatePlayerCompetitionTableRecords(table *pokertab
 			return competitionPlayer.PlayerID == player.PlayerID
 		})
 		if playerIdx == UnsetValue {
-			fmt.Printf("[updatePlayerCompetitionTableRecords#statistic] player (%s) is not in the competition\n", player.PlayerID)
+			// fmt.Printf("[updatePlayerCompetitionTableRecords#statistic] player (%s) is not in the competition\n", player.PlayerID)
 			continue
 		}
 
@@ -896,7 +896,7 @@ func (ce *competitionEngine) updatePlayerCompetitionTableRecords(table *pokertab
 			return competitionPlayer.PlayerID == tablePlayer.PlayerID
 		})
 		if playerIdx == UnsetValue {
-			fmt.Printf("[updatePlayerCompetitionTableRecords#winner] player (%s) is not in the competition\n", tablePlayer.PlayerID)
+			// fmt.Printf("[updatePlayerCompetitionTableRecords#winner] player (%s) is not in the competition\n", tablePlayer.PlayerID)
 			continue
 		}
 
@@ -931,7 +931,7 @@ func (ce *competitionEngine) updatePlayerCompetitionTableRecords(table *pokertab
 			return competitionPlayer.PlayerID == playerID
 		})
 		if playerIdx == UnsetValue {
-			fmt.Printf("[updatePlayerCompetitionTableRecords#table-settlement] player (%s) is not in the competition\n", playerID)
+			// fmt.Printf("[updatePlayerCompetitionTableRecords#table-settlement] player (%s) is not in the competition\n", playerID)
 			continue
 		}
 
@@ -994,8 +994,7 @@ func (ce *competitionEngine) shouldCloseCashTable(tableStartAt int64) bool {
 	return time.Now().Unix() > tableEndAt
 }
 
-func (ce *competitionEngine) updateTableBlind(caller string, tableID string) {
-	fmt.Printf("[DEBUG#MTT] [%s] call updateTableBlind\n", caller)
+func (ce *competitionEngine) updateTableBlind(tableID string) {
 	level, ante, dealer, sb, bb := ce.competition.CurrentBlindData()
 	if err := ce.tableManagerBackend.UpdateBlind(tableID, level, ante, dealer, sb, bb); err != nil {
 		ce.emitErrorEvent("update blind", "", err)
@@ -1040,9 +1039,9 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 		}
 
 		ce.competition.State.BlindState.CurrentLevelIndex = bs.Status.CurrentLevelIndex
-		fmt.Println("[DEBUG#initBlind] BlindState.CurrentLevelIndex:", ce.competition.State.BlindState.CurrentLevelIndex)
+		// fmt.Println("[DEBUG#initBlind] BlindState.CurrentLevelIndex:", ce.competition.State.BlindState.CurrentLevelIndex)
 		for _, table := range ce.competition.State.Tables {
-			ce.updateTableBlind("initBlind", table.ID)
+			ce.updateTableBlind(table.ID)
 			ce.handleBreaking(table.ID)
 		}
 
@@ -1106,14 +1105,14 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 				switch ce.competition.Meta.Mode {
 				case CompetitionMode_CT:
 					if shouldCloseCompetition && len(ce.competition.State.Tables) == 1 {
-						fmt.Println("Stopped BuyIn auto close -> CT CloseTable")
+						// fmt.Println("Stopped BuyIn auto close -> CT CloseTable")
 						if err := ce.tableManagerBackend.CloseTable(ce.competition.State.Tables[0].ID); err != nil {
 							ce.emitErrorEvent("Stopped BuyIn auto close -> CT CloseTable", "", err)
 						}
 					}
 				case CompetitionMode_MTT:
 					if shouldCloseCompetition {
-						fmt.Println("Stopped BuyIn auto close -> MTT CloseCompetition")
+						// fmt.Println("Stopped BuyIn auto close -> MTT CloseCompetition")
 						if err := ce.CloseCompetition(CompetitionStateStatus_End); err != nil {
 							ce.emitErrorEvent("Stopped BuyIn auto close -> MTT CloseCompetition", "", err)
 						}

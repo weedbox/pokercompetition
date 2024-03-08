@@ -37,7 +37,7 @@ func (ce *competitionEngine) regulatorCreateAndDistributePlayers(playerIDs []str
 		TableID:     uuid.New().String(),
 		JoinPlayers: joinPlayers,
 	}
-	tableID, err := ce.addCompetitionTable(tableSetting, CompetitionPlayerStatus_WaitingTableBalancing)
+	tableID, err := ce.addCompetitionTable(tableSetting)
 	if err != nil {
 		return "", err
 	}

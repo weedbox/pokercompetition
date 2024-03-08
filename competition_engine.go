@@ -223,7 +223,7 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 	case CompetitionMode_CT, CompetitionMode_Cash:
 		// 批次建立桌次
 		for _, tableSetting := range competitionSetting.TableSettings {
-			if _, err := ce.addCompetitionTable(tableSetting, CompetitionPlayerStatus_Playing); err != nil {
+			if _, err := ce.addCompetitionTable(tableSetting); err != nil {
 				return nil, err
 			}
 		}
