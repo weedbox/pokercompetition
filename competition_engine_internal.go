@@ -434,12 +434,12 @@ func (ce *competitionEngine) handleMTTTableSettlement(tableIdx int, table *poker
 				}
 			}
 		} else {
-			ce.handleMTTTableSettlementNextStep(tableIdx, table, alivePlayerIDs, zeroChipPlayerIDs)
+			ce.handleMTTTableSettlementNextStep(table, alivePlayerIDs, zeroChipPlayerIDs)
 		}
 	} else {
 		// 無晉級計算
 		// 拆併桌更新桌次狀態
-		ce.handleMTTTableSettlementNextStep(tableIdx, table, alivePlayerIDs, zeroChipPlayerIDs)
+		ce.handleMTTTableSettlementNextStep(table, alivePlayerIDs, zeroChipPlayerIDs)
 
 		// 判斷是否要關閉賽事
 		shouldCloseCompetition = !ce.isEndStatus() && ce.competition.State.BlindState.IsStopBuyIn() && len(alivePlayerIDs) == 1 && len(ce.competition.State.Tables) == 1
@@ -448,13 +448,20 @@ func (ce *competitionEngine) handleMTTTableSettlement(tableIdx int, table *poker
 	return shouldCloseCompetition
 }
 
-func (ce *competitionEngine) handleMTTTableSettlementNextStep(tableIdx int, table *pokertable.Table, alivePlayerIDs, zeroChipPlayerIDs []string) {
+func (ce *competitionEngine) handleMTTTableSettlementNextStep(table *pokertable.Table, alivePlayerIDs, zeroChipPlayerIDs []string) {
 	// 拆併桌監管器更新狀態
 	releaseCount, newPlayerIDs, err := ce.regulator.SyncState(table.ID, len(alivePlayerIDs))
 	if err != nil {
 		ce.emitErrorEvent(fmt.Sprintf("[%s][%d] MTT Regulator Sync State", table.ID, table.State.GameCount), "", err)
 		return
 	}
+	fmt.Printf("---------- [c: %s][t: %s] 第 (%d) 手結算, 停止買入: %+v, [SyncState 後 regulator 有 %d 人 ----------\n",
+		ce.competition.ID,
+		table.ID,
+		table.State.GameCount,
+		ce.competition.State.BlindState.IsStopBuyIn(),
+		ce.regulator.GetPlayerCount(),
+	)
 
 	/*
 		- 建立桌次平衡資料
