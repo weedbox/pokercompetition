@@ -437,8 +437,9 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 		playerStatus = CompetitionPlayerStatus_WaitingTableBalancing
 	}
 
-	// 更新統計數據 (CT & MTT)
-	if ce.competition.Meta.Mode == CompetitionMode_CT || ce.competition.Meta.Mode == CompetitionMode_MTT {
+	// 更新統計數據 (MTT)
+	if ce.competition.Meta.Mode == CompetitionMode_MTT {
+		// MTT TotalBuyInCount 一次一發
 		ce.competition.State.Statistic.TotalBuyInCount++
 	}
 
@@ -579,6 +580,10 @@ func (ce *competitionEngine) PlayerRefund(playerID string) error {
 
 	// refund logic
 	ce.mu.Lock()
+	if ce.competition.Meta.Mode == CompetitionMode_MTT {
+		// MTT TotalBuyInCount 一次一發
+		ce.competition.State.Statistic.TotalBuyInCount--
+	}
 	ce.deletePlayer(playerIdx)
 	ce.deletePlayerCache(ce.competition.ID, playerID)
 	defer ce.mu.Unlock()
