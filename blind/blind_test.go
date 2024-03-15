@@ -1,6 +1,7 @@
 package pokerblind
 
 import (
+	"sync"
 	"testing"
 	"time"
 
@@ -422,4 +423,51 @@ func Test_Blind_DuplicateStart(t *testing.T) {
 
 	_, err = blind.Start()
 	assert.ErrorIs(t, err, ErrBlindAlreadyStarted, "should not start blind twice")
+}
+
+func Test_Blind_0_Duration(t *testing.T) {
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	// create blind
+	blind := NewBlind()
+
+	// apply options
+	options := &BlindOptions{
+		ID:                   uuid.New().String(),
+		InitialLevel:         1,
+		FinalBuyInLevelIndex: -2,
+		Levels: []BlindLevel{
+			{
+				Level: 1,
+				Ante:  10,
+				Blind: pokerface.BlindSetting{
+					Dealer: 0,
+					SB:     1,
+					BB:     2,
+				},
+				Duration: 0,
+			},
+		},
+	}
+	bs := blind.ApplyOptions(options)
+	assert.NotNil(t, bs, "blind state should not be nil")
+
+	blind.OnBlindStateUpdated(func(bs *BlindState) {
+		assert.Equal(t, 0, bs.Status.CurrentLevelIndex, "current level index is wrong")
+		wg.Done()
+	})
+
+	blind.OnErrorUpdated(func(bs *BlindState, err error) {
+		t.Log("error updated", err)
+		assert.NoError(t, err, "error should be nil")
+		wg.Done()
+	})
+
+	// starting blind
+	_, err := blind.Start()
+	assert.NoError(t, err, "starting blind failed")
+	assert.True(t, blind.IsStarted(), "blind should be started")
+
+	wg.Wait()
 }
