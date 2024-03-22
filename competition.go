@@ -136,6 +136,7 @@ type CompetitionPlayer struct {
 	TotalCallTimes        int   `json:"total_call_times"`         // 跟注總次數
 	TotalCheckTimes       int   `json:"total_check_times"`        // 過牌總次數
 	TotalProfitTimes      int   `json:"total_profit_times"`       // 總共贏得籌碼次數
+	TotalPFRTimes         int   `json:"total_pfr_times"`          // PFR 總次數
 }
 
 type Blind struct {
