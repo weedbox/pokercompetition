@@ -791,7 +791,8 @@ func (ce *competitionEngine) handleReBuy(table *pokertable.Table) {
 	}
 
 	if len(reBuyPlayerIDs) > 0 {
-		reBuyEndAtTime := time.Unix(reBuyEndAt, 0)
+		bufferSeconds := 2 // FIXME: workaround solution for fixing time edge issue
+		reBuyEndAtTime := time.Unix(reBuyEndAt, 0).Add(time.Second * time.Duration(bufferSeconds))
 		if err := timebank.NewTimeBank().NewTaskWithDeadline(reBuyEndAtTime, func(isCancelled bool) {
 			if isCancelled {
 				// fmt.Println("[handleReBuy#after] rebuy timer is cancelled")
