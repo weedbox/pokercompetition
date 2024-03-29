@@ -17,5 +17,3 @@ require (
 	github.com/weedbox/syncsaga v0.0.0-20230821071725-a634f0872340 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/weedbox/pokertable => /Users/jeffreyyang/Desktop/work/repo/cyberpoker/pokertable
