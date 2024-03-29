@@ -125,7 +125,6 @@ type CompetitionPlayer struct {
 
 	// game: round & actions
 	TotalWalkTimes        int64 `json:"total_walk_times"`         // Preflop 除了大盲以外的人全部 Fold，而贏得籌碼的次數
-	TotalVPIPTimes        int   `json:"total_vpip_times"`         // 入池總次數
 	TotalFoldTimes        int   `json:"total_fold_times"`         // 棄牌總次數
 	TotalPreflopFoldTimes int   `json:"total_preflop_fold_times"` // Preflop 棄牌總次數
 	TotalFlopFoldTimes    int   `json:"total_flop_fold_times"`    // Flop 棄牌總次數
@@ -136,7 +135,26 @@ type CompetitionPlayer struct {
 	TotalCallTimes        int   `json:"total_call_times"`         // 跟注總次數
 	TotalCheckTimes       int   `json:"total_check_times"`        // 過牌總次數
 	TotalProfitTimes      int   `json:"total_profit_times"`       // 總共贏得籌碼次數
-	TotalPFRTimes         int   `json:"total_pfr_times"`          // PFR 總次數
+
+	// game: statistics
+	TotalVPIPChances            int `json:"total_vpip_chances"`             // 入池總機會
+	TotalVPIPTimes              int `json:"total_vpip_times"`               // 入池總次數
+	TotalPFRChances             int `json:"total_pfr_chances"`              // PFR 總機會
+	TotalPFRTimes               int `json:"total_pfr_times"`                // PFR 總次數
+	TotalATSChances             int `json:"total_ats_chances"`              // ATS 總機會
+	TotalATSTimes               int `json:"total_ats_times"`                // ATS 總次數
+	Total3BChances              int `json:"total_3b_chances"`               // 3-Bet 總機會
+	Total3BTimes                int `json:"total_3b_times"`                 // 3-Bet 總次數
+	TotalFt3BChances            int `json:"total_ft3b_chances"`             // Ft3B 總機會
+	TotalFt3BTimes              int `json:"total_ft3b_times"`               // Ft3B 總次數
+	TotalCheckRaiseChances      int `json:"total_check_raise_chances"`      // C/R 總機會
+	TotalCheckRaiseTimes        int `json:"total_check_raise_times"`        // C/R 總次數
+	TotalCBetChances            int `json:"total_c_bet_chances"`            // C-Bet 總機會
+	TotalCBetTimes              int `json:"total_c_bet_times"`              // C-Bet 總次數
+	TotalFtCBChances            int `json:"total_ftcb_chances"`             // FtCB 總機會
+	TotalFtCBTimes              int `json:"total_ftcb_times"`               // FtCB 總次數
+	TotalShowdownWinningChances int `json:"total_showdown_winning_chances"` // Showdown Winning 總機會
+	TotalShowdownWinningTimes   int `json:"total_showdown_winning_times"`   // Showdown Winning 總次數
 }
 
 type Blind struct {

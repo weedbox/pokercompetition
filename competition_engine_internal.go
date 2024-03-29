@@ -25,35 +25,52 @@ func (ce *competitionEngine) newDefaultCompetitionPlayerData(tableID, playerID s
 	}
 
 	player := CompetitionPlayer{
-		PlayerID:              playerID,
-		CurrentTableID:        tableID,
-		CurrentSeat:           UnsetValue,
-		JoinAt:                joinAt,
-		Status:                playerStatus,
-		Rank:                  UnsetValue,
-		Chips:                 redeemChips,
-		IsReBuying:            false,
-		ReBuyEndAt:            UnsetValue,
-		ReBuyTimes:            0,
-		AddonTimes:            0,
-		BestWinningPotChips:   0,
-		BestWinningCombo:      make([]string, 0),
-		BestWinningType:       "",
-		BestWinningPower:      0,
-		TotalRedeemChips:      redeemChips,
-		TotalGameCounts:       0,
-		TotalWalkTimes:        0,
-		TotalVPIPTimes:        0,
-		TotalFoldTimes:        0,
-		TotalPreflopFoldTimes: 0,
-		TotalFlopFoldTimes:    0,
-		TotalTurnFoldTimes:    0,
-		TotalRiverFoldTimes:   0,
-		TotalActionTimes:      0,
-		TotalRaiseTimes:       0,
-		TotalCallTimes:        0,
-		TotalCheckTimes:       0,
-		TotalProfitTimes:      0,
+		PlayerID:                    playerID,
+		CurrentTableID:              tableID,
+		CurrentSeat:                 UnsetValue,
+		JoinAt:                      joinAt,
+		Status:                      playerStatus,
+		Rank:                        UnsetValue,
+		Chips:                       redeemChips,
+		IsReBuying:                  false,
+		ReBuyEndAt:                  UnsetValue,
+		ReBuyTimes:                  0,
+		AddonTimes:                  0,
+		BestWinningPotChips:         0,
+		BestWinningCombo:            make([]string, 0),
+		BestWinningType:             "",
+		BestWinningPower:            0,
+		TotalRedeemChips:            redeemChips,
+		TotalGameCounts:             0,
+		TotalWalkTimes:              0,
+		TotalFoldTimes:              0,
+		TotalPreflopFoldTimes:       0,
+		TotalFlopFoldTimes:          0,
+		TotalTurnFoldTimes:          0,
+		TotalRiverFoldTimes:         0,
+		TotalActionTimes:            0,
+		TotalRaiseTimes:             0,
+		TotalCallTimes:              0,
+		TotalCheckTimes:             0,
+		TotalProfitTimes:            0,
+		TotalVPIPChances:            0,
+		TotalVPIPTimes:              0,
+		TotalPFRChances:             0,
+		TotalPFRTimes:               0,
+		TotalATSChances:             0,
+		TotalATSTimes:               0,
+		Total3BChances:              0,
+		Total3BTimes:                0,
+		TotalFt3BChances:            0,
+		TotalFt3BTimes:              0,
+		TotalCheckRaiseChances:      0,
+		TotalCheckRaiseTimes:        0,
+		TotalCBetChances:            0,
+		TotalCBetTimes:              0,
+		TotalFtCBChances:            0,
+		TotalFtCBTimes:              0,
+		TotalShowdownWinningChances: 0,
+		TotalShowdownWinningTimes:   0,
 	}
 
 	return player, playerCache
@@ -317,7 +334,7 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 		case CompetitionMode_Cash:
 			ce.handleCashTableSettlement(table)
 		case CompetitionMode_MTT:
-			shouldCloseMTTCompetition = ce.handleMTTTableSettlement(tableIdx, table)
+			shouldCloseMTTCompetition = ce.handleMTTTableSettlement(table)
 		}
 
 		// 中場休息處理
@@ -387,7 +404,7 @@ func (ce *competitionEngine) handleCashTableSettlement(table *pokertable.Table) 
 	}
 }
 
-func (ce *competitionEngine) handleMTTTableSettlement(tableIdx int, table *pokertable.Table) bool {
+func (ce *competitionEngine) handleMTTTableSettlement(table *pokertable.Table) bool {
 	zeroChipPlayerIDs := make([]string, 0)
 	alivePlayerIDs := make([]string, 0)
 	for _, p := range table.State.PlayerStates {
@@ -703,7 +720,7 @@ func (ce *competitionEngine) handleBreaking(tableID string) {
 				ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] = true
 			}
 		} else {
-			// fmt.Println("[DEBUG#handleBreaking] not find table at index:", tableIdx)
+			fmt.Println("[DEBUG#handleBreaking] not find table at index:", tableIdx)
 		}
 	}); err != nil {
 		ce.emitErrorEvent("new resume game task from breaking", "", err)
@@ -888,6 +905,56 @@ func (ce *competitionEngine) updatePlayerCompetitionTableRecords(table *pokertab
 		cp.TotalRaiseTimes += player.GameStatistics.RaiseTimes
 		cp.TotalCallTimes += player.GameStatistics.CallTimes
 		cp.TotalCheckTimes += player.GameStatistics.CheckTimes
+
+		// update game statistics
+		if player.GameStatistics.IsVPIPChance {
+			cp.TotalVPIPChances++
+		}
+		if player.GameStatistics.IsVPIP {
+			cp.TotalVPIPTimes++
+		}
+		if player.GameStatistics.IsPFRChance {
+			cp.TotalPFRChances++
+		}
+		if player.GameStatistics.IsPFR {
+			cp.TotalPFRTimes++
+		}
+		if player.GameStatistics.IsATSChance {
+			cp.TotalATSChances++
+		}
+		if player.GameStatistics.IsATS {
+			cp.TotalATSTimes++
+		}
+		if player.GameStatistics.Is3BChance {
+			cp.Total3BChances++
+		}
+		if player.GameStatistics.Is3B {
+			cp.Total3BTimes++
+		}
+		if player.GameStatistics.IsFt3BChance {
+			cp.TotalFt3BChances++
+		}
+		if player.GameStatistics.IsFt3B {
+			cp.TotalFt3BTimes++
+		}
+		if player.GameStatistics.IsCheckRaiseChance {
+			cp.TotalCheckRaiseChances++
+		}
+		if player.GameStatistics.IsCheckRaise {
+			cp.TotalCheckRaiseTimes++
+		}
+		if player.GameStatistics.IsCBetChance {
+			cp.TotalCBetChances++
+		}
+		if player.GameStatistics.IsCBet {
+			cp.TotalCBetTimes++
+		}
+		if player.GameStatistics.IsFtCBChance {
+			cp.TotalFtCBChances++
+		}
+		if player.GameStatistics.IsFtCB {
+			cp.TotalFtCBTimes++
+		}
 	}
 
 	// 更新贏家統計數據
@@ -913,9 +980,6 @@ func (ce *competitionEngine) updatePlayerCompetitionTableRecords(table *pokertab
 
 		gs := table.State.GameState
 		gsPlayer := gs.GetPlayer(winnerGameIdx)
-		if gsPlayer.VPIP {
-			cp.TotalVPIPTimes++
-		}
 
 		if table.State.CurrentBBSeat == tablePlayer.Seat && tablePlayer.GameStatistics.ActionTimes == 0 && gamePlayerPreflopFoldTimes == len(table.State.GamePlayerIndexes)-1 {
 			cp.TotalWalkTimes++
