@@ -140,11 +140,11 @@ func (ce *competitionEngine) UpdateTable(table *pokertable.Table) {
 		pokertable.TableStateStatus_TableClosed:      ce.closeCompetitionTable,
 		pokertable.TableStateStatus_TableGameSettled: ce.settleCompetitionTable,
 	}
-	handler, ok := tableStatusHandlerMap[table.State.Status]
+	handler, ok := tableStatusHandlerMap[cloneTable.State.Status]
 	if !ok {
 		return
 	}
-	handler(table, tableIdx)
+	handler(&cloneTable, tableIdx)
 }
 
 func (ce *competitionEngine) handleCompetitionTableCreated(table *pokertable.Table, tableIdx int) {
@@ -1142,6 +1142,13 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 					}
 
 					cp := ce.competition.State.Players[playerCache.PlayerIdx]
+
+					// 找出 CT 還在考慮 Re Buy 的玩家
+					isCTReBuying := false
+					if ce.competition.Meta.Mode == CompetitionMode_CT && (cp.IsReBuying && cp.ReBuyEndAt != UnsetValue) {
+						isCTReBuying = true
+					}
+
 					cp.Status = CompetitionPlayerStatus_Knockout
 					cp.IsReBuying = false
 					cp.ReBuyEndAt = UnsetValue
@@ -1149,11 +1156,9 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 					ce.emitPlayerEvent("Stopped BuyIn Knockout Players", cp)
 
 					// 玩家離座 (CT only), 因為 MTT 在結算沒籌碼時就已經離開該桌次了
-					if ce.competition.Meta.Mode == CompetitionMode_CT {
-						if len(ce.competition.State.Tables) > 0 {
-							if err := ce.tableManagerBackend.PlayersLeave(ce.competition.State.Tables[0].ID, []string{knockoutPlayerID}); err != nil {
-								ce.emitErrorEvent("Stopped BuyIn Knockout Players -> PlayersLeave", knockoutPlayerID, err)
-							}
+					if isCTReBuying && len(ce.competition.State.Tables) > 0 {
+						if err := ce.tableManagerBackend.PlayersLeave(ce.competition.State.Tables[0].ID, []string{knockoutPlayerID}); err != nil {
+							ce.emitErrorEvent("Stopped BuyIn Knockout Players -> PlayersLeave", knockoutPlayerID, err)
 						}
 					}
 

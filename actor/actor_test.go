@@ -141,7 +141,13 @@ func TestActor_CT_Breaking(t *testing.T) {
 			t.Logf("table [%s] is closed", table.ID)
 		}
 
-		tableManagerBackend.UpdateTable(table)
+		var cloneTable pokertable.Table
+		if encoded, err := json.Marshal(table); err == nil {
+			json.Unmarshal(encoded, &cloneTable)
+		} else {
+			cloneTable = *table
+		}
+		tableManagerBackend.UpdateTable(&cloneTable)
 	})
 
 	// 玩家報名賽事
@@ -282,7 +288,13 @@ func TestActor_CT_Normal(t *testing.T) {
 			t.Logf("table [%s] is closed", table.ID)
 		}
 
-		tableManagerBackend.UpdateTable(table)
+		var cloneTable pokertable.Table
+		if encoded, err := json.Marshal(table); err == nil {
+			json.Unmarshal(encoded, &cloneTable)
+		} else {
+			cloneTable = *table
+		}
+		tableManagerBackend.UpdateTable(&cloneTable)
 	})
 
 	// 玩家報名賽事

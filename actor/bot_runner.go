@@ -1,7 +1,6 @@
 package actor
 
 import (
-	"fmt"
 	"math/rand"
 	"time"
 
@@ -100,7 +99,7 @@ func (br *botRunner) UpdateTableState(table *pokertable.Table) error {
 	}
 
 	if isEliminated {
-		fmt.Printf("[DEBUG#botRunner#UpdateTableState] [1] No reaction required since bot (%s), table (%s) is eliminated.\n", br.playerID, table.ID)
+		// fmt.Printf("[DEBUG#botRunner#UpdateTableState] [1] No reaction required since bot (%s), table (%s) is eliminated.\n", br.playerID, table.ID)
 		return nil
 	}
 
@@ -119,7 +118,7 @@ func (br *botRunner) UpdateTableState(table *pokertable.Table) error {
 		} else if br.lastGameStateTime >= gs.UpdatedAt {
 			// Ignore if game state is too old
 			//fmt.Println(br.playerID, table.ID)
-			fmt.Printf("[DEBUG#botRunner#UpdateTableState] [2] No reaction required since lastGameStateTime >= currentGameStateTime. Bot PlayerID: %s, TableID: %s\n", br.playerID, table.ID)
+			// fmt.Printf("[DEBUG#botRunner#UpdateTableState] [2] No reaction required since lastGameStateTime >= currentGameStateTime. Bot PlayerID: %s, TableID: %s\n", br.playerID, table.ID)
 			return nil
 		}
 
@@ -136,7 +135,7 @@ func (br *botRunner) UpdateTableState(table *pokertable.Table) error {
 	// Somehow, this player is not in the game.
 	// It probably has no chips already or just sat down and have not participated in the game yet
 	if gamePlayerIdx == -1 {
-		fmt.Printf("[DEBUG#botRunner#UpdateTableState] [3] No reaction required since bot (%s) gamePlayerIdx is -1 at table (%s) when table status is %s.\n", br.playerID, table.ID, pokertable.TableStateStatus_TableGamePlaying)
+		// fmt.Printf("[DEBUG#botRunner#UpdateTableState] [3] No reaction required since bot (%s) gamePlayerIdx is -1 at table (%s) when table status is %s.\n", br.playerID, table.ID, pokertable.TableStateStatus_TableGamePlaying)
 		return nil
 	}
 
@@ -145,7 +144,7 @@ func (br *botRunner) UpdateTableState(table *pokertable.Table) error {
 	// game is running so we have to check actions allowed
 	player := gs.GetPlayer(gamePlayerIdx)
 	if player == nil {
-		fmt.Printf("[DEBUG#botRunner#UpdateTableState] [4] No reaction required since gs GetPlayer(Bot) Failed. PlayerID: %s, GameIdx: %d, Event: %s\n", br.playerID, gamePlayerIdx, gs.Status.CurrentEvent)
+		// fmt.Printf("[DEBUG#botRunner#UpdateTableState] [4] No reaction required since gs GetPlayer(Bot) Failed. PlayerID: %s, GameIdx: %d, Event: %s\n", br.playerID, gamePlayerIdx, gs.Status.CurrentEvent)
 		return nil
 	}
 
@@ -153,7 +152,7 @@ func (br *botRunner) UpdateTableState(table *pokertable.Table) error {
 		//fmt.Println(br.playerID, player.AllowedActions)
 		err := br.requestMove(table.State.GameState, gamePlayerIdx)
 		if err != nil {
-			fmt.Printf("[DEBUG#botRunner#UpdateTableState] [5] Bot requestMove Failed (player_id=%s, gameIdx=%d, event=%s). Error: %+v\n", br.playerID, gamePlayerIdx, gs.Status.CurrentEvent, err)
+			// fmt.Printf("[DEBUG#botRunner#UpdateTableState] [5] Bot requestMove Failed (player_id=%s, gameIdx=%d, event=%s). Error: %+v\n", br.playerID, gamePlayerIdx, gs.Status.CurrentEvent, err)
 			return err
 		}
 	}
