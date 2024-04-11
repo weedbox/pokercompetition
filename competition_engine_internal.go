@@ -154,12 +154,16 @@ func (ce *competitionEngine) handleCompetitionTableCreated(table *pokertable.Tab
 			return
 		}
 
-		// 啟動盲注系統
-		ce.activateBlind()
-
 		// auto start game if condition is reached
 		if _, err := ce.StartCompetition(); err != nil {
 			ce.emitErrorEvent("CT Auto StartCompetition", "", err)
+			return
+		}
+
+		// 啟動盲注系統
+		err := ce.activateBlind()
+		if err != nil {
+			ce.emitErrorEvent("CT Activate Blind Error", "", err)
 			return
 		}
 
@@ -175,12 +179,16 @@ func (ce *competitionEngine) handleCompetitionTableCreated(table *pokertable.Tab
 			return
 		}
 
-		// 啟動盲注系統
-		ce.activateBlind()
-
 		// auto start game if condition is reached
 		if _, err := ce.StartCompetition(); err != nil {
-			ce.emitErrorEvent("CT Auto StartCompetition", "", err)
+			ce.emitErrorEvent("Cash Auto StartCompetition", "", err)
+			return
+		}
+
+		// 啟動盲注系統
+		err := ce.activateBlind()
+		if err != nil {
+			ce.emitErrorEvent("Cash Activate Blind Error", "", err)
 			return
 		}
 
@@ -200,10 +208,16 @@ func (ce *competitionEngine) handleCompetitionTableBalancing(table *pokertable.T
 
 	if !ce.blind.IsStarted() {
 		// 啟動盲注系統
-		ce.activateBlind()
+		err := ce.activateBlind()
+		if err != nil {
+			ce.emitErrorEvent("MTT Activate Blind Error", "", err)
+			return
+		}
 	}
 
-	ce.updateTableBlind(table.ID)
+	if ce.blind.IsStarted() {
+		ce.updateTableBlind(table.ID)
+	}
 }
 
 func (ce *competitionEngine) updatePauseCompetition(table *pokertable.Table, tableIdx int) {
@@ -1206,17 +1220,24 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 /*
 activateBlind 啟動盲注系統
 */
-func (ce *competitionEngine) activateBlind() {
+func (ce *competitionEngine) activateBlind() error {
 	// 啟動盲注系統
 	bs, err := ce.blind.Start()
 	if err != nil {
-		ce.emitErrorEvent("Start Blind Error", "", err)
-	} else {
-		ce.competition.State.BlindState.CurrentLevelIndex = bs.Status.CurrentLevelIndex
-		ce.competition.State.BlindState.FinalBuyInLevelIndex = bs.Status.FinalBuyInLevelIndex
-		copy(ce.competition.State.BlindState.EndAts, bs.Status.LevelEndAts)
-		ce.emitCompetitionStateEvent(CompetitionStateEvent_BlindActivated)
+		return err
 	}
+
+	if ce.competition.Meta.Blind.FinalBuyInLevelIndex == UnsetValue || ce.competition.Meta.Blind.FinalBuyInLevelIndex < NoStopBuyInIndex {
+		ce.competition.State.Status = CompetitionStateStatus_StoppedBuyIn
+	} else {
+		ce.competition.State.Status = CompetitionStateStatus_DelayedBuyIn
+	}
+
+	ce.competition.State.BlindState.CurrentLevelIndex = bs.Status.CurrentLevelIndex
+	ce.competition.State.BlindState.FinalBuyInLevelIndex = bs.Status.FinalBuyInLevelIndex
+	copy(ce.competition.State.BlindState.EndAts, bs.Status.LevelEndAts)
+	ce.emitCompetitionStateEvent(CompetitionStateEvent_BlindActivated)
+	return nil
 }
 
 func (ce *competitionEngine) canStartCT() bool {
