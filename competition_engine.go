@@ -82,6 +82,7 @@ type competitionEngine struct {
 	breakingPauseResumeStates           map[string]map[int]bool // key: tableID, value: (k,v): (breaking blind level index, is resume from pause)
 	blind                               pokerblind.Blind
 	regulator                           regulator.Regulator
+	isStarted                           bool
 
 	// TODO: Test Only
 	onTableCreated func(table *pokertable.Table)
@@ -99,6 +100,7 @@ func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
 		onCompetitionPlayerCashOut:          func(competitionID string, competitionPlayer *CompetitionPlayer) {},
 		breakingPauseResumeStates:           make(map[string]map[int]bool),
 		blind:                               pokerblind.NewBlind(),
+		isStarted:                           false,
 
 		// TODO: Test Only
 		onTableCreated: func(table *pokertable.Table) {},
@@ -231,6 +233,7 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 		// 初始化拆併桌監管器
 		if ce.regulator == nil {
 			ce.regulator = regulator.NewRegulator(
+				regulator.MinInitialPlayers(competitionSetting.Meta.TableMinPlayerCount),
 				regulator.WithRequestTableFn(func(playerIDs []string) (string, error) {
 					return ce.regulatorCreateAndDistributePlayers(playerIDs)
 				}),
@@ -305,7 +308,7 @@ StartCompetition 開賽
   - 適用時機: MTT 手動開賽、MTT 自動開賽、CT 開賽
 */
 func (ce *competitionEngine) StartCompetition() (int64, error) {
-	if ce.competition.State.Status != CompetitionStateStatus_Registering {
+	if ce.isStarted {
 		return ce.competition.State.StartAt, ErrCompetitionStartRejected
 	}
 
@@ -357,6 +360,7 @@ func (ce *competitionEngine) StartCompetition() (int64, error) {
 		ce.regulator.SetStatus(regulator.CompetitionStatus_Normal)
 	}
 
+	ce.isStarted = true
 	ce.emitEvent("StartCompetition", "")
 	ce.emitCompetitionStateEvent(CompetitionStateEvent_Started)
 	return ce.competition.State.StartAt, nil
