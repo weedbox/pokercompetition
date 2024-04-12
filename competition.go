@@ -62,19 +62,20 @@ type Competition struct {
 }
 
 type CompetitionMeta struct {
-	Blind               Blind           `json:"blind"`                  // 盲注資訊
-	MaxDuration         int             `json:"max_duration"`           // 比賽時間總長 (Seconds)
-	MinPlayerCount      int             `json:"min_player_count"`       // 最小參賽人數
-	MaxPlayerCount      int             `json:"max_player_count"`       // 最大參賽人數
-	TableMaxSeatCount   int             `json:"table_max_seat_count"`   // 每桌人數上限
-	TableMinPlayerCount int             `json:"table_min_player_count"` // 每桌最小開打數
-	Rule                CompetitionRule `json:"rule"`                   // 德州撲克規則, 常牌(default), 短牌(short_deck), 奧瑪哈(omaha)
-	Mode                CompetitionMode `json:"mode"`                   // 賽事模式 (CT, MTT, Cash)
-	ReBuySetting        ReBuySetting    `json:"re_buy_setting"`         // 補碼設定
-	AddonSetting        AddonSetting    `json:"addon_setting"`          // 增購設定
-	AdvanceSetting      AdvanceSetting  `json:"advance_setting"`        // 晉級設定
-	ActionTime          int             `json:"action_time"`            // 思考時間 (Seconds)
-	MinChipUnit         int64           `json:"min_chip_unit"`          // 最小單位籌碼量
+	Blind                          Blind           `json:"blind"`                              // 盲注資訊
+	MaxDuration                    int             `json:"max_duration"`                       // 比賽時間總長 (Seconds)
+	MinPlayerCount                 int             `json:"min_player_count"`                   // 最小參賽人數
+	MaxPlayerCount                 int             `json:"max_player_count"`                   // 最大參賽人數
+	TableMaxSeatCount              int             `json:"table_max_seat_count"`               // 每桌人數上限
+	TableMinPlayerCount            int             `json:"table_min_player_count"`             // 每桌最小開打數
+	RegulatorMinInitialPlayerCount int             `json:"regulator_min_initial_player_count"` // 拆併桌每桌至少需要人數
+	Rule                           CompetitionRule `json:"rule"`                               // 德州撲克規則, 常牌(default), 短牌(short_deck), 奧瑪哈(omaha)
+	Mode                           CompetitionMode `json:"mode"`                               // 賽事模式 (CT, MTT, Cash)
+	ReBuySetting                   ReBuySetting    `json:"re_buy_setting"`                     // 補碼設定
+	AddonSetting                   AddonSetting    `json:"addon_setting"`                      // 增購設定
+	AdvanceSetting                 AdvanceSetting  `json:"advance_setting"`                    // 晉級設定
+	ActionTime                     int             `json:"action_time"`                        // 思考時間 (Seconds)
+	MinChipUnit                    int64           `json:"min_chip_unit"`                      // 最小單位籌碼量
 }
 
 type CompetitionState struct {

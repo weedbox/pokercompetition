@@ -233,7 +233,7 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 		// 初始化拆併桌監管器
 		if ce.regulator == nil {
 			ce.regulator = regulator.NewRegulator(
-				regulator.MinInitialPlayers(competitionSetting.Meta.TableMinPlayerCount),
+				regulator.MinInitialPlayers(competitionSetting.Meta.RegulatorMinInitialPlayerCount),
 				regulator.WithRequestTableFn(func(playerIDs []string) (string, error) {
 					return ce.regulatorCreateAndDistributePlayers(playerIDs)
 				}),
