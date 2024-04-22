@@ -341,14 +341,16 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 		knockoutPlayerIDs := ce.handleTableKnockoutPlayers(table)
 
 		// 桌次處理
-		shouldCloseMTTCompetition := false
+		shouldCloseCompetition := false
 		switch ce.competition.Meta.Mode {
 		case CompetitionMode_CT:
 			ce.handleCTTableSettlement(knockoutPlayerIDs, table)
+			shouldCloseCompetition = ce.shouldCloseCTCompetition(table.State.StartAt, len(table.AlivePlayers()))
 		case CompetitionMode_Cash:
 			ce.handleCashTableSettlement(table)
+			shouldCloseCompetition = ce.shouldCloseCashCompetition(table.State.StartAt)
 		case CompetitionMode_MTT:
-			shouldCloseMTTCompetition = ce.handleMTTTableSettlement(table)
+			shouldCloseCompetition = ce.handleMTTTableSettlement(table)
 		}
 
 		// 中場休息處理
@@ -359,33 +361,16 @@ func (ce *competitionEngine) settleCompetitionTable(table *pokertable.Table, tab
 		ce.emitCompetitionStateEvent(CompetitionStateEvent_TableGameSettled)
 
 		// 賽事結算條件達成處理
-		switch ce.competition.Meta.Mode {
-		case CompetitionMode_CT:
-			// 結束桌
-			if ce.shouldCloseCTTable(table.State.StartAt, len(table.AlivePlayers())) {
-				if err := ce.tableManagerBackend.CloseTable(table.ID); err != nil {
-					ce.emitErrorEvent("Table Settlement -> Close CT Table", "", err)
+		if shouldCloseCompetition {
+			if err := timebank.NewTimeBank().NewTask(time.Second*3, func(isCancelled bool) {
+				if isCancelled {
+					return
 				}
-			}
-		case CompetitionMode_Cash:
-			// 判斷是否要關閉賽事 (現金桌)
-			if ce.shouldCloseCashTable(table.State.StartAt) {
-				if err := ce.tableManagerBackend.CloseTable(table.ID); err != nil {
-					ce.emitErrorEvent("Table Settlement -> Close Cash Table", "", err)
-				}
-			}
-		case CompetitionMode_MTT:
-			if shouldCloseMTTCompetition {
-				if err := timebank.NewTimeBank().NewTask(time.Second*3, func(isCancelled bool) {
-					if isCancelled {
-						return
-					}
 
-					// 結束賽事處理
-					ce.CloseCompetition(CompetitionStateStatus_End)
-				}); err != nil {
-					ce.emitErrorEvent("error next stage after settle competition table", "", err)
-				}
+				// 結束賽事處理
+				ce.CloseCompetition(CompetitionStateStatus_End)
+			}); err != nil {
+				ce.emitErrorEvent("error next stage after settle competition table", "", err)
 			}
 		}
 
@@ -1054,11 +1039,11 @@ func (ce *competitionEngine) updatePlayerFinalRankings() {
 }
 
 /*
-shouldCloseCTTable CT 計算桌次是否已達到結束條件
+shouldCloseCTCompetition CT 計算桌次是否已達到結束條件
   - 結束條件 1: 達到結束時間
   - 結束條件 2: 停止買入後且存活玩家小於最小開打數
 */
-func (ce *competitionEngine) shouldCloseCTTable(tableStartAt int64, tableAlivePlayerCount int) bool {
+func (ce *competitionEngine) shouldCloseCTCompetition(tableStartAt int64, tableAlivePlayerCount int) bool {
 	if ce.competition.Meta.Mode != CompetitionMode_CT {
 		return false
 	}
@@ -1068,10 +1053,10 @@ func (ce *competitionEngine) shouldCloseCTTable(tableStartAt int64, tableAlivePl
 }
 
 /*
-shouldCloseCashTable Cash 計算桌次是否已達到結束條件
+shouldCloseCashCompetition Cash 計算桌次是否已達到結束條件
   - 結束條件 1: 達到結束時間
 */
-func (ce *competitionEngine) shouldCloseCashTable(tableStartAt int64) bool {
+func (ce *competitionEngine) shouldCloseCashCompetition(tableStartAt int64) bool {
 	if ce.competition.Meta.Mode != CompetitionMode_Cash {
 		return false
 	}
@@ -1193,20 +1178,13 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 				// 處理結束賽事
 				tableEndConditions := len(ce.competition.State.Tables) == 0 || (len(ce.competition.State.Tables) == 1 && len(ce.competition.State.Tables[0].AlivePlayers()) < 2)
 				shouldCloseCompetition := !ce.isEndStatus() && tableEndConditions
-				switch ce.competition.Meta.Mode {
-				case CompetitionMode_CT:
-					if shouldCloseCompetition && len(ce.competition.State.Tables) == 1 {
-						// fmt.Println("Stopped BuyIn auto close -> CT CloseTable")
-						if err := ce.tableManagerBackend.CloseTable(ce.competition.State.Tables[0].ID); err != nil {
-							ce.emitErrorEvent("Stopped BuyIn auto close -> CT CloseTable", "", err)
-						}
-					}
-				case CompetitionMode_MTT:
-					if shouldCloseCompetition {
-						// fmt.Println("Stopped BuyIn auto close -> MTT CloseCompetition")
-						if err := ce.CloseCompetition(CompetitionStateStatus_End); err != nil {
-							ce.emitErrorEvent("Stopped BuyIn auto close -> MTT CloseCompetition", "", err)
-						}
+				autoCloseModes := []CompetitionMode{
+					CompetitionMode_CT,
+					CompetitionMode_MTT,
+				}
+				if funk.Contains(autoCloseModes, ce.competition.Meta.Mode) && shouldCloseCompetition {
+					if err := ce.CloseCompetition(CompetitionStateStatus_End); err != nil {
+						ce.emitErrorEvent("Stopped BuyIn auto close -> CloseCompetition", "", err)
 					}
 				}
 			}
