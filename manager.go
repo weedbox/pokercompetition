@@ -59,7 +59,6 @@ func (m *manager) Reset() {
 	m.competitionEngines.Range(func(key, value interface{}) bool {
 		if ce, ok := value.(CompetitionEngine); ok {
 			_ = ce.CloseCompetition(CompetitionStateStatus_ForceEnd)
-			ce.ReleaseTables()
 		}
 		return true
 	})
@@ -68,13 +67,7 @@ func (m *manager) Reset() {
 }
 
 func (m *manager) ReleaseCompetition(competitionID string) {
-	competitionEngine, err := m.GetCompetitionEngine(competitionID)
-	if err != nil {
-		return
-	}
-
 	m.competitionEngines.Delete(competitionID)
-	_ = competitionEngine.ReleaseTables()
 }
 
 func (m *manager) GetCompetitionEngine(competitionID string) (CompetitionEngine, error) {

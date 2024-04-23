@@ -302,6 +302,7 @@ CloseCompetition 關閉賽事
 */
 func (ce *competitionEngine) CloseCompetition(endStatus CompetitionStateStatus) error {
 	ce.settleCompetition(endStatus)
+	_ = ce.ReleaseTables()
 	return nil
 }
 
@@ -695,9 +696,7 @@ func (ce *competitionEngine) UpdateReserveTablePlayerState(tableID string, playe
 
 func (ce *competitionEngine) ReleaseTables() error {
 	for _, table := range ce.competition.State.Tables {
-		if err := ce.tableManagerBackend.ReleaseTable(table.ID); err != nil {
-			return err
-		}
+		_ = ce.tableManagerBackend.ReleaseTable(table.ID)
 	}
 	return nil
 }
