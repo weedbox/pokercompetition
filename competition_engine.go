@@ -1,6 +1,7 @@
 package pokercompetition
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
@@ -35,10 +36,6 @@ var (
 type CompetitionEngineOpt func(*competitionEngine)
 
 type CompetitionEngine interface {
-	// Others
-	UpdateTable(table *pokertable.Table)                                                    // 桌次更新
-	UpdateReserveTablePlayerState(tableID string, playerState *pokertable.TablePlayerState) // 更新 Reserve 桌次玩家狀態
-
 	// Events
 	OnCompetitionUpdated(fn func(competition *Competition))                                         // 賽事更新事件監聽器
 	OnCompetitionErrorUpdated(fn func(competition *Competition, err error))                         // 賽事錯誤更新事件監聽器
@@ -47,6 +44,7 @@ type CompetitionEngine interface {
 	OnCompetitionStateUpdated(fn func(event string, competition *Competition))                      // 賽事狀態監聽器
 	OnAdvancePlayerCountUpdated(fn func(competitionID string, totalBuyInCount int) int)             // 賽事晉級人數更新監聽器
 	OnCompetitionPlayerCashOut(fn func(competitionID string, competitionPlayer *CompetitionPlayer)) // 現金桌賽事玩家結算事件監聽器
+	OnTableCreated(fn func(table *pokertable.Table))                                                // TODO: Test Only
 
 	// Competition Actions
 	GetCompetition() *Competition                                                  // 取得賽事
@@ -62,14 +60,17 @@ type CompetitionEngine interface {
 	PlayerCashOut(tableID, playerID string) error            // 玩家離桌結算 (現金桌)
 	PlayerQuit(tableID, playerID string) error               // 玩家棄賽淘汰
 
-	// TODO: Test Only
-	OnTableCreated(fn func(table *pokertable.Table))
+	// Others
+	UpdateTable(table *pokertable.Table)                                                    // 桌次更新
+	UpdateReserveTablePlayerState(tableID string, playerState *pokertable.TablePlayerState) // 更新 Reserve 桌次玩家狀態
+	ReleaseTables() error                                                                   // 釋放所有桌次
 }
 
 type competitionEngine struct {
 	mu                                  sync.RWMutex
 	competition                         *Competition
 	playerCaches                        sync.Map // key: <competitionID.playerID>, value: PlayerCache
+	gameSettledRecords                  sync.Map // key: <tableID.game_count>, value: IsSettled
 	tableOptions                        *pokertable.TableEngineOptions
 	tableManagerBackend                 TableManagerBackend
 	onCompetitionUpdated                func(competition *Competition)
@@ -91,6 +92,7 @@ type competitionEngine struct {
 func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
 	ce := &competitionEngine{
 		playerCaches:                        sync.Map{},
+		gameSettledRecords:                  sync.Map{},
 		onCompetitionUpdated:                func(competition *Competition) {},
 		onCompetitionErrorUpdated:           func(competition *Competition, err error) {},
 		onCompetitionPlayerUpdated:          func(competitionID string, competitionPlayer *CompetitionPlayer) {},
@@ -159,13 +161,13 @@ func (ce *competitionEngine) OnCompetitionPlayerCashOut(fn func(competitionID st
 	ce.onCompetitionPlayerCashOut = fn
 }
 
-func (ce *competitionEngine) GetCompetition() *Competition {
-	return ce.competition
-}
-
 // TODO: Test Only
 func (ce *competitionEngine) OnTableCreated(fn func(table *pokertable.Table)) {
 	ce.onTableCreated = fn
+}
+
+func (ce *competitionEngine) GetCompetition() *Competition {
+	return ce.competition
 }
 
 func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSetting) (*Competition, error) {
@@ -674,4 +676,65 @@ func (ce *competitionEngine) PlayerQuit(tableID, playerID string) error {
 	}
 
 	return nil
+}
+
+func (ce *competitionEngine) UpdateReserveTablePlayerState(tableID string, playerState *pokertable.TablePlayerState) {
+	// 更新玩家狀態
+	playerCache, exist := ce.getPlayerCache(ce.competition.ID, playerState.PlayerID)
+	if !exist {
+		return
+	}
+
+	cp := ce.competition.State.Players[playerCache.PlayerIdx]
+	cp.CurrentSeat = playerState.Seat
+	cp.CurrentTableID = tableID
+	cp.Status = CompetitionPlayerStatus_Playing
+	ce.emitPlayerEvent("[UpdateReserveTablePlayerState] player table seat updated", cp)
+	ce.emitEvent(fmt.Sprintf("[UpdateReserveTablePlayerState] player (%s) is reserved to table (%s) at seat (%d)", cp.PlayerID, cp.CurrentTableID, cp.CurrentSeat), cp.PlayerID)
+}
+
+func (ce *competitionEngine) ReleaseTables() error {
+	for _, table := range ce.competition.State.Tables {
+		if err := ce.tableManagerBackend.ReleaseTable(table.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (ce *competitionEngine) UpdateTable(table *pokertable.Table) {
+	tableIdx := ce.competition.FindTableIdx(func(t *pokertable.Table) bool {
+		return table.ID == t.ID
+	})
+	if tableIdx == UnsetValue {
+		return
+	}
+
+	if ce.isEndStatus() {
+		// fmt.Println("[DEBUG#UpdateTable] status is end, no need to update table. Status:", string(ce.competition.State.Status))
+		return
+	}
+
+	// 更新 competition table
+	var cloneTable pokertable.Table
+	if encoded, err := json.Marshal(table); err == nil {
+		json.Unmarshal(encoded, &cloneTable)
+	} else {
+		cloneTable = *table
+	}
+	ce.competition.State.Tables[tableIdx] = &cloneTable
+
+	// 處理因 table status 產生的變化
+	tableStatusHandlerMap := map[pokertable.TableStateStatus]func(pokertable.Table, int){
+		pokertable.TableStateStatus_TableCreated:     ce.handleCompetitionTableCreated,
+		pokertable.TableStateStatus_TableBalancing:   ce.handleCompetitionTableBalancing,
+		pokertable.TableStateStatus_TablePausing:     ce.updatePauseCompetition,
+		pokertable.TableStateStatus_TableClosed:      ce.closeCompetitionTable,
+		pokertable.TableStateStatus_TableGameSettled: ce.settleCompetitionTable,
+	}
+	handler, ok := tableStatusHandlerMap[cloneTable.State.Status]
+	if !ok {
+		return
+	}
+	handler(cloneTable, tableIdx)
 }

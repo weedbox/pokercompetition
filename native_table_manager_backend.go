@@ -28,6 +28,7 @@ type TableManagerBackend interface {
 
 	// Others
 	UpdateTable(table *pokertable.Table) // TODO: test only, should remove this
+	ReleaseTable(tableID string) error
 }
 
 func NewNativeTableManagerBackend(manager pokertable.Manager) TableManagerBackend {
@@ -132,6 +133,10 @@ func (ntmb *nativeTableManagerBackend) PlayersLeave(tableID string, playerIDs []
 	return ntmb.manager.PlayersLeave(tableID, playerIDs)
 }
 
-func (ntbm *nativeTableManagerBackend) UpdateTable(table *pokertable.Table) {
-	ntbm.onTableUpdated(table)
+func (ntmb *nativeTableManagerBackend) UpdateTable(table *pokertable.Table) {
+	ntmb.onTableUpdated(table)
+}
+
+func (ntmb *nativeTableManagerBackend) ReleaseTable(tableID string) error {
+	return ntmb.manager.ReleaseTable(tableID)
 }

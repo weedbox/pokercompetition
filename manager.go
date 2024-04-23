@@ -13,6 +13,7 @@ var (
 
 type Manager interface {
 	Reset()
+	ReleaseCompetition(competitionID string)
 
 	// CompetitionEngine Actions
 	GetCompetitionEngine(competitionID string) (CompetitionEngine, error)
@@ -56,11 +57,24 @@ func NewManager(tableManagerBackend TableManagerBackend) Manager {
 
 func (m *manager) Reset() {
 	m.competitionEngines.Range(func(key, value interface{}) bool {
-		_ = value.(CompetitionEngine).CloseCompetition(CompetitionStateStatus_ForceEnd)
+		if ce, ok := value.(CompetitionEngine); ok {
+			_ = ce.CloseCompetition(CompetitionStateStatus_ForceEnd)
+			ce.ReleaseTables()
+		}
 		return true
 	})
 
 	m.competitionEngines = sync.Map{}
+}
+
+func (m *manager) ReleaseCompetition(competitionID string) {
+	competitionEngine, err := m.GetCompetitionEngine(competitionID)
+	if err != nil {
+		return
+	}
+
+	m.competitionEngines.Delete(competitionID)
+	_ = competitionEngine.ReleaseTables()
 }
 
 func (m *manager) GetCompetitionEngine(competitionID string) (CompetitionEngine, error) {

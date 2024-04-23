@@ -159,6 +159,12 @@ func TestActor_CT_Breaking(t *testing.T) {
 	}
 
 	wg.Wait()
+
+	// 清空賽事
+	manager.ReleaseCompetition(competition.ID)
+
+	_, err = manager.GetCompetitionEngine(competition.ID)
+	assert.EqualError(t, err, pokercompetition.ErrManagerCompetitionNotFound.Error())
 }
 
 func TestActor_CT_Normal(t *testing.T) {
@@ -306,6 +312,12 @@ func TestActor_CT_Normal(t *testing.T) {
 	}
 
 	wg.Wait()
+
+	// 清空賽事
+	manager.ReleaseCompetition(competition.ID)
+
+	_, err = manager.GetCompetitionEngine(competition.ID)
+	assert.EqualError(t, err, pokercompetition.ErrManagerCompetitionNotFound.Error())
 }
 
 // func TestActor_MTT(t *testing.T) {
