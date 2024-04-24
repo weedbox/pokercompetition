@@ -1171,6 +1171,8 @@ func (ce *competitionEngine) activateBlind() error {
 	ce.competition.State.BlindState.CurrentLevelIndex = bs.Status.CurrentLevelIndex
 	ce.competition.State.BlindState.FinalBuyInLevelIndex = bs.Status.FinalBuyInLevelIndex
 	copy(ce.competition.State.BlindState.EndAts, bs.Status.LevelEndAts)
+
+	ce.emitEvent("ActivateBlind", "")
 	ce.emitCompetitionStateEvent(CompetitionStateEvent_BlindActivated)
 	return nil
 }
