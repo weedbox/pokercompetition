@@ -789,6 +789,10 @@ func (ce *competitionEngine) handleReBuy(table pokertable.Table) {
 					continue
 				}
 
+				if time.Now().Unix() <= cp.ReBuyEndAt {
+					continue
+				}
+
 				switch ce.competition.Meta.Mode {
 				case CompetitionMode_CT:
 					// 已經淘汰或是已經棄賽的玩家不處理

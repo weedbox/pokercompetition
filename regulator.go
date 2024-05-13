@@ -79,6 +79,20 @@ func (ce *competitionEngine) regulatorDistributePlayers(tableID string, playerID
 }
 
 func (ce *competitionEngine) regulatorAddPlayers(playerIDs []string) error {
-	fmt.Printf("[MTT#DEBUG#regulatorAddPlayers] Players: %d\n", len(playerIDs))
-	return ce.regulator.AddPlayers(playerIDs)
+	if ce.competition.Meta.MinPlayerCount > len(ce.competition.State.Players) {
+		// 達到開賽最低人數之前，都把玩家放到等待佇列
+		ce.waitingPlayers = append(ce.waitingPlayers, playerIDs...)
+		return nil
+	}
+
+	// 達到開賽最低人數之後，才丟到拆併桌程式
+	ce.waitingPlayers = append(ce.waitingPlayers, playerIDs...)
+	fmt.Printf("[MTT#DEBUG#regulatorAddPlayers] Add %d Players: %v\n", len(ce.waitingPlayers), ce.waitingPlayers)
+
+	if err := ce.regulator.AddPlayers(playerIDs); err != nil {
+		return err
+	}
+
+	ce.waitingPlayers = make([]string, 0)
+	return nil
 }

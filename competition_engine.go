@@ -84,6 +84,7 @@ type competitionEngine struct {
 	blind                               pokerblind.Blind
 	regulator                           regulator.Regulator
 	isStarted                           bool
+	waitingPlayers                      []string
 
 	// TODO: Test Only
 	onTableCreated func(table *pokertable.Table)
@@ -103,6 +104,7 @@ func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
 		breakingPauseResumeStates:           make(map[string]map[int]bool),
 		blind:                               pokerblind.NewBlind(),
 		isStarted:                           false,
+		waitingPlayers:                      make([]string, 0),
 
 		// TODO: Test Only
 		onTableCreated: func(table *pokertable.Table) {},
@@ -566,6 +568,10 @@ func (ce *competitionEngine) PlayerRefund(playerID string) error {
 	}
 
 	if ce.competition.State.Status != CompetitionStateStatus_Registering {
+		return ErrCompetitionRefundRejected
+	}
+
+	if ce.competition.Meta.MinPlayerCount >= len(ce.competition.State.Players) {
 		return ErrCompetitionRefundRejected
 	}
 
