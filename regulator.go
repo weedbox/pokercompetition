@@ -89,7 +89,7 @@ func (ce *competitionEngine) regulatorAddPlayers(playerIDs []string) error {
 	ce.waitingPlayers = append(ce.waitingPlayers, playerIDs...)
 	fmt.Printf("[MTT#DEBUG#regulatorAddPlayers] Add %d Players: %v\n", len(ce.waitingPlayers), ce.waitingPlayers)
 
-	if err := ce.regulator.AddPlayers(playerIDs); err != nil {
+	if err := ce.regulator.AddPlayers(ce.waitingPlayers); err != nil {
 		return err
 	}
 
