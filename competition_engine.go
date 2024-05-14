@@ -596,6 +596,14 @@ func (ce *competitionEngine) PlayerRefund(playerID string) error {
 
 	// emit events
 	ce.emitEvent("PlayerRefund", playerID)
+	waitingPlayers := make([]string, 0)
+	for _, waitingPlayerID := range ce.waitingPlayers {
+		if playerID == waitingPlayerID {
+			continue
+		}
+		waitingPlayers = append(waitingPlayers, waitingPlayerID)
+	}
+	ce.waitingPlayers = waitingPlayers
 
 	// call tableEngine
 	if playerTableID != "" {
