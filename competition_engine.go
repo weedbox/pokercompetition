@@ -571,7 +571,7 @@ func (ce *competitionEngine) PlayerRefund(playerID string) error {
 		return ErrCompetitionRefundRejected
 	}
 
-	if ce.competition.Meta.MinPlayerCount >= len(ce.competition.State.Players) {
+	if len(ce.competition.State.Players) >= ce.competition.Meta.MinPlayerCount {
 		return ErrCompetitionRefundRejected
 	}
 
