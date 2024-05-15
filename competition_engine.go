@@ -63,6 +63,7 @@ type CompetitionEngine interface {
 	// Others
 	UpdateTable(table *pokertable.Table)                                                    // 桌次更新
 	UpdateReserveTablePlayerState(tableID string, playerState *pokertable.TablePlayerState) // 更新 Reserve 桌次玩家狀態
+	AutoGameOpenEnd(tableID string) error                                                   // 自動開賽結束
 	ReleaseTables() error                                                                   // 釋放所有桌次
 }
 
@@ -706,6 +707,22 @@ func (ce *competitionEngine) UpdateReserveTablePlayerState(tableID string, playe
 	cp.Status = CompetitionPlayerStatus_Playing
 	ce.emitPlayerEvent("[UpdateReserveTablePlayerState] player table seat updated", cp)
 	ce.emitEvent(fmt.Sprintf("[UpdateReserveTablePlayerState] player (%s) is reserved to table (%s) at seat (%d)", cp.PlayerID, cp.CurrentTableID, cp.CurrentSeat), cp.PlayerID)
+}
+
+func (ce *competitionEngine) AutoGameOpenEnd(tableID string) error {
+	tableIdx := ce.competition.FindTableIdx(func(t *pokertable.Table) bool {
+		return tableID == t.ID
+	})
+	if tableIdx == UnsetValue {
+		return ErrCompetitionTableNotFound
+	}
+
+	// CT 停止買入且賽事沒有繼續自動開桌，則自動結束賽事
+	if ce.competition.State.Tables[tableIdx].Meta.Mode == string(CompetitionMode_CT) && ce.competition.State.Status == CompetitionStateStatus_StoppedBuyIn {
+		_ = ce.CloseCompetition(CompetitionStateStatus_AutoEnd)
+	}
+
+	return nil
 }
 
 func (ce *competitionEngine) ReleaseTables() error {
