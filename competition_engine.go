@@ -714,16 +714,12 @@ func (ce *competitionEngine) AutoGameOpenEnd(tableID string) error {
 		return tableID == t.ID
 	})
 	if tableIdx == UnsetValue {
-		fmt.Printf("[DEBUG#AutoGameOpenEnd] table (%s) not found\n", tableID)
 		return ErrCompetitionTableNotFound
 	}
 
 	// CT 停止買入且賽事沒有繼續自動開桌，則自動結束賽事
 	if ce.competition.State.Tables[tableIdx].Meta.Mode == string(CompetitionMode_CT) && ce.competition.State.Status == CompetitionStateStatus_StoppedBuyIn {
-		fmt.Printf("[DEBUG#AutoGameOpenEnd] close competition for table (%s), auto end\n", tableID)
-		_ = ce.CloseCompetition(CompetitionStateStatus_AutoEnd)
-	} else {
-		fmt.Printf("[DEBUG#AutoGameOpenEnd] not close competition for table (%s), table mode: %s, competition status: %s\n", tableID, ce.competition.State.Tables[tableIdx].Meta.Mode, ce.competition.State.Status)
+		_ = ce.CloseCompetition(CompetitionStateStatus_End)
 	}
 
 	return nil
