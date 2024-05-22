@@ -87,11 +87,22 @@ func (ce *competitionEngine) regulatorAddPlayers(playerIDs []string) error {
 
 	// 達到開賽最低人數之後，才丟到拆併桌程式
 	ce.waitingPlayers = append(ce.waitingPlayers, playerIDs...)
-	fmt.Printf("[MTT#DEBUG#regulatorAddPlayers] Add %d Players: %v\n", len(ce.waitingPlayers), ce.waitingPlayers)
-
 	if err := ce.regulator.AddPlayers(ce.waitingPlayers); err != nil {
 		return err
 	}
+
+	fmt.Printf("---------- [c: %s] Regulator Add %d Players: %v ----------\n",
+		ce.competition.ID,
+		len(ce.waitingPlayers),
+		ce.waitingPlayers,
+	)
+
+	fmt.Printf("---------- [c: %s][RegulatorAddPlayers 後 regulator 有 %d 人][賽事正在玩: %d 人, 等待區: %d 人] ----------\n",
+		ce.competition.ID,
+		ce.regulator.GetPlayerCount(),
+		ce.competition.PlayingPlayers(),
+		ce.competition.WaitingTableBalancingPlayers(),
+	)
 
 	ce.waitingPlayers = make([]string, 0)
 	return nil

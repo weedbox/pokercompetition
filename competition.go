@@ -229,6 +229,18 @@ func (c Competition) PlayingPlayerCount() int {
 	}).([]*CompetitionPlayer))
 }
 
+func (c Competition) PlayingPlayers() int {
+	return len(funk.Filter(c.State.Players, func(player *CompetitionPlayer) bool {
+		return player.Status == CompetitionPlayerStatus_Playing
+	}).([]*CompetitionPlayer))
+}
+
+func (c Competition) WaitingTableBalancingPlayers() int {
+	return len(funk.Filter(c.State.Players, func(player *CompetitionPlayer) bool {
+		return player.Status == CompetitionPlayerStatus_WaitingTableBalancing
+	}).([]*CompetitionPlayer))
+}
+
 func (c Competition) IsTableExist(tableID string) bool {
 	for _, table := range c.State.Tables {
 		if table.ID == tableID {

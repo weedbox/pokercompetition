@@ -423,15 +423,16 @@ func (ce *competitionEngine) handleMTTTableSettlement(table pokertable.Table) bo
 
 func (ce *competitionEngine) handleMTTTableSettlementNextStep(table pokertable.Table, alivePlayerIDs, zeroChipPlayerIDs []string) {
 	// 拆併桌監管器更新狀態
-	releaseCount, newPlayerIDs, err := ce.regulator.SyncState(table.ID, len(alivePlayerIDs))
+	releaseCount, newPlayerIDs, err := ce.regulator.SyncState(table.ID, len(zeroChipPlayerIDs))
 	if err != nil {
 		ce.emitErrorEvent(fmt.Sprintf("[%s][%d] MTT Regulator Sync State", table.ID, table.State.GameCount), "", err)
 		return
 	}
-	fmt.Printf("---------- [c: %s][t: %s] 第 (%d) 手結算, 停止買入: %+v, [SyncState 後 regulator 有 %d 人 ----------\n",
+	fmt.Printf("---------- [c: %s][t: %s] 第 (%d) 手結算後走 (%d) 人, 停止買入: %+v, [SyncState 後 regulator 有 %d 人] ----------\n",
 		ce.competition.ID,
 		table.ID,
 		table.State.GameCount,
+		len(zeroChipPlayerIDs),
 		ce.competition.State.BlindState.IsStopBuyIn(),
 		ce.regulator.GetPlayerCount(),
 	)
@@ -578,7 +579,7 @@ func (ce *competitionEngine) handleMTTTableSettlementNextStep(table pokertable.T
 		}
 	}
 
-	fmt.Printf("---------- [c: %s][t: %s] 第 (%d) 手結算, 停止買入: %+v, [本桌有籌碼活著: %d 人 (%s), 本桌沒籌碼離開 %d 人 (%s), 本桌離開至等待區 %d 人 (%s), 別桌加入 %d 人 (%s), 本桌當前 %d 人] ----------\n",
+	fmt.Printf("---------- [c: %s][t: %s] 第 (%d) 手結算, 停止買入: %+v, [本桌有籌碼活著: %d 人 (%s), 本桌沒籌碼離開 %d 人 (%s), 本桌離開至等待區 %d 人 (%s), 別桌加入 %d 人 (%s), 本桌當前 %d 人][賽事正在玩: %d 人, 等待區: %d 人] ----------\n",
 		ce.competition.ID,
 		table.ID,
 		table.State.GameCount,
@@ -592,6 +593,8 @@ func (ce *competitionEngine) handleMTTTableSettlementNextStep(table pokertable.T
 		len(newPlayerIDs),
 		strings.Join(newPlayerIDs, ","),
 		currentTablePlayerCount,
+		ce.competition.PlayingPlayers(),
+		ce.competition.WaitingTableBalancingPlayers(),
 	)
 }
 

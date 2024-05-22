@@ -304,6 +304,10 @@ CloseCompetition 關閉賽事
   - 適用時機: 賽事出狀況需要臨時關閉賽事、未達開賽條件自動關閉賽事、正常結束賽事
 */
 func (ce *competitionEngine) CloseCompetition(endStatus CompetitionStateStatus) error {
+	if ce.isEndStatus() {
+		return nil
+	}
+
 	ce.settleCompetition(endStatus)
 	_ = ce.ReleaseTables()
 	return nil
@@ -656,6 +660,11 @@ func (ce *competitionEngine) PlayerCashOut(tableID, playerID string) error {
 
 func (ce *competitionEngine) PlayerQuit(tableID, playerID string) error {
 	// validate quit conditions
+	// CT Only
+	if ce.competition.Meta.Mode != CompetitionMode_CT {
+		return ErrCompetitionQuitRejected
+	}
+
 	playerIdx := ce.competition.FindPlayerIdx(func(player *CompetitionPlayer) bool {
 		return player.PlayerID == playerID
 	})
