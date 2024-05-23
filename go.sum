@@ -35,6 +35,8 @@ github.com/weedbox/pokertable v0.0.59 h1:dasraPNHjeGznBolzj+twmp+jm+/4byyIwMNs+z
 github.com/weedbox/pokertable v0.0.59/go.mod h1:xsGHuR72RDzjQDFo8JKYpjGSWq9HbalpPdVDygr7McM=
 github.com/weedbox/pokertable v0.0.60 h1:Rlld03bcyHlgBbI1LTLZPFDkTQzdxyWYUI8rbPMwp60=
 github.com/weedbox/pokertable v0.0.60/go.mod h1:X6uwxU6CM9sHkhHVd+V5PEkyT/YFGfXvplKRkil3x6Q=
+github.com/weedbox/pokertable v0.0.62 h1:etLl9lgrhCKcjGrodjwZHGo/l17FGuVOUYu43EHjJEU=
+github.com/weedbox/pokertable v0.0.62/go.mod h1:X6uwxU6CM9sHkhHVd+V5PEkyT/YFGfXvplKRkil3x6Q=
 github.com/weedbox/syncsaga v0.0.0-20230821071725-a634f0872340 h1:ZHzlfkN/XnOIADtOxGUPbyislvjx0KjtTwCVuKEF1hw=
 github.com/weedbox/syncsaga v0.0.0-20230821071725-a634f0872340/go.mod h1:1k6tuqJhfosy4htz/8WTL17Hn4W1BJD4R+Lp/08EOPI=
 github.com/weedbox/timebank v0.0.0-20230713013837-bd7a6f808e3e h1:3v7juh57KHXyYVjfsE6gYn6tzgLBTQcDgg1A7fqNGC0=
