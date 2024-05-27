@@ -2,6 +2,7 @@ package pokercompetition
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -28,8 +29,12 @@ func (ce *competitionEngine) newDefaultCompetitionPlayerData(tableID, playerID s
 		CurrentTableID:              tableID,
 		CurrentSeat:                 UnsetValue,
 		JoinAt:                      joinAt,
+		ReBuyWaitingAt:              UnsetValue,
+		KnockoutAt:                  UnsetValue,
 		Status:                      playerStatus,
 		Rank:                        UnsetValue,
+		TableRank:                   UnsetValue,
+		CompetitionRank:             UnsetValue,
 		Chips:                       redeemChips,
 		IsReBuying:                  false,
 		ReBuyEndAt:                  UnsetValue,
@@ -202,9 +207,9 @@ func (ce *competitionEngine) updatePauseCompetition(table pokertable.Table, tabl
 	}
 }
 
-func (ce *competitionEngine) addCompetitionTable(tableSetting TableSetting) (string, error) {
+func (ce *competitionEngine) addCompetitionTable(tableSetting TableSetting, blind pokertable.TableBlindState) (string, error) {
 	// create table
-	setting := NewPokerTableSetting(ce.competition.ID, ce.competition.Meta, tableSetting)
+	setting := NewPokerTableSetting(ce.competition.ID, ce.competition.Meta, tableSetting, blind)
 	table, err := ce.tableManagerBackend.CreateTable(ce.tableOptions, setting)
 	if err != nil {
 		return "", err
@@ -312,6 +317,9 @@ func (ce *competitionEngine) settleCompetitionTable(table pokertable.Table, tabl
 
 		// 中場休息處理
 		ce.handleBreaking(table.ID)
+
+		ce.refreshPlayerStatusStatistics()
+		ce.refreshPlayerCompetitionRanks()
 
 		// 事件更新
 		ce.emitEvent("Table Settlement", "")
@@ -593,8 +601,8 @@ func (ce *competitionEngine) handleMTTTableSettlementNextStep(table pokertable.T
 		len(newPlayerIDs),
 		strings.Join(newPlayerIDs, ","),
 		currentTablePlayerCount,
-		ce.competition.PlayingPlayers(),
-		ce.competition.WaitingTableBalancingPlayers(),
+		ce.competition.GetPlayerCountByStatus(CompetitionPlayerStatus_Playing),
+		ce.competition.GetPlayerCountByStatus(CompetitionPlayerStatus_WaitingTableBalancing),
 	)
 }
 
@@ -702,6 +710,7 @@ func (ce *competitionEngine) handleTableKnockoutPlayers(table pokertable.Table) 
 
 		cp := ce.competition.State.Players[playerCache.PlayerIdx]
 		cp.Status = CompetitionPlayerStatus_Knockout
+		cp.KnockoutAt = time.Now().Unix()
 		cp.CurrentSeat = UnsetValue
 		ce.emitPlayerEvent("table settlement knockout", cp)
 
@@ -742,10 +751,10 @@ func (ce *competitionEngine) handleReBuy(table pokertable.Table) {
 		if !cp.IsReBuying {
 			if cp.ReBuyTimes < ce.competition.Meta.ReBuySetting.MaxTime {
 				cp.Status = CompetitionPlayerStatus_ReBuyWaiting
+				cp.ReBuyWaitingAt = time.Now().Unix()
 				cp.IsReBuying = true
 				cp.ReBuyEndAt = reBuyEndAt
 				if ce.competition.Meta.Mode == CompetitionMode_MTT {
-					cp.ReBuyEndAt = UnsetValue
 					cp.CurrentSeat = UnsetValue
 					cp.ReBuyEndAt = UnsetValue
 				}
@@ -816,6 +825,7 @@ func (ce *competitionEngine) handleReBuy(table pokertable.Table) {
 			}
 
 			if len(leavePlayerIDs) > 0 {
+				ce.refreshPlayerStatusStatistics()
 				ce.emitEvent("re buy leave", strings.Join(leavePlayerIDs, ","))
 				switch ce.competition.Meta.Mode {
 				case CompetitionMode_CT:
@@ -972,6 +982,7 @@ func (ce *competitionEngine) updatePlayerCompetitionTableRecords(table pokertabl
 
 		cp := ce.competition.State.Players[playerIdx]
 		cp.Rank = rankData.Rank
+		cp.TableRank = rankData.Rank
 		cp.Chips = rankData.Chips
 		ce.emitPlayerEvent("table-settlement", cp)
 	}
@@ -998,6 +1009,18 @@ func (ce *competitionEngine) updatePlayerFinalRankings() {
 		// 把名次由前至後重新排列 (Reverse competition.State.Rankings)
 		for i, j := 0, len(ce.competition.State.Rankings)-1; i < j; i, j = i+1, j-1 {
 			ce.competition.State.Rankings[i], ce.competition.State.Rankings[j] = ce.competition.State.Rankings[j], ce.competition.State.Rankings[i]
+		}
+
+		// 更新玩家排名
+		competitionPlayerIdxMap := make(map[string]int) // key player id, value: competition player index
+		for idx, p := range ce.competition.State.Players {
+			competitionPlayerIdxMap[p.PlayerID] = idx
+		}
+		for idx, ranking := range ce.competition.State.Rankings {
+			rank := idx + 1
+			if playerIdx, exist := competitionPlayerIdxMap[ranking.PlayerID]; exist {
+				ce.competition.State.Players[playerIdx].CompetitionRank = rank
+			}
 		}
 	}
 }
@@ -1113,6 +1136,7 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 					}
 
 					cp.Status = CompetitionPlayerStatus_Knockout
+					cp.KnockoutAt = time.Now().Unix()
 					cp.IsReBuying = false
 					cp.ReBuyEndAt = UnsetValue
 					cp.CurrentSeat = UnsetValue
@@ -1135,6 +1159,8 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 				}
 
 				// 事件通知
+				ce.refreshPlayerStatusStatistics()
+				ce.refreshPlayerCompetitionRanks()
 				ce.emitEvent("Stopped BuyIn Knockout Players", "")
 				ce.emitCompetitionStateEvent(CompetitionStateEvent_KnockoutPlayers)
 				ce.emitCompetitionStateEvent(CompetitionStateEvent_BlindUpdated) // change Status
@@ -1256,4 +1282,89 @@ func (ce *competitionEngine) initAdvancement() {
 	ce.competition.State.AdvanceState.Status = CompetitionAdvanceStatus_Updating
 	ce.competition.State.AdvanceState.TotalTables = len(ce.competition.State.Tables)
 	ce.competition.State.AdvanceState.UpdatedTables = 0
+}
+
+func (ce *competitionEngine) refreshPlayerStatusStatistics() {
+	ce.competition.State.Statistic.PlayingPlayerCount = ce.competition.GetPlayerCountByStatus(CompetitionPlayerStatus_Playing)
+	ce.competition.State.Statistic.WaitingTableBalancingPlayerCount = ce.competition.GetPlayerCountByStatus(CompetitionPlayerStatus_WaitingTableBalancing)
+	ce.competition.State.Statistic.KnockoutPlayerCount = ce.competition.GetPlayerCountByStatus(CompetitionPlayerStatus_Knockout)
+	ce.competition.State.Statistic.ReBuyWaitingPlayerCount = ce.competition.GetPlayerCountByStatus(CompetitionPlayerStatus_ReBuyWaiting)
+}
+
+func (ce *competitionEngine) refreshPlayerCompetitionRanks() {
+	allowStatuses := []CompetitionStateStatus{
+		CompetitionStateStatus_DelayedBuyIn,
+		CompetitionStateStatus_StoppedBuyIn,
+	}
+
+	if !funk.Contains(allowStatuses, ce.competition.State.Status) {
+		return
+	}
+
+	competitionPlayerIdxMap := make(map[string]int) // key player id, value: competition player index
+
+	// 分類玩家
+	playingPlayers := make([]CompetitionPlayer, 0)
+	reBuyWaitingPlayers := make([]CompetitionPlayer, 0)
+	for idx, p := range ce.competition.State.Players {
+		if p.Chips > 0 {
+			playingPlayers = append(playingPlayers, *p)
+		} else {
+			if p.Status == CompetitionPlayerStatus_ReBuyWaiting {
+				reBuyWaitingPlayers = append(reBuyWaitingPlayers, *p)
+			}
+		}
+		competitionPlayerIdxMap[p.PlayerID] = idx
+	}
+
+	// 計算排名
+	rank := 1
+
+	// 處理還在玩且有籌碼、尚未有排名玩家
+	if len(playingPlayers) > 0 {
+		sort.Slice(playingPlayers, func(i, j int) bool {
+			// 依照籌碼量排名由大到小排序，如果排名相同則用加入時間排序 (早加入者名次高)
+			if playingPlayers[i].Chips == playingPlayers[j].Chips {
+				return playingPlayers[i].JoinAt < playingPlayers[j].JoinAt
+			}
+			return playingPlayers[i].Chips > playingPlayers[j].Chips
+		})
+
+		// 更新還在玩且有籌碼玩家排名
+		for _, p := range playingPlayers {
+			if playerIdx, exist := competitionPlayerIdxMap[p.PlayerID]; exist {
+				ce.competition.State.Players[playerIdx].CompetitionRank = rank
+				rank++
+			}
+		}
+	}
+
+	// 處理還在玩但沒有籌碼 (補碼中) 玩家排名
+	if len(reBuyWaitingPlayers) > 0 {
+		sort.Slice(reBuyWaitingPlayers, func(i, j int) bool {
+			// 越晚離開排名越高 (後離開者名次高)
+			return reBuyWaitingPlayers[i].ReBuyWaitingAt > reBuyWaitingPlayers[j].ReBuyWaitingAt
+		})
+
+		// 更新還在玩但沒有籌碼 (補碼中) 玩家排名
+		for _, p := range reBuyWaitingPlayers {
+			if playerIdx, exist := competitionPlayerIdxMap[p.PlayerID]; exist {
+				ce.competition.State.Players[playerIdx].CompetitionRank = rank
+				rank++
+			}
+		}
+	}
+
+	// 處理沒有籌碼且已淘汰玩家排名
+	if len(ce.competition.State.Rankings) > 0 {
+		// rank := ce.competition.PlayingPlayerCount() + (len(knockoutPlayerRankings) - idx)
+		for i := len(ce.competition.State.Rankings) - 1; i >= 0; i-- {
+			if playerIdx, exist := competitionPlayerIdxMap[ce.competition.State.Rankings[i].PlayerID]; exist {
+				ce.competition.State.Players[playerIdx].CompetitionRank = rank
+				rank++
+			}
+		}
+	}
+
+	ce.emitCompetitionStateEvent(CompetitionStateEvent_PlayerRankUpdated)
 }

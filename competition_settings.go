@@ -22,7 +22,7 @@ type JoinPlayer struct {
 	RedeemChips int64  `json:"redeem_chips"`
 }
 
-func NewPokerTableSetting(competitionID string, competitionMeta CompetitionMeta, tableSetting TableSetting) pokertable.TableSetting {
+func NewPokerTableSetting(competitionID string, competitionMeta CompetitionMeta, tableSetting TableSetting, blind pokertable.TableBlindState) pokertable.TableSetting {
 	return pokertable.TableSetting{
 		TableID: tableSetting.TableID,
 		Meta: pokertable.TableMeta{
@@ -36,5 +36,6 @@ func NewPokerTableSetting(competitionID string, competitionMeta CompetitionMeta,
 			ActionTime:          competitionMeta.ActionTime,
 		},
 		JoinPlayers: tableSetting.JoinPlayers,
+		Blind:       blind,
 	}
 }

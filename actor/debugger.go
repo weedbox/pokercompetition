@@ -192,7 +192,7 @@ func DebugPrintCompetitionEnded(c pokercompetition.Competition) {
 		if player.Status == pokercompetition.CompetitionPlayerStatus_Knockout {
 			isKnockout = "O"
 		}
-		fmt.Printf("%s, 加入時間: %s, 狀態: %s, 淘汰: %s, 桌次: %s, 桌排名: %d, 籌碼: %d\n", player.PlayerID, timeString(player.JoinAt), player.Status, isKnockout, player.CurrentTableID, player.Rank, player.Chips)
+		fmt.Printf("%s, 加入時間: %s, 狀態: %s, 淘汰: %s, 桌次: %s, 桌排名: %d, 賽事排名: %d, 籌碼: %d\n", player.PlayerID, timeString(player.JoinAt), player.Status, isKnockout, player.CurrentTableID, player.TableRank, player.CompetitionRank, player.Chips)
 	}
 
 	fmt.Println("---------- 最後排名 ----------")

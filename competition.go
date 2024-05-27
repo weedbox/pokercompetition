@@ -98,19 +98,24 @@ type CompetitionRank struct {
 }
 
 type CompetitionPlayer struct {
-	PlayerID       string `json:"player_id"` // 玩家 ID
-	CurrentTableID string `json:"table_id"`  // 當前桌次 ID
-	CurrentSeat    int    `json:"seat"`      // 當前座位
-	JoinAt         int64  `json:"join_at"`   // 加入時間 (Seconds)
+	PlayerID       string `json:"player_id"`        // 玩家 ID
+	CurrentTableID string `json:"table_id"`         // 當前桌次 ID
+	CurrentSeat    int    `json:"seat"`             // 當前座位
+	JoinAt         int64  `json:"join_at"`          // 加入時間 (Seconds)
+	ReBuyWaitingAt int64  `json:"rebuy_waiting_at"` // 補碼等待時間 (Seconds)
+	KnockoutAt     int64  `json:"knockout_at"`      // 淘汰時間 (Seconds)
 
 	// current info
-	Status     CompetitionPlayerStatus `json:"status"`        // 參與玩家狀態
-	Rank       int                     `json:"rank"`          // 當前桌次排名
-	Chips      int64                   `json:"chips"`         // 當前籌碼
-	IsReBuying bool                    `json:"is_re_buying"`  // 是否正在補碼
-	ReBuyEndAt int64                   `json:"re_buy_end_at"` // 最後補碼時間 (Seconds)
-	ReBuyTimes int                     `json:"re_buy_times"`  // 補碼次數
-	AddonTimes int                     `json:"addon_times"`   // 增購次數
+	Status          CompetitionPlayerStatus `json:"status"`           // 參與玩家狀態
+	Rank            int                     `json:"rank"`             // 當前桌次排名
+	TableRank       int                     `json:"table_rank"`       // 當前桌次排名
+	CompetitionRank int                     `json:"competition_rank"` // 當前賽事排名
+
+	Chips      int64 `json:"chips"`         // 當前籌碼
+	IsReBuying bool  `json:"is_re_buying"`  // 是否正在補碼
+	ReBuyEndAt int64 `json:"re_buy_end_at"` // 最後補碼時間 (Seconds)
+	ReBuyTimes int   `json:"re_buy_times"`  // 補碼次數
+	AddonTimes int   `json:"addon_times"`   // 增購次數
 
 	// statistics info
 	// best
@@ -189,7 +194,12 @@ type AdvanceState struct {
 }
 
 type Statistic struct {
-	TotalBuyInCount int `json:"total_buy_in_count"` // 總買入次數
+	TotalBuyInCount                  int `json:"total_buy_in_count"`                   // 總買入次數
+	TotalAddonCount                  int `json:"total_addon_count"`                    // 總 Addon 次數
+	PlayingPlayerCount               int `json:"playing_player_count"`                 // 現在有籌碼且在玩的人數
+	WaitingTableBalancingPlayerCount int `json:"waiting_table_balancing_player_count"` // 現在有籌碼且等待拆併桌中的玩家數
+	KnockoutPlayerCount              int `json:"knockout_player_count"`                // 現在沒有籌碼且淘汰玩家數 (不能再 Re Buy)
+	ReBuyWaitingPlayerCount          int `json:"re_buy_waiting_player_count"`          // 現在沒有籌碼且等待補碼中的玩家數 (能再 Re Buy)
 }
 
 type ReBuySetting struct {
@@ -229,15 +239,9 @@ func (c Competition) PlayingPlayerCount() int {
 	}).([]*CompetitionPlayer))
 }
 
-func (c Competition) PlayingPlayers() int {
+func (c Competition) GetPlayerCountByStatus(status CompetitionPlayerStatus) int {
 	return len(funk.Filter(c.State.Players, func(player *CompetitionPlayer) bool {
-		return player.Status == CompetitionPlayerStatus_Playing
-	}).([]*CompetitionPlayer))
-}
-
-func (c Competition) WaitingTableBalancingPlayers() int {
-	return len(funk.Filter(c.State.Players, func(player *CompetitionPlayer) bool {
-		return player.Status == CompetitionPlayerStatus_WaitingTableBalancing
+		return player.Status == status
 	}).([]*CompetitionPlayer))
 }
 

@@ -37,7 +37,15 @@ func (ce *competitionEngine) regulatorCreateAndDistributePlayers(playerIDs []str
 		TableID:     uuid.New().String(),
 		JoinPlayers: joinPlayers,
 	}
-	tableID, err := ce.addCompetitionTable(tableSetting)
+	level, ante, dealer, sb, bb := ce.competition.CurrentBlindData()
+	blind := pokertable.TableBlindState{
+		Level:  level,
+		Ante:   ante,
+		Dealer: dealer,
+		SB:     sb,
+		BB:     bb,
+	}
+	tableID, err := ce.addCompetitionTable(tableSetting, blind)
 	if err != nil {
 		return "", err
 	}
@@ -100,8 +108,8 @@ func (ce *competitionEngine) regulatorAddPlayers(playerIDs []string) error {
 	fmt.Printf("---------- [c: %s][RegulatorAddPlayers 後 regulator 有 %d 人][賽事正在玩: %d 人, 等待區: %d 人] ----------\n",
 		ce.competition.ID,
 		ce.regulator.GetPlayerCount(),
-		ce.competition.PlayingPlayers(),
-		ce.competition.WaitingTableBalancingPlayers(),
+		ce.competition.GetPlayerCountByStatus(CompetitionPlayerStatus_Playing),
+		ce.competition.GetPlayerCountByStatus(CompetitionPlayerStatus_WaitingTableBalancing),
 	)
 
 	ce.waitingPlayers = make([]string, 0)

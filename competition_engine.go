@@ -217,8 +217,8 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 			},
 			AdvanceState: &AdvanceState{
 				Status:        CompetitionAdvanceStatus_NotStart,
-				TotalTables:   -1,
-				UpdatedTables: -1,
+				TotalTables:   UnsetValue,
+				UpdatedTables: UnsetValue,
 			},
 			Statistic: &Statistic{
 				TotalBuyInCount: 0,
@@ -230,7 +230,14 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 	case CompetitionMode_CT, CompetitionMode_Cash:
 		// 批次建立桌次
 		for _, tableSetting := range competitionSetting.TableSettings {
-			if _, err := ce.addCompetitionTable(tableSetting); err != nil {
+			blind := pokertable.TableBlindState{
+				Level:  0,
+				Ante:   pokertable.UnsetValue,
+				Dealer: pokertable.UnsetValue,
+				SB:     pokertable.UnsetValue,
+				BB:     pokertable.UnsetValue,
+			}
+			if _, err := ce.addCompetitionTable(tableSetting, blind); err != nil {
 				return nil, err
 			}
 		}
@@ -444,14 +451,18 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 		playerStatus = CompetitionPlayerStatus_WaitingTableBalancing
 	}
 
+	// do logic
+	ce.mu.Lock()
+
 	// 更新統計數據 (MTT)
 	if ce.competition.Meta.Mode == CompetitionMode_MTT {
 		// MTT TotalBuyInCount 一次一發
 		ce.competition.State.Statistic.TotalBuyInCount++
 	}
 
-	// do logic
-	ce.mu.Lock()
+	ce.refreshPlayerStatusStatistics()
+	ce.refreshPlayerCompetitionRanks()
+
 	if isBuyIn {
 		player, playerCache := ce.newDefaultCompetitionPlayerData(tableID, joinPlayer.PlayerID, joinPlayer.RedeemChips, playerStatus)
 		ce.competition.State.Players = append(ce.competition.State.Players, &player)
@@ -468,6 +479,7 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 
 		cp := ce.competition.State.Players[playerIdx]
 		cp.Status = playerStatus
+		cp.ReBuyWaitingAt = UnsetValue
 		cp.Chips = joinPlayer.RedeemChips
 		cp.ReBuyTimes++
 		playerCache.ReBuyTimes = cp.ReBuyTimes
@@ -544,6 +556,8 @@ func (ce *competitionEngine) PlayerAddon(tableID string, joinPlayer JoinPlayer) 
 	cp.Chips += joinPlayer.RedeemChips
 	cp.AddonTimes++
 	cp.TotalRedeemChips += joinPlayer.RedeemChips
+	ce.competition.State.Statistic.TotalAddonCount++
+	ce.refreshPlayerCompetitionRanks()
 	defer ce.mu.Unlock()
 
 	// emit events
