@@ -451,6 +451,8 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 		playerStatus = CompetitionPlayerStatus_WaitingTableBalancing
 	}
 
+	var competitionPlayer *CompetitionPlayer
+
 	// do logic
 	ce.mu.Lock()
 
@@ -459,11 +461,10 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 		ce.competition.State.Players = append(ce.competition.State.Players, &player)
 		playerCache.PlayerIdx = len(ce.competition.State.Players) - 1
 		ce.insertPlayerCache(ce.competition.ID, joinPlayer.PlayerID, playerCache)
-
+		ce.competition.State.Statistic.TotalBuyInCount += joinPlayer.Unit
 		ce.refreshPlayerStatusStatistics()
 		ce.refreshPlayerCompetitionRanks()
-		ce.emitEvent(fmt.Sprintf("PlayerBuyIn -> %s Buy In", joinPlayer.PlayerID), joinPlayer.PlayerID)
-		ce.emitPlayerEvent("PlayerBuyIn -> Buy In", &player)
+		competitionPlayer = &player
 	} else {
 		// ReBuy logic
 		playerCache, exist := ce.getPlayerCache(ce.competition.ID, joinPlayer.PlayerID)
@@ -490,16 +491,21 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 			cp.CurrentSeat = UnsetValue
 		}
 
+		ce.competition.State.Statistic.TotalBuyInCount += joinPlayer.Unit
 		ce.refreshPlayerStatusStatistics()
 		ce.refreshPlayerCompetitionRanks()
-		ce.emitEvent(fmt.Sprintf("PlayerBuyIn -> %s Re Buy", joinPlayer.PlayerID), joinPlayer.PlayerID)
-		ce.emitPlayerEvent("PlayerBuyIn -> Re Buy", cp)
+		competitionPlayer = cp
 	}
 
-	// 更新統計數據 (MTT)
-	ce.competition.State.Statistic.TotalBuyInCount += joinPlayer.Unit
 	defer ce.mu.Unlock()
 
+	if isBuyIn {
+		ce.emitEvent(fmt.Sprintf("PlayerBuyIn -> %s Buy In", joinPlayer.PlayerID), joinPlayer.PlayerID)
+		ce.emitPlayerEvent("PlayerBuyIn -> Buy In", competitionPlayer)
+	} else {
+		ce.emitEvent(fmt.Sprintf("PlayerBuyIn -> %s Re Buy", joinPlayer.PlayerID), joinPlayer.PlayerID)
+		ce.emitPlayerEvent("PlayerBuyIn -> Re Buy", competitionPlayer)
+	}
 	ce.emitCompetitionStateEvent(CompetitionStateEvent_CompetitionStatisticUpdated)
 
 	switch ce.competition.Meta.Mode {
