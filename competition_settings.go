@@ -20,6 +20,7 @@ type TableSetting struct {
 type JoinPlayer struct {
 	PlayerID    string `json:"player_id"`
 	RedeemChips int64  `json:"redeem_chips"`
+	Unit        int    `json:"unit"` // 買入發數
 }
 
 func NewPokerTableSetting(competitionID string, competitionMeta CompetitionMeta, tableSetting TableSetting, blind pokertable.TableBlindState) pokertable.TableSetting {

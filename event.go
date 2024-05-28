@@ -6,15 +6,16 @@ import (
 )
 
 const (
-	CompetitionStateEvent_BlindActivated    = "BlindActivated"
-	CompetitionStateEvent_BlindUpdated      = "BlindUpdated"
-	CompetitionStateEvent_Started           = "Started"
-	CompetitionStateEvent_TableUpdated      = "TableUpdated"
-	CompetitionStateEvent_TableGameSettled  = "TableGameSettled"
-	CompetitionStateEvent_KnockoutPlayers   = "KnockoutPlayers"
-	CompetitionStateEvent_CashOutPlayers    = "CashOutPlayers"
-	CompetitionStateEvent_PlayerRankUpdated = "PlayerRankUpdated"
-	CompetitionStateEvent_Settled           = "Settled"
+	CompetitionStateEvent_BlindActivated              = "BlindActivated"
+	CompetitionStateEvent_BlindUpdated                = "BlindUpdated"
+	CompetitionStateEvent_Started                     = "Started"
+	CompetitionStateEvent_TableUpdated                = "TableUpdated"
+	CompetitionStateEvent_TableGameSettled            = "TableGameSettled"
+	CompetitionStateEvent_KnockoutPlayers             = "KnockoutPlayers"
+	CompetitionStateEvent_CashOutPlayers              = "CashOutPlayers"
+	CompetitionStateEvent_PlayerRankUpdated           = "PlayerRankUpdated"
+	CompetitionStateEvent_CompetitionStatisticUpdated = "CompetitionStatisticUpdated"
+	CompetitionStateEvent_Settled                     = "Settled"
 )
 
 func (ce *competitionEngine) emitEvent(eventName string, playerID string) {

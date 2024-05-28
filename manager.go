@@ -34,7 +34,7 @@ type Manager interface {
 	// Player Operations
 	PlayerBuyIn(competitionID string, joinPlayer JoinPlayer) error
 	PlayerAddon(competitionID string, tableID string, joinPlayer JoinPlayer) error
-	PlayerRefund(competitionID string, playerID string) error
+	PlayerRefund(competitionID string, playerID string, unit int) error
 	PlayerCashOut(competitionID string, tableID, playerID string) error
 	PlayerQuit(competitionID string, tableID, playerID string) error
 }
@@ -187,13 +187,13 @@ func (m *manager) PlayerAddon(competitionID string, tableID string, joinPlayer J
 	return competitionEngine.PlayerAddon(tableID, joinPlayer)
 }
 
-func (m *manager) PlayerRefund(competitionID string, playerID string) error {
+func (m *manager) PlayerRefund(competitionID string, playerID string, unit int) error {
 	competitionEngine, err := m.GetCompetitionEngine(competitionID)
 	if err != nil {
 		return ErrManagerCompetitionNotFound
 	}
 
-	return competitionEngine.PlayerRefund(playerID)
+	return competitionEngine.PlayerRefund(playerID, unit)
 }
 
 func (m *manager) PlayerCashOut(competitionID string, tableID, playerID string) error {

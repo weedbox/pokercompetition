@@ -1293,6 +1293,7 @@ func (ce *competitionEngine) refreshPlayerStatusStatistics() {
 
 func (ce *competitionEngine) refreshPlayerCompetitionRanks() {
 	allowStatuses := []CompetitionStateStatus{
+		CompetitionStateStatus_Registering,
 		CompetitionStateStatus_DelayedBuyIn,
 		CompetitionStateStatus_StoppedBuyIn,
 	}

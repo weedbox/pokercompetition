@@ -56,7 +56,7 @@ type CompetitionEngine interface {
 	// Player Operations
 	PlayerBuyIn(joinPlayer JoinPlayer) error                 // 玩家報名或補碼
 	PlayerAddon(tableID string, joinPlayer JoinPlayer) error // 玩家增購
-	PlayerRefund(playerID string) error                      // 玩家退賽
+	PlayerRefund(playerID string, unit int) error            // 玩家退賽
 	PlayerCashOut(tableID, playerID string) error            // 玩家離桌結算 (現金桌)
 	PlayerQuit(tableID, playerID string) error               // 玩家棄賽淘汰
 
@@ -454,20 +454,14 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 	// do logic
 	ce.mu.Lock()
 
-	// 更新統計數據 (MTT)
-	if ce.competition.Meta.Mode == CompetitionMode_MTT {
-		// MTT TotalBuyInCount 一次一發
-		ce.competition.State.Statistic.TotalBuyInCount++
-	}
-
-	ce.refreshPlayerStatusStatistics()
-	ce.refreshPlayerCompetitionRanks()
-
 	if isBuyIn {
 		player, playerCache := ce.newDefaultCompetitionPlayerData(tableID, joinPlayer.PlayerID, joinPlayer.RedeemChips, playerStatus)
 		ce.competition.State.Players = append(ce.competition.State.Players, &player)
 		playerCache.PlayerIdx = len(ce.competition.State.Players) - 1
 		ce.insertPlayerCache(ce.competition.ID, joinPlayer.PlayerID, playerCache)
+
+		ce.refreshPlayerStatusStatistics()
+		ce.refreshPlayerCompetitionRanks()
 		ce.emitEvent(fmt.Sprintf("PlayerBuyIn -> %s Buy In", joinPlayer.PlayerID), joinPlayer.PlayerID)
 		ce.emitPlayerEvent("PlayerBuyIn -> Buy In", &player)
 	} else {
@@ -495,10 +489,18 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 			cp.CurrentTableID = "" // re-buy 時要清空 CurrentTableID 等待重新配桌
 			cp.CurrentSeat = UnsetValue
 		}
+
+		ce.refreshPlayerStatusStatistics()
+		ce.refreshPlayerCompetitionRanks()
 		ce.emitEvent(fmt.Sprintf("PlayerBuyIn -> %s Re Buy", joinPlayer.PlayerID), joinPlayer.PlayerID)
 		ce.emitPlayerEvent("PlayerBuyIn -> Re Buy", cp)
 	}
+
+	// 更新統計數據 (MTT)
+	ce.competition.State.Statistic.TotalBuyInCount += joinPlayer.Unit
 	defer ce.mu.Unlock()
+
+	ce.emitCompetitionStateEvent(CompetitionStateEvent_CompetitionStatisticUpdated)
 
 	switch ce.competition.Meta.Mode {
 	case CompetitionMode_CT, CompetitionMode_Cash:
@@ -556,13 +558,14 @@ func (ce *competitionEngine) PlayerAddon(tableID string, joinPlayer JoinPlayer) 
 	cp.Chips += joinPlayer.RedeemChips
 	cp.AddonTimes++
 	cp.TotalRedeemChips += joinPlayer.RedeemChips
-	ce.competition.State.Statistic.TotalAddonCount++
+	ce.competition.State.Statistic.TotalAddonCount += joinPlayer.Unit
 	ce.refreshPlayerCompetitionRanks()
 	defer ce.mu.Unlock()
 
 	// emit events
 	ce.emitEvent("PlayerAddon", joinPlayer.PlayerID)
 	ce.emitPlayerEvent("PlayerAddon", cp)
+	ce.emitCompetitionStateEvent(CompetitionStateEvent_CompetitionStatisticUpdated)
 
 	// call tableEngine
 	jp := pokertable.JoinPlayer{
@@ -577,7 +580,7 @@ func (ce *competitionEngine) PlayerAddon(tableID string, joinPlayer JoinPlayer) 
 	return nil
 }
 
-func (ce *competitionEngine) PlayerRefund(playerID string) error {
+func (ce *competitionEngine) PlayerRefund(playerID string, unit int) error {
 	// validate refund conditions
 	playerIdx := ce.competition.FindPlayerIdx(func(player *CompetitionPlayer) bool {
 		return player.PlayerID == playerID
@@ -605,16 +608,15 @@ func (ce *competitionEngine) PlayerRefund(playerID string) error {
 
 	// refund logic
 	ce.mu.Lock()
-	if ce.competition.Meta.Mode == CompetitionMode_MTT {
-		// MTT TotalBuyInCount 一次一發
-		ce.competition.State.Statistic.TotalBuyInCount--
-	}
+	ce.competition.State.Statistic.TotalBuyInCount -= unit
 	ce.deletePlayer(playerIdx)
 	ce.deletePlayerCache(ce.competition.ID, playerID)
 	defer ce.mu.Unlock()
 
 	// emit events
 	ce.emitEvent("PlayerRefund", playerID)
+	ce.emitCompetitionStateEvent(CompetitionStateEvent_CompetitionStatisticUpdated)
+
 	waitingPlayers := make([]string, 0)
 	for _, waitingPlayerID := range ce.waitingPlayers {
 		if playerID == waitingPlayerID {
