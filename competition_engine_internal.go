@@ -292,52 +292,52 @@ func (ce *competitionEngine) settleCompetitionTable(table pokertable.Table, tabl
 	ce.gameSettledRecords.Store(gameSettledRecordID, true)
 	ce.mu.Unlock()
 
-	ce.delay(time.Millisecond*500, func() error {
-		// 更新玩家相關賽事數據
-		ce.updatePlayerCompetitionTableRecords(table)
+	// 更新玩家相關賽事數據
+	ce.updatePlayerCompetitionTableRecords(table)
 
-		// 根據是否達到停止買入做處理
-		ce.handleReBuy(table)
+	// 根據是否達到停止買入做處理
+	ce.handleReBuy(table)
 
-		// 處理淘汰玩家
-		knockoutPlayerIDs := ce.handleTableKnockoutPlayers(table)
+	// 處理淘汰玩家
+	knockoutPlayerIDs := ce.handleTableKnockoutPlayers(table)
 
-		// 桌次處理
-		shouldCloseCompetition := false
-		switch ce.competition.Meta.Mode {
-		case CompetitionMode_CT:
-			ce.handleCTTableSettlement(knockoutPlayerIDs, table)
-			shouldCloseCompetition = ce.shouldCloseCTCompetition(table.State.StartAt, len(table.AlivePlayers()))
-		case CompetitionMode_Cash:
-			ce.handleCashTableSettlement(table)
-			shouldCloseCompetition = ce.shouldCloseCashCompetition(table.State.StartAt)
-		case CompetitionMode_MTT:
-			shouldCloseCompetition = ce.handleMTTTableSettlement(table)
+	// 桌次處理
+	shouldCloseCompetition := false
+	switch ce.competition.Meta.Mode {
+	case CompetitionMode_CT:
+		ce.handleCTTableSettlement(knockoutPlayerIDs, table)
+		shouldCloseCompetition = ce.shouldCloseCTCompetition(table.State.StartAt, len(table.AlivePlayers()))
+	case CompetitionMode_Cash:
+		ce.handleCashTableSettlement(table)
+		shouldCloseCompetition = ce.shouldCloseCashCompetition(table.State.StartAt)
+	case CompetitionMode_MTT:
+		shouldCloseCompetition = ce.handleMTTTableSettlement(table)
+	}
+
+	// 中場休息處理
+	ce.handleBreaking(table.ID)
+
+	ce.refreshPlayerStatusStatistics()
+	ce.refreshPlayerCompetitionRanks()
+
+	// 賽事結算條件達成處理
+	if shouldCloseCompetition {
+		if err := timebank.NewTimeBank().NewTask(time.Second*3, func(isCancelled bool) {
+			if isCancelled {
+				return
+			}
+
+			// 結束賽事處理
+			ce.CloseCompetition(CompetitionStateStatus_End)
+		}); err != nil {
+			ce.emitErrorEvent("error next stage after settle competition table", "", err)
 		}
+	}
 
-		// 中場休息處理
-		ce.handleBreaking(table.ID)
-
-		ce.refreshPlayerStatusStatistics()
-		ce.refreshPlayerCompetitionRanks()
-
-		// 事件更新
+	// 事件更新
+	ce.delay(time.Millisecond*500, func() error {
 		ce.emitEvent("Table Settlement", "")
 		ce.emitCompetitionStateEvent(CompetitionStateEvent_TableGameSettled)
-
-		// 賽事結算條件達成處理
-		if shouldCloseCompetition {
-			if err := timebank.NewTimeBank().NewTask(time.Second*3, func(isCancelled bool) {
-				if isCancelled {
-					return
-				}
-
-				// 結束賽事處理
-				ce.CloseCompetition(CompetitionStateStatus_End)
-			}); err != nil {
-				ce.emitErrorEvent("error next stage after settle competition table", "", err)
-			}
-		}
 
 		return nil
 	})
