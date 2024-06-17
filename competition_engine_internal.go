@@ -215,6 +215,10 @@ func (ce *competitionEngine) addCompetitionTable(tableSetting TableSetting, blin
 		return "", err
 	}
 
+	if table.State.Status == pokertable.TableStateStatus_TablePausing && ce.competition.IsBreaking() {
+		ce.handleBreaking(table.ID)
+	}
+
 	// add table
 	ce.competition.State.Tables = append(ce.competition.State.Tables, table)
 	ce.emitCompetitionStateEvent(CompetitionStateEvent_TableUpdated)
