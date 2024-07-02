@@ -685,10 +685,18 @@ func (ce *competitionEngine) handleBreaking(tableID string) {
 				return
 			}
 
-			if err := ce.tableManagerBackend.TableGameOpen(tableID); err != nil {
-				ce.emitErrorEvent("resume game from breaking & auto open next game", "", err)
-			} else {
-				ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] = true
+			if t.State.GameCount > 0 {
+				if err := ce.tableManagerBackend.TableGameOpen(tableID); err != nil {
+					ce.emitErrorEvent("resume game from breaking & auto open next game", "", err)
+				} else {
+					ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] = true
+				}
+			} else if t.State.GameCount == 0 {
+				if err := ce.tableManagerBackend.StartTableGame(tableID); err != nil {
+					ce.emitErrorEvent("resume game from breaking & auto start game", "", err)
+				} else {
+					ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] = true
+				}
 			}
 		} else {
 			fmt.Println("[DEBUG#handleBreaking] not find table at index:", tableIdx)
