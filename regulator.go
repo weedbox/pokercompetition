@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/weedbox/pokerface/regulator"
 	"github.com/weedbox/pokertable"
 )
 
@@ -87,13 +88,27 @@ func (ce *competitionEngine) regulatorDistributePlayers(tableID string, playerID
 }
 
 func (ce *competitionEngine) regulatorAddPlayers(playerIDs []string) error {
-	if ce.competition.Meta.MinPlayerCount > len(ce.competition.State.Players) {
-		// 達到開賽最低人數之前，都把玩家放到等待佇列
+	// 開賽前一律放到等待佇列
+	if ce.regulatorStatus == regulator.CompetitionStatus_Pending {
 		ce.waitingPlayers = append(ce.waitingPlayers, playerIDs...)
 		return nil
 	}
 
-	// 達到開賽最低人數之後，才丟到拆併桌程式
+	// 開賽後且尚未達到開賽最低人數之前，都把玩家放到等待佇列
+	if ce.competition.Meta.MinPlayerCount > len(ce.competition.State.Players) {
+		ce.waitingPlayers = append(ce.waitingPlayers, playerIDs...)
+		return nil
+	}
+
+	// MTT 啟動盲注
+	if !ce.blind.IsStarted() {
+		err := ce.activateBlind()
+		if err != nil {
+			ce.emitErrorEvent("MTT Activate Blind Error", "", err)
+		}
+	}
+
+	// 開賽後且達到開賽最低人數之後，才丟到拆併桌程式
 	ce.waitingPlayers = append(ce.waitingPlayers, playerIDs...)
 	if err := ce.regulator.AddPlayers(ce.waitingPlayers); err != nil {
 		return err

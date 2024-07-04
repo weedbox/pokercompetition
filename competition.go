@@ -2,7 +2,6 @@ package pokercompetition
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"github.com/thoas/go-funk"
 	"github.com/weedbox/pokertable"
@@ -274,7 +273,6 @@ func (c Competition) FindPlayerIdx(predicate func(*CompetitionPlayer) bool) int 
 
 func (c Competition) CurrentBlindLevel() BlindLevel {
 	if c.State.BlindState.CurrentLevelIndex < 0 {
-		fmt.Println("[DEBUG#ERROR] Invalid CurrentBlindLevel")
 		return BlindLevel{}
 	}
 	return c.Meta.Blind.Levels[c.State.BlindState.CurrentLevelIndex]
