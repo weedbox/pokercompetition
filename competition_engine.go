@@ -86,6 +86,7 @@ type competitionEngine struct {
 	regulator                           regulator.Regulator
 	isStarted                           bool
 	waitingPlayers                      []string
+	regulatorStatus                     regulator.CompetitionStatus
 
 	// TODO: Test Only
 	onTableCreated func(table *pokertable.Table)
@@ -106,6 +107,7 @@ func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
 		blind:                               pokerblind.NewBlind(),
 		isStarted:                           false,
 		waitingPlayers:                      make([]string, 0),
+		regulatorStatus:                     regulator.CompetitionStatus_Pending,
 
 		// TODO: Test Only
 		onTableCreated: func(table *pokertable.Table) {},
@@ -254,6 +256,7 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 				}),
 			)
 			ce.regulator.SetStatus(regulator.CompetitionStatus_Pending)
+			ce.regulatorStatus = regulator.CompetitionStatus_Pending
 		}
 	}
 
@@ -375,6 +378,7 @@ func (ce *competitionEngine) StartCompetition() (int64, error) {
 	case CompetitionMode_MTT:
 		// 更新拆併桌監管器狀態
 		ce.regulator.SetStatus(regulator.CompetitionStatus_Normal)
+		ce.regulatorStatus = regulator.CompetitionStatus_Normal
 	}
 
 	ce.isStarted = true
@@ -595,11 +599,13 @@ func (ce *competitionEngine) PlayerRefund(playerID string, unit int) error {
 		return ErrCompetitionRefundRejected
 	}
 
-	if ce.competition.State.Status != CompetitionStateStatus_Registering {
+	// 只有在啟動拆併桌監管器前才能退賽
+	if ce.regulatorStatus != regulator.CompetitionStatus_Pending {
 		return ErrCompetitionRefundRejected
 	}
 
-	if len(ce.competition.State.Players) >= ce.competition.Meta.MinPlayerCount {
+	// 盲注啟動後就不能退賽
+	if ce.blind.IsStarted() {
 		return ErrCompetitionRefundRejected
 	}
 
@@ -788,7 +794,6 @@ func (ce *competitionEngine) UpdateTable(table *pokertable.Table) {
 	// 處理因 table status 產生的變化
 	tableStatusHandlerMap := map[pokertable.TableStateStatus]func(pokertable.Table, int){
 		pokertable.TableStateStatus_TableCreated:     ce.handleCompetitionTableCreated,
-		pokertable.TableStateStatus_TableBalancing:   ce.handleCompetitionTableBalancing,
 		pokertable.TableStateStatus_TablePausing:     ce.updatePauseCompetition,
 		pokertable.TableStateStatus_TableClosed:      ce.closeCompetitionTable,
 		pokertable.TableStateStatus_TableGameSettled: ce.settleCompetitionTable,

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/thoas/go-funk"
@@ -87,7 +88,7 @@ func TestActor_CT_Breaking(t *testing.T) {
 	joinPlayers := funk.Map(playerIDs, func(playerID string) pokercompetition.JoinPlayer {
 		return pokercompetition.JoinPlayer{
 			PlayerID:    playerID,
-			RedeemChips: 300000,
+			RedeemChips: 1000,
 		}
 	}).([]pokercompetition.JoinPlayer)
 
@@ -106,10 +107,10 @@ func TestActor_CT_Breaking(t *testing.T) {
 		// Initializing bot runner
 		bot := NewBotRunner(p.PlayerID)
 		bot.OnTableAutoJoinActionRequested(func(competitionID, tableID, playerID string) {
-			go func() {
-				assert.Nil(t, tableEngine.PlayerJoin(playerID), fmt.Sprintf("%s join table failed", playerID))
-				t.Logf("%s is joined", playerID)
-			}()
+			go func(pID string) {
+				assert.Nil(t, tableEngine.PlayerJoin(pID), fmt.Sprintf("%s join table failed", pID))
+				t.Logf("%s is joined", pID)
+			}(playerID)
 		})
 		a.SetRunner(bot)
 
@@ -240,7 +241,7 @@ func TestActor_CT_Normal(t *testing.T) {
 	joinPlayers := funk.Map(playerIDs, func(playerID string) pokercompetition.JoinPlayer {
 		return pokercompetition.JoinPlayer{
 			PlayerID:    playerID,
-			RedeemChips: 3000,
+			RedeemChips: 1000,
 		}
 	}).([]pokercompetition.JoinPlayer)
 
@@ -259,10 +260,10 @@ func TestActor_CT_Normal(t *testing.T) {
 		// Initializing bot runner
 		bot := NewBotRunner(p.PlayerID)
 		bot.OnTableAutoJoinActionRequested(func(competitionID, tableID, playerID string) {
-			go func() {
-				assert.Nil(t, tableEngine.PlayerJoin(playerID), fmt.Sprintf("%s join table failed", playerID))
-				t.Logf("%s is joined", playerID)
-			}()
+			go func(pID string) {
+				assert.Nil(t, tableEngine.PlayerJoin(pID), fmt.Sprintf("%s join table failed", pID))
+				t.Logf("%s is joined", pID)
+			}(playerID)
 		})
 		a.SetRunner(bot)
 
@@ -305,6 +306,7 @@ func TestActor_CT_Normal(t *testing.T) {
 
 	// 玩家報名賽事
 	for _, joinPlayer := range joinPlayers {
+		time.Sleep(time.Millisecond * 100)
 		err := manager.PlayerBuyIn(competition.ID, joinPlayer)
 		assert.Nil(t, err, fmt.Sprintf("%s buy in competition failed", joinPlayer.PlayerID))
 		logData = append(logData, makeLog(fmt.Sprintf("[Competition][%d] %s join competition", competitionEngine.GetCompetition().UpdateSerial, joinPlayer.PlayerID), competition.GetJSON))

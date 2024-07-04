@@ -153,25 +153,6 @@ func (ce *competitionEngine) handleCompetitionTableCreated(table pokertable.Tabl
 	}
 }
 
-func (ce *competitionEngine) handleCompetitionTableBalancing(table pokertable.Table, tableIdx int) {
-	if ce.competition.Meta.Mode != CompetitionMode_MTT {
-		return
-	}
-
-	if !ce.blind.IsStarted() {
-		// 啟動盲注系統
-		err := ce.activateBlind()
-		if err != nil {
-			ce.emitErrorEvent("MTT Activate Blind Error", "", err)
-			return
-		}
-	}
-
-	if ce.blind.IsStarted() {
-		ce.updateTableBlind(table.ID)
-	}
-}
-
 func (ce *competitionEngine) updatePauseCompetition(table pokertable.Table, tableIdx int) {
 	shouldReOpenGame := false
 	readyPlayersCount := 0
@@ -213,6 +194,10 @@ func (ce *competitionEngine) addCompetitionTable(tableSetting TableSetting, blin
 	table, err := ce.tableManagerBackend.CreateTable(ce.tableOptions, setting)
 	if err != nil {
 		return "", err
+	}
+
+	if table.State.Status == pokertable.TableStateStatus_TablePausing && ce.competition.IsBreaking() {
+		ce.handleBreaking(table.ID)
 	}
 
 	// add table
@@ -681,10 +666,18 @@ func (ce *competitionEngine) handleBreaking(tableID string) {
 				return
 			}
 
-			if err := ce.tableManagerBackend.TableGameOpen(tableID); err != nil {
-				ce.emitErrorEvent("resume game from breaking & auto open next game", "", err)
-			} else {
-				ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] = true
+			if t.State.GameCount > 0 {
+				if err := ce.tableManagerBackend.TableGameOpen(tableID); err != nil {
+					ce.emitErrorEvent("resume game from breaking & auto open next game", "", err)
+				} else {
+					ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] = true
+				}
+			} else if t.State.GameCount == 0 {
+				if err := ce.tableManagerBackend.StartTableGame(tableID); err != nil {
+					ce.emitErrorEvent("resume game from breaking & auto start game", "", err)
+				} else {
+					ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] = true
+				}
 			}
 		} else {
 			fmt.Println("[DEBUG#handleBreaking] not find table at index:", tableIdx)
@@ -1254,6 +1247,10 @@ func (ce *competitionEngine) canStartCash() bool {
 
 	return currentPlayerCount >= ce.competition.Meta.MinPlayerCount
 }
+
+// func (ce *competitionEngine) canStartMTT() bool {
+// 	return ce.competition.Meta.RegulatorMinInitialPlayerCount == ce.competition.GetPlayerCountByStatus(CompetitionPlayerStatus_WaitingTableBalancing)
+// }
 
 /*
 initAdvancement 初始化晉級機制 (停止買入後)
