@@ -15,7 +15,7 @@ import (
 	"github.com/weedbox/timebank"
 )
 
-func (ce *competitionEngine) newDefaultCompetitionPlayerData(tableID, playerID string, redeemChips int64, playerStatus CompetitionPlayerStatus) (CompetitionPlayer, PlayerCache) {
+func (ce *competitionEngine) newDefaultCompetitionPlayerData(tableID, playerID string, redeemChips int64, playerStatus CompetitionPlayerStatus, buyInUnit int) (CompetitionPlayer, PlayerCache) {
 	joinAt := time.Now().Unix()
 	playerCache := PlayerCache{
 		PlayerID:   playerID,
@@ -40,6 +40,7 @@ func (ce *competitionEngine) newDefaultCompetitionPlayerData(tableID, playerID s
 		ReBuyEndAt:                  UnsetValue,
 		ReBuyTimes:                  0,
 		AddonTimes:                  0,
+		TotalBuyInUnits:             buyInUnit,
 		BestWinningPotChips:         0,
 		BestWinningCombo:            make([]string, 0),
 		BestWinningType:             "",

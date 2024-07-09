@@ -2,6 +2,7 @@ package pokercompetition
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/weedbox/pokerface/regulator"
@@ -87,19 +88,19 @@ func (ce *competitionEngine) regulatorDistributePlayers(tableID string, playerID
 	return nil
 }
 
-func (ce *competitionEngine) regulatorAddPlayers(playerIDs []string) error {
-	// 開賽前一律放到等待佇列
-	if ce.regulatorStatus == regulator.CompetitionStatus_Pending {
-		ce.waitingPlayers = append(ce.waitingPlayers, playerIDs...)
-		return nil
+func (ce *competitionEngine) shouldActivateRegulator() bool {
+	if ce.isRegulatorStarted {
+		return false
 	}
 
-	// 開賽後且尚未達到開賽最低人數之前，都把玩家放到等待佇列
-	if ce.competition.Meta.MinPlayerCount > len(ce.competition.State.Players) {
-		ce.waitingPlayers = append(ce.waitingPlayers, playerIDs...)
-		return nil
+	if !ce.isStarted {
+		return false
 	}
 
+	return len(ce.competition.State.Players) >= ce.competition.Meta.MinPlayerCount
+}
+
+func (ce *competitionEngine) activateRegulator() {
 	// MTT 啟動盲注
 	if !ce.blind.IsStarted() {
 		err := ce.activateBlind()
@@ -108,16 +109,26 @@ func (ce *competitionEngine) regulatorAddPlayers(playerIDs []string) error {
 		}
 	}
 
-	// 開賽後且達到開賽最低人數之後，才丟到拆併桌程式
-	ce.waitingPlayers = append(ce.waitingPlayers, playerIDs...)
-	if err := ce.regulator.AddPlayers(ce.waitingPlayers); err != nil {
+	//  把等待區玩家加入拆併桌程式
+	if err := ce.regulatorAddPlayers(ce.waitingPlayers); err != nil {
+		ce.emitErrorEvent("MTT Regulator Add Players Error", strings.Join(ce.waitingPlayers, ","), err)
+	}
+	ce.waitingPlayers = make([]string, 0)
+
+	// 啟動拆併桌程式
+	ce.regulator.SetStatus(regulator.CompetitionStatus_Normal)
+	ce.isRegulatorStarted = true
+}
+
+func (ce *competitionEngine) regulatorAddPlayers(playerIDs []string) error {
+	if err := ce.regulator.AddPlayers(playerIDs); err != nil {
 		return err
 	}
 
 	fmt.Printf("---------- [c: %s] Regulator Add %d Players: %v ----------\n",
 		ce.competition.ID,
-		len(ce.waitingPlayers),
-		ce.waitingPlayers,
+		len(playerIDs),
+		playerIDs,
 	)
 
 	fmt.Printf("---------- [c: %s][RegulatorAddPlayers 後 regulator 有 %d 人][賽事正在玩: %d 人, 等待區: %d 人] ----------\n",
@@ -127,6 +138,5 @@ func (ce *competitionEngine) regulatorAddPlayers(playerIDs []string) error {
 		ce.competition.GetPlayerCountByStatus(CompetitionPlayerStatus_WaitingTableBalancing),
 	)
 
-	ce.waitingPlayers = make([]string, 0)
 	return nil
 }

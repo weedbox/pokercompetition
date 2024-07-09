@@ -42,8 +42,8 @@ type CompetitionEngine interface {
 	OnCompetitionPlayerUpdated(fn func(competitionID string, competitionPlayer *CompetitionPlayer)) // 賽事玩家更新事件監聽器
 	OnCompetitionFinalPlayerRankUpdated(fn func(competitionID, playerID string, rank int))          // 賽事玩家最終名次監聽器
 	OnCompetitionStateUpdated(fn func(event string, competition *Competition))                      // 賽事狀態監聽器
-	OnAdvancePlayerCountUpdated(fn func(competitionID string, totalBuyInCount int) int)             // 賽事晉級人數更新監聽器
 	OnCompetitionPlayerCashOut(fn func(competitionID string, competitionPlayer *CompetitionPlayer)) // 現金桌賽事玩家結算事件監聽器
+	OnAdvancePlayerCountUpdated(fn func(competitionID string, totalBuyInCount int) int)             // 賽事晉級人數更新監聽器
 	OnTableCreated(fn func(table *pokertable.Table))                                                // TODO: Test Only
 
 	// Competition Actions
@@ -56,7 +56,7 @@ type CompetitionEngine interface {
 	// Player Operations
 	PlayerBuyIn(joinPlayer JoinPlayer) error                 // 玩家報名或補碼
 	PlayerAddon(tableID string, joinPlayer JoinPlayer) error // 玩家增購
-	PlayerRefund(playerID string, unit int) error            // 玩家退賽
+	PlayerRefund(playerID string) error                      // 玩家退賽
 	PlayerCashOut(tableID, playerID string) error            // 玩家離桌結算 (現金桌)
 	PlayerQuit(tableID, playerID string) error               // 玩家棄賽淘汰
 
@@ -85,8 +85,8 @@ type competitionEngine struct {
 	blind                               pokerblind.Blind
 	regulator                           regulator.Regulator
 	isStarted                           bool
+	isRegulatorStarted                  bool
 	waitingPlayers                      []string
-	regulatorStatus                     regulator.CompetitionStatus
 
 	// TODO: Test Only
 	onTableCreated func(table *pokertable.Table)
@@ -106,8 +106,8 @@ func NewCompetitionEngine(opts ...CompetitionEngineOpt) CompetitionEngine {
 		breakingPauseResumeStates:           make(map[string]map[int]bool),
 		blind:                               pokerblind.NewBlind(),
 		isStarted:                           false,
+		isRegulatorStarted:                  false,
 		waitingPlayers:                      make([]string, 0),
-		regulatorStatus:                     regulator.CompetitionStatus_Pending,
 
 		// TODO: Test Only
 		onTableCreated: func(table *pokertable.Table) {},
@@ -256,7 +256,6 @@ func (ce *competitionEngine) CreateCompetition(competitionSetting CompetitionSet
 				}),
 			)
 			ce.regulator.SetStatus(regulator.CompetitionStatus_Pending)
-			ce.regulatorStatus = regulator.CompetitionStatus_Pending
 		}
 	}
 
@@ -334,6 +333,7 @@ func (ce *competitionEngine) StartCompetition() (int64, error) {
 
 	// update start & end at
 	ce.competition.State.StartAt = time.Now().Unix()
+	ce.isStarted = true
 
 	if ce.competition.Meta.Mode == CompetitionMode_CT {
 		ce.competition.State.EndAt = ce.competition.State.StartAt + int64((time.Duration(ce.competition.Meta.MaxDuration) * time.Second).Seconds())
@@ -377,11 +377,11 @@ func (ce *competitionEngine) StartCompetition() (int64, error) {
 		}
 	case CompetitionMode_MTT:
 		// 更新拆併桌監管器狀態
-		ce.regulator.SetStatus(regulator.CompetitionStatus_Normal)
-		ce.regulatorStatus = regulator.CompetitionStatus_Normal
+		if ce.shouldActivateRegulator() {
+			ce.activateRegulator()
+		}
 	}
 
-	ce.isStarted = true
 	ce.emitEvent("StartCompetition", "")
 	ce.emitCompetitionStateEvent(CompetitionStateEvent_Started)
 	return ce.competition.State.StartAt, nil
@@ -459,13 +459,14 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 
 	// do logic
 	ce.mu.Lock()
-
 	if isBuyIn {
-		player, playerCache := ce.newDefaultCompetitionPlayerData(tableID, joinPlayer.PlayerID, joinPlayer.RedeemChips, playerStatus)
+		player, playerCache := ce.newDefaultCompetitionPlayerData(tableID, joinPlayer.PlayerID, joinPlayer.RedeemChips, playerStatus, joinPlayer.Unit)
 		ce.competition.State.Players = append(ce.competition.State.Players, &player)
 		playerCache.PlayerIdx = len(ce.competition.State.Players) - 1
 		ce.insertPlayerCache(ce.competition.ID, joinPlayer.PlayerID, playerCache)
-		ce.competition.State.Statistic.TotalBuyInCount += joinPlayer.Unit
+		if ce.competition.IsModeCTorMTT() {
+			ce.competition.State.Statistic.TotalBuyInCount += joinPlayer.Unit
+		}
 		ce.refreshPlayerStatusStatistics()
 		ce.refreshPlayerCompetitionRanks()
 		competitionPlayer = &player
@@ -494,13 +495,14 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 			cp.CurrentTableID = "" // re-buy 時要清空 CurrentTableID 等待重新配桌
 			cp.CurrentSeat = UnsetValue
 		}
-
-		ce.competition.State.Statistic.TotalBuyInCount += joinPlayer.Unit
+		if ce.competition.IsModeCTorMTT() {
+			ce.competition.State.Statistic.TotalBuyInCount += joinPlayer.Unit
+			cp.TotalBuyInUnits += joinPlayer.Unit
+		}
 		ce.refreshPlayerStatusStatistics()
 		ce.refreshPlayerCompetitionRanks()
 		competitionPlayer = cp
 	}
-
 	defer ce.mu.Unlock()
 
 	if isBuyIn {
@@ -524,11 +526,17 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 			ce.emitErrorEvent("PlayerBuyIn -> PlayerReserve", joinPlayer.PlayerID, err)
 		}
 	case CompetitionMode_MTT:
-		// 一律丟到拆併桌監管器等待配桌
-		err := ce.regulatorAddPlayers([]string{joinPlayer.PlayerID})
-		if err != nil {
-			ce.emitErrorEvent("PlayerBuyIn -> AddPlayers to regulator failed", joinPlayer.PlayerID, err)
-			return err
+		// 更新拆併桌監管器狀態
+		if ce.isRegulatorStarted {
+			// 開賽後且達到開賽最低人數之後，丟到拆併桌程式
+			ce.regulatorAddPlayers([]string{joinPlayer.PlayerID})
+		} else {
+			if ce.shouldActivateRegulator() {
+				ce.activateRegulator()
+			} else {
+				// 開賽前 or 開賽後且尚未達到開賽最低人數之前，都把玩家放到等待佇列
+				ce.waitingPlayers = append(ce.waitingPlayers, joinPlayer.PlayerID)
+			}
 		}
 	}
 
@@ -568,7 +576,9 @@ func (ce *competitionEngine) PlayerAddon(tableID string, joinPlayer JoinPlayer) 
 	cp.Chips += joinPlayer.RedeemChips
 	cp.AddonTimes++
 	cp.TotalRedeemChips += joinPlayer.RedeemChips
-	ce.competition.State.Statistic.TotalAddonCount += joinPlayer.Unit
+	if ce.competition.IsModeCTorMTT() {
+		ce.competition.State.Statistic.TotalAddonCount += joinPlayer.Unit
+	}
 	ce.refreshPlayerCompetitionRanks()
 	defer ce.mu.Unlock()
 
@@ -590,7 +600,7 @@ func (ce *competitionEngine) PlayerAddon(tableID string, joinPlayer JoinPlayer) 
 	return nil
 }
 
-func (ce *competitionEngine) PlayerRefund(playerID string, unit int) error {
+func (ce *competitionEngine) PlayerRefund(playerID string) error {
 	// validate refund conditions
 	playerIdx := ce.competition.FindPlayerIdx(func(player *CompetitionPlayer) bool {
 		return player.PlayerID == playerID
@@ -599,28 +609,25 @@ func (ce *competitionEngine) PlayerRefund(playerID string, unit int) error {
 		return ErrCompetitionRefundRejected
 	}
 
-	// 只有在啟動拆併桌監管器前才能退賽
-	if ce.regulatorStatus != regulator.CompetitionStatus_Pending {
-		return ErrCompetitionRefundRejected
-	}
-
 	// 盲注啟動後就不能退賽
 	if ce.blind.IsStarted() {
 		return ErrCompetitionRefundRejected
 	}
 
+	// 取得玩家資訊
+	player := ce.competition.State.Players[playerIdx]
+
 	playerTableID := ""
 	if ce.competition.Meta.Mode == CompetitionMode_CT {
-		playerCache, exist := ce.getPlayerCache(ce.competition.ID, playerID)
-		if !exist {
-			return ErrCompetitionPlayerNotFound
-		}
-		playerTableID = playerCache.TableID
+		playerTableID = player.CurrentTableID
 	}
 
 	// refund logic
 	ce.mu.Lock()
-	ce.competition.State.Statistic.TotalBuyInCount -= unit
+	if ce.competition.IsModeCTorMTT() {
+		ce.competition.State.Statistic.TotalBuyInCount -= player.TotalBuyInUnits
+		ce.competition.State.Players[playerIdx].TotalBuyInUnits = 0
+	}
 	ce.deletePlayer(playerIdx)
 	ce.deletePlayerCache(ce.competition.ID, playerID)
 	defer ce.mu.Unlock()

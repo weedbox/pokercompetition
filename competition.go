@@ -110,11 +110,12 @@ type CompetitionPlayer struct {
 	TableRank       int                     `json:"table_rank"`       // 當前桌次排名
 	CompetitionRank int                     `json:"competition_rank"` // 當前賽事排名
 
-	Chips      int64 `json:"chips"`         // 當前籌碼
-	IsReBuying bool  `json:"is_re_buying"`  // 是否正在補碼
-	ReBuyEndAt int64 `json:"re_buy_end_at"` // 最後補碼時間 (Seconds)
-	ReBuyTimes int   `json:"re_buy_times"`  // 補碼次數
-	AddonTimes int   `json:"addon_times"`   // 增購次數
+	Chips           int64 `json:"chips"`              // 當前籌碼
+	IsReBuying      bool  `json:"is_re_buying"`       // 是否正在補碼
+	ReBuyEndAt      int64 `json:"re_buy_end_at"`      // 最後補碼時間 (Seconds)
+	ReBuyTimes      int   `json:"re_buy_times"`       // 補碼次數
+	AddonTimes      int   `json:"addon_times"`        // 增購次數
+	TotalBuyInUnits int   `json:"total_buy_in_units"` // 總買入發數
 
 	// statistics info
 	// best
@@ -289,6 +290,10 @@ func (c Competition) CurrentBlindData() (int, int64, int64, int64, int64) {
 
 func (c Competition) IsBreaking() bool {
 	return c.CurrentBlindLevel().Level == -1
+}
+
+func (c Competition) IsModeCTorMTT() bool {
+	return c.Meta.Mode == CompetitionMode_CT || c.Meta.Mode == CompetitionMode_MTT
 }
 
 // BlindState Getters
