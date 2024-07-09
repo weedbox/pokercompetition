@@ -460,10 +460,8 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 	// do logic
 	ce.mu.Lock()
 	if isBuyIn {
-		player, playerCache := ce.newDefaultCompetitionPlayerData(tableID, joinPlayer.PlayerID, joinPlayer.RedeemChips, playerStatus, joinPlayer.Unit)
+		player := ce.newDefaultCompetitionPlayerData(tableID, joinPlayer.PlayerID, joinPlayer.RedeemChips, playerStatus, joinPlayer.Unit)
 		ce.competition.State.Players = append(ce.competition.State.Players, &player)
-		playerCache.PlayerIdx = len(ce.competition.State.Players) - 1
-		ce.insertPlayerCache(ce.competition.ID, joinPlayer.PlayerID, playerCache)
 		if ce.competition.IsModeCTorMTT() {
 			ce.competition.State.Statistic.TotalBuyInCount += joinPlayer.Unit
 		}
@@ -472,26 +470,18 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 		competitionPlayer = &player
 	} else {
 		// ReBuy logic
-		playerCache, exist := ce.getPlayerCache(ce.competition.ID, joinPlayer.PlayerID)
-		if !exist {
-			return ErrCompetitionPlayerNotFound
-		}
-
 		cp := ce.competition.State.Players[playerIdx]
 		cp.Status = playerStatus
 		cp.ReBuyWaitingAt = UnsetValue
 		cp.Chips = joinPlayer.RedeemChips
 		cp.ReBuyTimes++
-		playerCache.ReBuyTimes = cp.ReBuyTimes
 		cp.IsReBuying = false
 		cp.ReBuyEndAt = UnsetValue
 		cp.TotalRedeemChips += joinPlayer.RedeemChips
 		if (ce.competition.Meta.Mode == CompetitionMode_CT || ce.competition.Meta.Mode == CompetitionMode_Cash) && len(ce.competition.State.Tables) > 0 {
-			playerCache.TableID = ce.competition.State.Tables[0].ID
 			cp.CurrentTableID = ce.competition.State.Tables[0].ID
 		}
 		if ce.competition.Meta.Mode == CompetitionMode_MTT {
-			playerCache.TableID = ""
 			cp.CurrentTableID = "" // re-buy 時要清空 CurrentTableID 等待重新配桌
 			cp.CurrentSeat = UnsetValue
 		}
@@ -629,7 +619,6 @@ func (ce *competitionEngine) PlayerRefund(playerID string) error {
 		ce.competition.State.Players[playerIdx].TotalBuyInUnits = 0
 	}
 	ce.deletePlayer(playerIdx)
-	ce.deletePlayerCache(ce.competition.ID, playerID)
 	defer ce.mu.Unlock()
 
 	// emit events
@@ -740,12 +729,12 @@ func (ce *competitionEngine) PlayerQuit(tableID, playerID string) error {
 
 func (ce *competitionEngine) UpdateReserveTablePlayerState(tableID string, playerState *pokertable.TablePlayerState) {
 	// 更新玩家狀態
-	playerCache, exist := ce.getPlayerCache(ce.competition.ID, playerState.PlayerID)
+	playerIdx, exist := ce.competition.GetPlayerIndexMap()[playerState.PlayerID]
 	if !exist {
 		return
 	}
 
-	cp := ce.competition.State.Players[playerCache.PlayerIdx]
+	cp := ce.competition.State.Players[playerIdx]
 	cp.CurrentSeat = playerState.Seat
 	cp.CurrentTableID = tableID
 	cp.Status = CompetitionPlayerStatus_Playing

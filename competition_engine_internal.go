@@ -15,70 +15,30 @@ import (
 	"github.com/weedbox/timebank"
 )
 
-func (ce *competitionEngine) newDefaultCompetitionPlayerData(tableID, playerID string, redeemChips int64, playerStatus CompetitionPlayerStatus, buyInUnit int) (CompetitionPlayer, PlayerCache) {
-	joinAt := time.Now().Unix()
-	playerCache := PlayerCache{
-		PlayerID:   playerID,
-		JoinAt:     joinAt,
-		ReBuyTimes: 0,
-		TableID:    tableID,
+func (ce *competitionEngine) newDefaultCompetitionPlayerData(tableID, playerID string, redeemChips int64, playerStatus CompetitionPlayerStatus, buyInUnit int) CompetitionPlayer {
+	return CompetitionPlayer{
+		PlayerID:            playerID,
+		CurrentTableID:      tableID,
+		CurrentSeat:         UnsetValue,
+		JoinAt:              time.Now().Unix(),
+		ReBuyWaitingAt:      UnsetValue,
+		KnockoutAt:          UnsetValue,
+		Status:              playerStatus,
+		Rank:                UnsetValue,
+		TableRank:           UnsetValue,
+		CompetitionRank:     UnsetValue,
+		Chips:               redeemChips,
+		IsReBuying:          false,
+		ReBuyEndAt:          UnsetValue,
+		ReBuyTimes:          0,
+		AddonTimes:          0,
+		TotalBuyInUnits:     buyInUnit,
+		BestWinningPotChips: 0,
+		BestWinningCombo:    make([]string, 0),
+		BestWinningType:     "",
+		BestWinningPower:    0,
+		TotalRedeemChips:    redeemChips,
 	}
-
-	player := CompetitionPlayer{
-		PlayerID:                    playerID,
-		CurrentTableID:              tableID,
-		CurrentSeat:                 UnsetValue,
-		JoinAt:                      joinAt,
-		ReBuyWaitingAt:              UnsetValue,
-		KnockoutAt:                  UnsetValue,
-		Status:                      playerStatus,
-		Rank:                        UnsetValue,
-		TableRank:                   UnsetValue,
-		CompetitionRank:             UnsetValue,
-		Chips:                       redeemChips,
-		IsReBuying:                  false,
-		ReBuyEndAt:                  UnsetValue,
-		ReBuyTimes:                  0,
-		AddonTimes:                  0,
-		TotalBuyInUnits:             buyInUnit,
-		BestWinningPotChips:         0,
-		BestWinningCombo:            make([]string, 0),
-		BestWinningType:             "",
-		BestWinningPower:            0,
-		TotalRedeemChips:            redeemChips,
-		TotalGameCounts:             0,
-		TotalWalkTimes:              0,
-		TotalFoldTimes:              0,
-		TotalPreflopFoldTimes:       0,
-		TotalFlopFoldTimes:          0,
-		TotalTurnFoldTimes:          0,
-		TotalRiverFoldTimes:         0,
-		TotalActionTimes:            0,
-		TotalRaiseTimes:             0,
-		TotalCallTimes:              0,
-		TotalCheckTimes:             0,
-		TotalProfitTimes:            0,
-		TotalVPIPChances:            0,
-		TotalVPIPTimes:              0,
-		TotalPFRChances:             0,
-		TotalPFRTimes:               0,
-		TotalATSChances:             0,
-		TotalATSTimes:               0,
-		Total3BChances:              0,
-		Total3BTimes:                0,
-		TotalFt3BChances:            0,
-		TotalFt3BTimes:              0,
-		TotalCheckRaiseChances:      0,
-		TotalCheckRaiseTimes:        0,
-		TotalCBetChances:            0,
-		TotalCBetTimes:              0,
-		TotalFtCBChances:            0,
-		TotalFtCBTimes:              0,
-		TotalShowdownWinningChances: 0,
-		TotalShowdownWinningTimes:   0,
-	}
-
-	return player, playerCache
 }
 
 func (ce *competitionEngine) delay(interval time.Duration, fn func() error) error {
@@ -234,7 +194,6 @@ func (ce *competitionEngine) settleCompetition(endCompetitionStatus CompetitionS
 	ce.emitCompetitionStateEvent(CompetitionStateEvent_Settled)
 
 	// clear caches
-	ce.deletePlayerCachesByCompetition(ce.competition.ID)
 	ce.gameSettledRecords = sync.Map{}
 }
 
@@ -442,12 +401,10 @@ func (ce *competitionEngine) handleMTTTableSettlementNextStep(table pokertable.T
 		2. 如果該桌最後沒人，關閉桌次
 	*/
 	releasePlayerIDs := make([]string, 0)
-	releasePlayerCaches := make(map[string]*PlayerCache)             // key: playerID, value: PlayerCache
-	releaseCompetitionPlayers := make(map[string]*CompetitionPlayer) // key: playerID, value: CompetitionPlayer
+	releaseCompetitionPlayerIndices := make(map[string]int) // key: playerID, value: playerIndex
 
 	newJoinPlayers := make([]pokertable.JoinPlayer, 0)
-	newJoinPlayerCaches := make(map[string]*PlayerCache)             // key: playerID, value: PlayerCache
-	newJoinCompetitionPlayers := make(map[string]*CompetitionPlayer) // key: playerID, value: CompetitionPlayer
+	newJoinCompetitionPlayerIndices := make(map[string]int) // key: playerID, value: playerIndex
 
 	leavePlayerIDs := make([]string, 0) // leavePlayerIDs = releasePlayerIDs + zeroChipPlayerIDs
 
@@ -478,16 +435,8 @@ func (ce *competitionEngine) handleMTTTableSettlementNextStep(table pokertable.T
 				continue
 			}
 
-			releasePlayerCache, exist := ce.getPlayerCache(ce.competition.ID, releasePlayerID)
-			if !exist {
-				continue
-			}
-
-			releaseCompetitionPlayer := ce.competition.State.Players[releasePlayerIdx]
-
 			// prepare data
-			releasePlayerCaches[releasePlayerID] = releasePlayerCache
-			releaseCompetitionPlayers[releasePlayerID] = releaseCompetitionPlayer
+			releaseCompetitionPlayerIndices[releasePlayerID] = releasePlayerIdx
 		}
 	}
 
@@ -500,19 +449,13 @@ func (ce *competitionEngine) handleMTTTableSettlementNextStep(table pokertable.T
 				continue
 			}
 
-			playerCache, exist := ce.getPlayerCache(ce.competition.ID, playerID)
-			if !exist {
-				continue
-			}
-
 			cp := ce.competition.State.Players[playerIdx]
 			if cp.Chips <= 0 {
 				fmt.Printf("[DEBUG#MTT] attempt to join zero chip player (%s) to table (%s)\n", cp.PlayerID, table.ID)
 				continue
 			}
 
-			newJoinPlayerCaches[playerID] = playerCache
-			newJoinCompetitionPlayers[playerID] = cp
+			newJoinCompetitionPlayerIndices[playerID] = playerIdx
 			newJoinPlayers = append(newJoinPlayers, pokertable.JoinPlayer{
 				PlayerID:    playerID,
 				RedeemChips: cp.Chips,
@@ -532,14 +475,12 @@ func (ce *competitionEngine) handleMTTTableSettlementNextStep(table pokertable.T
 			// 玩家進等待區
 			if len(releasePlayerIDs) > 0 {
 				// release 玩家進等待區
-				for playerID, playerCache := range releasePlayerCaches {
-					if cp, ok := releaseCompetitionPlayers[playerID]; ok {
-						playerCache.TableID = ""
-						cp.CurrentTableID = ""
-						cp.CurrentSeat = UnsetValue
-						cp.Status = CompetitionPlayerStatus_WaitingTableBalancing
-						ce.emitPlayerEvent(fmt.Sprintf("[Regulator] player (%s) is moving to the waiting room", cp.PlayerID), cp)
-					}
+				for _, playerIdx := range releaseCompetitionPlayerIndices {
+					releasePlayer := ce.competition.State.Players[playerIdx]
+					releasePlayer.CurrentTableID = ""
+					releasePlayer.CurrentSeat = UnsetValue
+					releasePlayer.Status = CompetitionPlayerStatus_WaitingTableBalancing
+					ce.emitPlayerEvent(fmt.Sprintf("[Regulator] player (%s) is moving to the waiting room", releasePlayer.PlayerID), releasePlayer)
 				}
 
 				// 拆併桌監管器釋放玩家
@@ -552,15 +493,12 @@ func (ce *competitionEngine) handleMTTTableSettlementNextStep(table pokertable.T
 
 			// 更新該桌次玩家資訊
 			for playerID, seat := range tablePlayerSeatMap {
-				if playerCache, ok := newJoinPlayerCaches[playerID]; ok {
-					playerCache.TableID = table.ID
-
-					if cp, ok := newJoinCompetitionPlayers[playerID]; ok {
-						cp.CurrentTableID = table.ID
-						cp.Status = CompetitionPlayerStatus_Playing
-						cp.CurrentSeat = seat
-						ce.emitPlayerEvent("[UpdateTablePlayers] reserve table", cp)
-					}
+				if newJoinPlayerIdx, exist := newJoinCompetitionPlayerIndices[playerID]; exist {
+					newJoinCompetitionPlayer := ce.competition.State.Players[newJoinPlayerIdx]
+					newJoinCompetitionPlayer.CurrentTableID = table.ID
+					newJoinCompetitionPlayer.Status = CompetitionPlayerStatus_Playing
+					newJoinCompetitionPlayer.CurrentSeat = seat
+					ce.emitPlayerEvent("[UpdateTablePlayers] reserve table", newJoinCompetitionPlayer)
 				}
 			}
 		}
@@ -602,7 +540,6 @@ func (ce *competitionEngine) handleCashOut(tableID string, leavePlayerIndexes ma
 	for _, leavePlayerID := range leavePlayerIDs {
 		if playerIdx, exist := leavePlayerIndexes[leavePlayerID]; exist {
 			ce.onCompetitionPlayerCashOut(ce.competition.ID, ce.competition.State.Players[playerIdx])
-			ce.deletePlayerCache(ce.competition.ID, leavePlayerID)
 		}
 	}
 
@@ -690,6 +627,8 @@ func (ce *competitionEngine) handleBreaking(tableID string) {
 }
 
 func (ce *competitionEngine) handleTableKnockoutPlayers(table pokertable.Table) []string {
+	playerIdxMap := ce.competition.GetPlayerIndexMap()
+
 	// 列出淘汰玩家
 	knockoutPlayerRankings := ce.GetSortedTableSettlementKnockoutPlayerRankings(table.State.PlayerStates)
 	knockoutPlayerIDs := make([]string, 0)
@@ -697,12 +636,12 @@ func (ce *competitionEngine) handleTableKnockoutPlayers(table pokertable.Table) 
 		knockoutPlayerIDs = append(knockoutPlayerIDs, knockoutPlayerID)
 
 		// 更新玩家狀態
-		playerCache, exist := ce.getPlayerCache(ce.competition.ID, knockoutPlayerID)
+		playerIdx, exist := playerIdxMap[knockoutPlayerID]
 		if !exist {
 			continue
 		}
 
-		cp := ce.competition.State.Players[playerCache.PlayerIdx]
+		cp := ce.competition.State.Players[playerIdx]
 		cp.Status = CompetitionPlayerStatus_Knockout
 		cp.KnockoutAt = time.Now().Unix()
 		cp.CurrentSeat = UnsetValue
@@ -1114,14 +1053,15 @@ func (ce *competitionEngine) initBlind(meta CompetitionMeta) {
 				}
 
 				// 淘汰沒資格玩家
+				playerIdxMap := ce.competition.GetPlayerIndexMap()
 				knockoutPlayerRankings := ce.GetSortedStopBuyInKnockoutPlayerRankings()
 				for idx, knockoutPlayerID := range knockoutPlayerRankings {
-					playerCache, exist := ce.getPlayerCache(ce.competition.ID, knockoutPlayerID)
+					playerIdx, exist := playerIdxMap[knockoutPlayerID]
 					if !exist {
 						continue
 					}
 
-					cp := ce.competition.State.Players[playerCache.PlayerIdx]
+					cp := ce.competition.State.Players[playerIdx]
 
 					// 找出 CT 還在考慮 Re Buy 的玩家
 					isCTReBuying := false
@@ -1248,10 +1188,6 @@ func (ce *competitionEngine) canStartCash() bool {
 
 	return currentPlayerCount >= ce.competition.Meta.MinPlayerCount
 }
-
-// func (ce *competitionEngine) canStartMTT() bool {
-// 	return ce.competition.Meta.RegulatorMinInitialPlayerCount == ce.competition.GetPlayerCountByStatus(CompetitionPlayerStatus_WaitingTableBalancing)
-// }
 
 /*
 initAdvancement 初始化晉級機制 (停止買入後)

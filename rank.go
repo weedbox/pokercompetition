@@ -22,6 +22,7 @@ GetParticipatedPlayerTableRankingData 計算有參與該手玩家該桌即時排
 - @return 該桌玩家排名資料 Map, key: player id, value: RankData
 */
 func (ce *competitionEngine) GetParticipatedPlayerTableRankingData(competitionID string, tablePlayers []*pokertable.TablePlayerState, gamePlayerIndexes []int) map[string]RankData {
+	playerIndexMap := ce.competition.GetPlayerIndexMap()
 	playingPlayers := make([]pokertable.TablePlayerState, 0)
 	for _, playerIdx := range gamePlayerIndexes {
 		player := tablePlayers[playerIdx]
@@ -31,10 +32,10 @@ func (ce *competitionEngine) GetParticipatedPlayerTableRankingData(competitionID
 	// sort result
 	sort.Slice(playingPlayers, func(i int, j int) bool {
 		// 依照 Bankroll 排名由大到小排序，如果 Bankroll 相同則用加入時間排序 (早加入者名次高)
-		playerCacheI, iExist := ce.getPlayerCache(competitionID, playingPlayers[i].PlayerID)
-		playerCacheJ, jExist := ce.getPlayerCache(competitionID, playingPlayers[j].PlayerID)
+		playerIdxI, iExist := playerIndexMap[playingPlayers[i].PlayerID]
+		playerIdxJ, jExist := playerIndexMap[playingPlayers[j].PlayerID]
 		if playingPlayers[i].Bankroll == playingPlayers[j].Bankroll && (iExist && jExist) {
-			return playerCacheI.JoinAt < playerCacheJ.JoinAt
+			return ce.competition.State.Players[playerIdxI].JoinAt < ce.competition.State.Players[playerIdxJ].JoinAt
 		}
 		return playingPlayers[i].Bankroll > playingPlayers[j].Bankroll
 	})
@@ -72,7 +73,7 @@ GetSortedTableSettlementKnockoutPlayerRankings 桌次結算後預計被淘汰玩
   - @return SortedKnockoutPlayers 排序過後的淘汰玩家 ID 陣列
 */
 func (ce *competitionEngine) GetSortedTableSettlementKnockoutPlayerRankings(tablePlayers []*pokertable.TablePlayerState) []string {
-	competitionID := ce.competition.ID
+	playerIndexMap := ce.competition.GetPlayerIndexMap()
 	sortedKnockoutPlayers := make([]pokertable.TablePlayerState, 0)
 
 	// 找出可能的淘汰者們
@@ -85,9 +86,10 @@ func (ce *competitionEngine) GetSortedTableSettlementKnockoutPlayerRankings(tabl
 		// 延遲買入階段 & 還有補碼次數就略過
 		allowToReBuy := false
 		isAlreadyKnockout := false
-		if playerCache, exist := ce.getPlayerCache(competitionID, p.PlayerID); exist {
-			allowToReBuy = playerCache.ReBuyTimes < ce.competition.Meta.ReBuySetting.MaxTime
-			isAlreadyKnockout = ce.competition.State.Players[playerCache.PlayerIdx].Status == CompetitionPlayerStatus_Knockout
+		if playerIdx, exist := playerIndexMap[p.PlayerID]; exist {
+			player := ce.competition.State.Players[playerIdx]
+			allowToReBuy = player.ReBuyTimes < ce.competition.Meta.ReBuySetting.MaxTime
+			isAlreadyKnockout = player.Status == CompetitionPlayerStatus_Knockout
 		}
 		if !ce.competition.State.BlindState.IsStopBuyIn() && allowToReBuy {
 			continue
@@ -102,10 +104,10 @@ func (ce *competitionEngine) GetSortedTableSettlementKnockoutPlayerRankings(tabl
 
 	// 依加入時間晚到早排序
 	sort.Slice(sortedKnockoutPlayers, func(i int, j int) bool {
-		playerCacheI, iExist := ce.getPlayerCache(competitionID, sortedKnockoutPlayers[i].PlayerID)
-		playerCacheJ, jExist := ce.getPlayerCache(competitionID, sortedKnockoutPlayers[j].PlayerID)
+		playerIdxI, iExist := playerIndexMap[sortedKnockoutPlayers[i].PlayerID]
+		playerIdxJ, jExist := playerIndexMap[sortedKnockoutPlayers[j].PlayerID]
 		if iExist && jExist {
-			return playerCacheI.JoinAt > playerCacheJ.JoinAt
+			return ce.competition.State.Players[playerIdxI].JoinAt > ce.competition.State.Players[playerIdxJ].JoinAt
 		}
 		return true
 	})
@@ -160,10 +162,8 @@ func (ce *competitionEngine) GetParticipatedPlayerCompetitionRankingData(competi
 	// sort result
 	sort.Slice(playingPlayers, func(i int, j int) bool {
 		// 依照 Chips 排名由大到小排序，如果 Chips 相同則用加入時間排序 (早加入者名次高)
-		playerCacheI, iExist := ce.getPlayerCache(competitionID, playingPlayers[i].PlayerID)
-		playerCacheJ, jExist := ce.getPlayerCache(competitionID, playingPlayers[j].PlayerID)
-		if playingPlayers[i].Chips == playingPlayers[j].Chips && (iExist && jExist) {
-			return playerCacheI.JoinAt < playerCacheJ.JoinAt
+		if playingPlayers[i].Chips == playingPlayers[j].Chips {
+			return playingPlayers[i].JoinAt < playingPlayers[j].JoinAt
 		}
 		return playingPlayers[i].Chips > playingPlayers[j].Chips
 	})

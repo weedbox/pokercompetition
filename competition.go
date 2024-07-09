@@ -296,6 +296,14 @@ func (c Competition) IsModeCTorMTT() bool {
 	return c.Meta.Mode == CompetitionMode_CT || c.Meta.Mode == CompetitionMode_MTT
 }
 
+func (c Competition) GetPlayerIndexMap() map[string]int {
+	playerIndexMap := map[string]int{}
+	for idx, player := range c.State.Players {
+		playerIndexMap[player.PlayerID] = idx
+	}
+	return playerIndexMap
+}
+
 // BlindState Getters
 func (bs BlindState) IsStopBuyIn() bool {
 	// NoStopBuyInIndex 代表永遠都是延遲買入階段
