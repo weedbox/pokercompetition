@@ -558,6 +558,7 @@ func (ce *competitionEngine) handleCashOut(tableID string, leavePlayerIndexes ma
 
 func (ce *competitionEngine) handleBreaking(tableID string) {
 	if !ce.competition.IsBreaking() {
+		fmt.Println("[DEBUG#handleBreaking] is not breaking. TableID:", tableID)
 		return
 	}
 
@@ -568,12 +569,13 @@ func (ce *competitionEngine) handleBreaking(tableID string) {
 	if _, exist := ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex]; !exist {
 		ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] = false
 	} else {
-		// fmt.Println("[DEBUG#handleBreaking] already handle breaking & start timer")
+		fmt.Println("[DEBUG#handleBreaking] already handle breaking & start timer. TableID:", tableID)
 		return
 	}
 
 	// already resume table games from breaking
 	if ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] {
+		fmt.Println("[DEBUG#handleBreaking] 1 already resume table games from breaking. TableID:", tableID)
 		return
 	}
 
@@ -581,15 +583,17 @@ func (ce *competitionEngine) handleBreaking(tableID string) {
 	endAt := ce.competition.State.BlindState.EndAts[ce.competition.State.BlindState.CurrentLevelIndex] + 1
 	if err := timebank.NewTimeBank().NewTaskWithDeadline(time.Unix(endAt, 0), func(isCancelled bool) {
 		if isCancelled {
+			fmt.Println("[DEBUG#handleBreaking] timer is canceled. TableID:", tableID)
 			return
 		}
 
 		if ce.isEndStatus() {
-			// fmt.Println("[DEBUG#handleBreaking] not reopen since competition status is:", ce.competition.State.Status)
+			fmt.Println("[DEBUG#handleBreaking] not reopen since competition status is:", ce.competition.State.Status, "TableID:", tableID)
 			return
 		}
 
 		if ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] {
+			fmt.Println("[DEBUG#handleBreaking] 2 already resume table games from breaking. TableID:", tableID)
 			return
 		}
 
@@ -599,8 +603,9 @@ func (ce *competitionEngine) handleBreaking(tableID string) {
 		if len(ce.competition.State.Tables) > tableIdx && tableIdx >= 0 {
 			t := ce.competition.State.Tables[tableIdx]
 
-			autoOpenGame := t.State.Status == pokertable.TableStateStatus_TablePausing && len(t.AlivePlayers()) >= t.Meta.TableMinPlayerCount
+			autoOpenGame := len(t.AlivePlayers()) >= t.Meta.TableMinPlayerCount
 			if !autoOpenGame {
+				fmt.Println("[DEBUG#handleBreaking] not auto reopen table from breaking. TableID:", tableID, " Alive Players:", len(t.AlivePlayers()))
 				return
 			}
 
