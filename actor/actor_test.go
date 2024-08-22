@@ -118,6 +118,9 @@ func TestActor_CT_Breaking(t *testing.T) {
 	}
 
 	isGameSettledRecords := make(map[string]bool)
+	tableEngine.OnAutoGameOpenEnd(func(competitionID, tableID string) {
+		manager.AutoGameOpenEnd(competitionID, tableID)
+	})
 	tableEngine.OnTableUpdated(func(table *pokertable.Table) {
 		logData = append(logData, makeLog(fmt.Sprintf("[Table][%d]", table.UpdateSerial), table.GetJSON))
 
@@ -271,6 +274,9 @@ func TestActor_CT_Normal(t *testing.T) {
 	}
 
 	isGameSettledRecords := make(map[string]bool)
+	tableEngine.OnAutoGameOpenEnd(func(competitionID, tableID string) {
+		manager.AutoGameOpenEnd(competitionID, tableID)
+	})
 	tableEngine.OnTableUpdated(func(table *pokertable.Table) {
 		logData = append(logData, makeLog(fmt.Sprintf("[Table][%d]", table.UpdateSerial), table.GetJSON))
 
