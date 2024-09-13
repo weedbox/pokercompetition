@@ -745,8 +745,8 @@ func (ce *competitionEngine) handleReBuy(table pokertable.Table) {
 
 				switch ce.competition.Meta.Mode {
 				case CompetitionMode_CT:
-					// 已經淘汰或是已經棄賽的玩家不處理
-					if cp.Status != CompetitionPlayerStatus_Knockout || !cp.IsOverReBuyWaitingTime() {
+					// 已經淘汰 (status = knockout)，超過 ReBuy 時間或是已經棄賽 (current_seat = -1) 的玩家不處理
+					if cp.Status != CompetitionPlayerStatus_Knockout || !cp.IsOverReBuyWaitingTime() || cp.CurrentSeat != UnsetValue {
 						leavePlayerIDs = append(leavePlayerIDs, reBuyPlayerID)
 						leavePlayerIndexes[reBuyPlayerID] = reBuyPlayerIdx
 						cp.Status = CompetitionPlayerStatus_ReBuyWaiting
