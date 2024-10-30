@@ -718,7 +718,7 @@ func (ce *competitionEngine) PlayerQuit(tableID, playerID string) error {
 		cp.IsReBuying = false
 		cp.ReBuyEndAt = UnsetValue
 		cp.CurrentSeat = UnsetValue
-		defer ce.mu.Unlock()
+		ce.mu.Unlock()
 
 		ce.emitPlayerEvent("quit knockout", cp)
 		ce.emitEvent("Player Quit", "")
