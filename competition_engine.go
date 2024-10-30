@@ -708,20 +708,21 @@ func (ce *competitionEngine) PlayerQuit(tableID, playerID string) error {
 		return ErrCompetitionQuitRejected
 	}
 
-	ce.mu.Lock()
-	cp := ce.competition.State.Players[playerIdx]
-	cp.Status = CompetitionPlayerStatus_ReBuyWaiting
-	cp.IsReBuying = false
-	cp.ReBuyEndAt = UnsetValue
-	cp.CurrentSeat = UnsetValue
-	defer ce.mu.Unlock()
-
-	ce.emitPlayerEvent("quit knockout", cp)
-	ce.emitEvent("Player Quit", "")
-	ce.emitCompetitionStateEvent(CompetitionStateEvent_KnockoutPlayers)
-
 	if err := ce.tableManagerBackend.PlayersLeave(tableID, []string{playerID}); err != nil {
-		ce.emitErrorEvent("Player Quit Knockout Players -> PlayersLeave", playerID, err)
+		fmt.Printf("[DEBUG#PlayerQuit] PlayersLeave Error: %+v. CompetitionID: %s, TableID: %s, PlayerID: %s", err, ce.competition.ID, tableID, playerID)
+		// ce.emitErrorEvent("Player Quit Knockout Players -> PlayersLeave", playerID, err)
+	} else {
+		ce.mu.Lock()
+		cp := ce.competition.State.Players[playerIdx]
+		cp.Status = CompetitionPlayerStatus_ReBuyWaiting
+		cp.IsReBuying = false
+		cp.ReBuyEndAt = UnsetValue
+		cp.CurrentSeat = UnsetValue
+		defer ce.mu.Unlock()
+
+		ce.emitPlayerEvent("quit knockout", cp)
+		ce.emitEvent("Player Quit", "")
+		ce.emitCompetitionStateEvent(CompetitionStateEvent_KnockoutPlayers)
 	}
 
 	return nil
