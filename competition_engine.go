@@ -436,8 +436,9 @@ func (ce *competitionEngine) PlayerBuyIn(joinPlayer JoinPlayer) error {
 				if len(ce.competition.State.Tables) == 0 {
 					return ErrCompetitionTableNotFound
 				}
-
-				if len(ce.competition.State.Tables[0].State.PlayerStates) >= ce.competition.State.Tables[0].Meta.TableMaxSeatCount {
+				competitionPlayerCount := ce.competition.State.Statistic.PlayingPlayerCount
+				reBuyPlayerCount := ce.competition.State.Statistic.ReBuyWaitingPlayerCount
+				if competitionPlayerCount+reBuyPlayerCount >= ce.competition.State.Tables[0].Meta.TableMaxSeatCount {
 					return ErrCompetitionBuyInRejected
 				}
 			}
