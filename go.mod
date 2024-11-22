@@ -7,7 +7,7 @@ require (
 	github.com/stretchr/testify v1.8.4
 	github.com/thoas/go-funk v0.9.3
 	github.com/weedbox/pokerface v0.1.10
-	github.com/weedbox/pokertable v0.0.83-0.20241122024740-a3f7773d9894
+	github.com/weedbox/pokertable v0.0.83-0.20241122120730-e4f5c18a3eef
 	github.com/weedbox/timebank v0.0.0-20230713013837-bd7a6f808e3e
 )
 

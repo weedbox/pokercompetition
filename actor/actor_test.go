@@ -85,11 +85,11 @@ func TestActor_CT_Breaking(t *testing.T) {
 	assert.Nil(t, err, "get table engine engine failed")
 
 	// 建立 Bot 玩家
-	playerIDs := []string{"Jeffrey", "Fred", "Chuck"}
+	playerIDs := []string{"Jeffrey", "Willy", "Ian"}
 	joinPlayers := funk.Map(playerIDs, func(playerID string) pokercompetition.JoinPlayer {
 		return pokercompetition.JoinPlayer{
 			PlayerID:    playerID,
-			RedeemChips: 10000,
+			RedeemChips: 100,
 		}
 	}).([]pokercompetition.JoinPlayer)
 
