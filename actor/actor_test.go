@@ -154,7 +154,7 @@ func TestActor_CT_Breaking(t *testing.T) {
 		}
 		tableManagerBackend.UpdateTable(&cloneTable)
 	})
-	tableEngine.OnReadyOpenFirstTableGame(func(gameCount int, playerStates []*pokertable.TablePlayerState) {
+	tableEngine.OnReadyOpenFirstTableGame(func(competitionID, tableID string, gameCount int, playerStates []*pokertable.TablePlayerState) {
 		participates := map[string]int{}
 		for idx, player := range playerStates {
 			participates[player.PlayerID] = idx
@@ -318,7 +318,7 @@ func TestActor_CT_Normal(t *testing.T) {
 		}
 		tableManagerBackend.UpdateTable(&cloneTable)
 	})
-	tableEngine.OnReadyOpenFirstTableGame(func(gameCount int, playerStates []*pokertable.TablePlayerState) {
+	tableEngine.OnReadyOpenFirstTableGame(func(competitionID, tableID string, gameCount int, playerStates []*pokertable.TablePlayerState) {
 		participates := map[string]int{}
 		for idx, player := range playerStates {
 			participates[player.PlayerID] = idx
