@@ -37,7 +37,8 @@ func TestActor_CT_Breaking(t *testing.T) {
 	tableManagerBackend := pokercompetition.NewNativeTableManagerBackend(tableManager)
 	manager := pokercompetition.NewManager(tableManagerBackend)
 	tableOptions := pokertable.NewTableEngineOptions()
-	tableOptions.Interval = 1
+	tableOptions.GameContinueInterval = 1
+	tableOptions.OpenGameTimeout = 2
 	manager.SetTableEngineOptions(tableOptions)
 
 	// 建立賽事
@@ -88,7 +89,7 @@ func TestActor_CT_Breaking(t *testing.T) {
 	joinPlayers := funk.Map(playerIDs, func(playerID string) pokercompetition.JoinPlayer {
 		return pokercompetition.JoinPlayer{
 			PlayerID:    playerID,
-			RedeemChips: 1000,
+			RedeemChips: 10000,
 		}
 	}).([]pokercompetition.JoinPlayer)
 
@@ -153,6 +154,13 @@ func TestActor_CT_Breaking(t *testing.T) {
 		}
 		tableManagerBackend.UpdateTable(&cloneTable)
 	})
+	tableEngine.OnReadyOpenFirstTableGame(func(gameCount int, playerStates []*pokertable.TablePlayerState) {
+		participates := map[string]int{}
+		for idx, player := range playerStates {
+			participates[player.PlayerID] = idx
+		}
+		tableEngine.SetUpTableGame(gameCount, participates)
+	})
 
 	// 玩家報名賽事
 	for _, joinPlayer := range joinPlayers {
@@ -193,7 +201,8 @@ func TestActor_CT_Normal(t *testing.T) {
 	tableManagerBackend := pokercompetition.NewNativeTableManagerBackend(tableManager)
 	manager := pokercompetition.NewManager(tableManagerBackend)
 	tableOptions := pokertable.NewTableEngineOptions()
-	tableOptions.Interval = 1
+	tableOptions.GameContinueInterval = 1
+	tableOptions.OpenGameTimeout = 2
 	manager.SetTableEngineOptions(tableOptions)
 
 	// 建立賽事
@@ -308,6 +317,13 @@ func TestActor_CT_Normal(t *testing.T) {
 			cloneTable = *table
 		}
 		tableManagerBackend.UpdateTable(&cloneTable)
+	})
+	tableEngine.OnReadyOpenFirstTableGame(func(gameCount int, playerStates []*pokertable.TablePlayerState) {
+		participates := map[string]int{}
+		for idx, player := range playerStates {
+			participates[player.PlayerID] = idx
+		}
+		tableEngine.SetUpTableGame(gameCount, participates)
 	})
 
 	// 玩家報名賽事

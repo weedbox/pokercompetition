@@ -117,14 +117,10 @@ func (ce *competitionEngine) handleCompetitionTableCreated(table pokertable.Tabl
 func (ce *competitionEngine) updatePauseCompetition(table pokertable.Table, tableIdx int) {
 	shouldReOpenGame := false
 	readyPlayersCount := 0
-	alivePlayerCount := 0
+	aliveParticipants := ce.generateAliveParticipants(table.State.PlayerStates)
 	for _, p := range table.State.PlayerStates {
 		if p.IsIn && p.Bankroll > 0 {
 			readyPlayersCount++
-		}
-
-		if p.Bankroll > 0 {
-			alivePlayerCount++
 		}
 	}
 
@@ -141,10 +137,8 @@ func (ce *competitionEngine) updatePauseCompetition(table pokertable.Table, tabl
 
 	// re-open game
 	if shouldReOpenGame && !ce.competition.IsBreaking() {
-		if err := ce.tableManagerBackend.TableGameOpen(table.ID); err != nil {
-			ce.emitErrorEvent("Game Reopen", "", err)
-			return
-		}
+		nextGameCount := table.State.GameCount + 1
+		ce.tableManagerBackend.SetUpTableGame(table.ID, nextGameCount, aliveParticipants)
 		ce.emitEvent("Game Reopen:", "")
 	}
 }
@@ -610,16 +604,17 @@ func (ce *competitionEngine) handleBreaking(tableID string) {
 			}
 
 			if t.State.GameCount > 0 {
-				if err := ce.tableManagerBackend.TableGameOpen(tableID); err != nil {
-					ce.emitErrorEvent("resume game from breaking & auto open next game", "", err)
-				} else {
-					ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] = true
-				}
+				nextGameCount := t.State.GameCount + 1
+				participants := ce.generateAliveParticipants(t.State.PlayerStates)
+				ce.tableManagerBackend.SetUpTableGame(tableID, nextGameCount, participants)
+				ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] = true
 			} else if t.State.GameCount == 0 {
-				if err := ce.tableManagerBackend.StartTableGame(tableID); err != nil {
-					ce.emitErrorEvent("resume game from breaking & auto start game", "", err)
-				} else {
-					ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] = true
+				participants := ce.generateAliveParticipants(t.State.PlayerStates)
+				ce.breakingPauseResumeStates[tableID][ce.competition.State.BlindState.CurrentLevelIndex] = true
+				if len(participants) >= ce.competition.Meta.TableMinPlayerCount {
+					if err := ce.tableManagerBackend.StartTableGame(tableID); err != nil {
+						ce.emitErrorEvent("resume game from breaking & auto start game", "", err)
+					}
 				}
 			}
 		} else {
@@ -1306,4 +1301,14 @@ func (ce *competitionEngine) refreshPlayerCompetitionRanks() {
 	}
 
 	ce.emitCompetitionStateEvent(CompetitionStateEvent_PlayerRankUpdated)
+}
+
+func (ce *competitionEngine) generateAliveParticipants(players []*pokertable.TablePlayerState) map[string]int {
+	aliveParticipants := map[string]int{}
+	for idx, p := range players {
+		if p.Bankroll > 0 && p.IsIn {
+			aliveParticipants[p.PlayerID] = idx
+		}
+	}
+	return aliveParticipants
 }

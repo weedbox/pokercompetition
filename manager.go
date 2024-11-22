@@ -47,7 +47,8 @@ type manager struct {
 
 func NewManager(tableManagerBackend TableManagerBackend) Manager {
 	tableOptions := pokertable.NewTableEngineOptions()
-	tableOptions.Interval = 6
+	tableOptions.GameContinueInterval = 6
+	tableOptions.OpenGameTimeout = 2
 
 	return &manager{
 		tableOptions:        tableOptions,

@@ -135,6 +135,9 @@ func WithTableManagerBackend(tmb TableManagerBackend) CompetitionEngineOpt {
 		ce.tableManagerBackend.OnTablePlayerReserved(func(tableID string, playerState *pokertable.TablePlayerState) {
 			ce.UpdateReserveTablePlayerState(tableID, playerState)
 		})
+		ce.tableManagerBackend.OnReadyOpenFirstTableGame(func(tableID string, gameCount int, playerStates []*pokertable.TablePlayerState) {
+			ce.ReadyFirstTableGame(tableID, gameCount, playerStates)
+		})
 	}
 }
 
@@ -801,4 +804,9 @@ func (ce *competitionEngine) UpdateTable(table *pokertable.Table) {
 		return
 	}
 	handler(cloneTable, tableIdx)
+}
+
+func (ce *competitionEngine) ReadyFirstTableGame(tableID string, gameCount int, players []*pokertable.TablePlayerState) {
+	participants := ce.generateAliveParticipants(players)
+	ce.tableManagerBackend.SetUpTableGame(tableID, gameCount, participants)
 }

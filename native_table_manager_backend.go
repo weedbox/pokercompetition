@@ -10,13 +10,14 @@ type TableManagerBackend interface {
 	// Events
 	OnTableUpdated(fn func(table *pokertable.Table))
 	OnTablePlayerReserved(fn func(tableID string, playerState *pokertable.TablePlayerState))
+	OnReadyOpenFirstTableGame(fn func(tableID string, gameCount int, playerStates []*pokertable.TablePlayerState))
 
 	// TableManager Table Actions
 	CreateTable(options *pokertable.TableEngineOptions, setting pokertable.TableSetting) (*pokertable.Table, error)
 	PauseTable(tableID string) error
 	CloseTable(tableID string) error
 	StartTableGame(tableID string) error
-	TableGameOpen(tableID string) error
+	SetUpTableGame(tableID string, gameCount int, participants map[string]int) error
 	UpdateBlind(tableID string, level int, ante, dealer, sb, bb int64) error
 	UpdateTablePlayers(tableID string, joinPlayers []pokertable.JoinPlayer, leavePlayerIDs []string) (map[string]int, error)
 
@@ -33,17 +34,19 @@ type TableManagerBackend interface {
 
 func NewNativeTableManagerBackend(manager pokertable.Manager) TableManagerBackend {
 	backend := nativeTableManagerBackend{
-		manager:               manager,
-		onTableUpdated:        func(t *pokertable.Table) {},
-		onTablePlayerReserved: func(tableID string, playerState *pokertable.TablePlayerState) {},
+		manager:                   manager,
+		onTableUpdated:            func(t *pokertable.Table) {},
+		onTablePlayerReserved:     func(tableID string, playerState *pokertable.TablePlayerState) {},
+		onReadyOpenFirstTableGame: func(tableID string, ganeCoubt int, players []*pokertable.TablePlayerState) {},
 	}
 	return &backend
 }
 
 type nativeTableManagerBackend struct {
-	manager               pokertable.Manager
-	onTableUpdated        func(table *pokertable.Table)
-	onTablePlayerReserved func(tableID string, playerState *pokertable.TablePlayerState)
+	manager                   pokertable.Manager
+	onTableUpdated            func(table *pokertable.Table)
+	onTablePlayerReserved     func(tableID string, playerState *pokertable.TablePlayerState)
+	onReadyOpenFirstTableGame func(tableID string, ganeCoubt int, players []*pokertable.TablePlayerState)
 }
 
 func (ntmb *nativeTableManagerBackend) OnTableUpdated(fn func(table *pokertable.Table)) {
@@ -52,6 +55,10 @@ func (ntmb *nativeTableManagerBackend) OnTableUpdated(fn func(table *pokertable.
 
 func (ntmb *nativeTableManagerBackend) OnTablePlayerReserved(fn func(tableID string, playerState *pokertable.TablePlayerState)) {
 	ntmb.onTablePlayerReserved = fn
+}
+
+func (ntmb *nativeTableManagerBackend) OnReadyOpenFirstTableGame(fn func(tableID string, gameCount int, playerStates []*pokertable.TablePlayerState)) {
+	ntmb.onReadyOpenFirstTableGame = fn
 }
 
 func (ntmb *nativeTableManagerBackend) CreateTable(options *pokertable.TableEngineOptions, setting pokertable.TableSetting) (*pokertable.Table, error) {
@@ -105,8 +112,8 @@ func (ntbm *nativeTableManagerBackend) StartTableGame(tableID string) error {
 	return ntbm.manager.StartTableGame(tableID)
 }
 
-func (ntbm *nativeTableManagerBackend) TableGameOpen(tableID string) error {
-	return ntbm.manager.TableGameOpen(tableID)
+func (ntbm *nativeTableManagerBackend) SetUpTableGame(tableID string, gameCount int, participants map[string]int) error {
+	return ntbm.manager.SetUpTableGame(tableID, gameCount, participants)
 }
 
 func (ntbm *nativeTableManagerBackend) UpdateBlind(tableID string, level int, ante, dealer, sb, bb int64) error {
