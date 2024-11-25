@@ -30,6 +30,7 @@ type Manager interface {
 	UpdateTable(competitionID string, table *pokertable.Table) error
 	UpdateReserveTablePlayerState(competitionID, tableID string, playerState *pokertable.TablePlayerState) error
 	AutoGameOpenEnd(competitionID, tableID string) error
+	SetUpTableGame(compeittionID, tableID string, gameCount int, participants map[string]int) error
 
 	// Player Operations
 	PlayerBuyIn(competitionID string, joinPlayer JoinPlayer) error
@@ -168,6 +169,14 @@ func (m *manager) AutoGameOpenEnd(competitionID, tableID string) error {
 	}
 
 	return competitionEngine.AutoGameOpenEnd(tableID)
+}
+
+func (m *manager) SetUpTableGame(competitionID, tableID string, gameCount int, participants map[string]int) error {
+	competitionEngine, err := m.GetCompetitionEngine(competitionID)
+	if err != nil {
+		return ErrManagerCompetitionNotFound
+	}
+	return competitionEngine.SetUpTableGame(tableID, gameCount, participants)
 }
 
 func (m *manager) PlayerBuyIn(competitionID string, joinPlayer JoinPlayer) error {

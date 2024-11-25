@@ -64,6 +64,7 @@ type CompetitionEngine interface {
 	UpdateTable(table *pokertable.Table)                                                    // 桌次更新
 	UpdateReserveTablePlayerState(tableID string, playerState *pokertable.TablePlayerState) // 更新 Reserve 桌次玩家狀態
 	AutoGameOpenEnd(tableID string) error                                                   // 自動開賽結束
+	SetUpTableGame(tableID string, gameCount int, participants map[string]int) error        // 設定某手遊戲
 	ReleaseTables() error                                                                   // 釋放所有桌次
 }
 
@@ -761,6 +762,17 @@ func (ce *competitionEngine) AutoGameOpenEnd(tableID string) error {
 	}
 
 	return nil
+}
+
+func (ce *competitionEngine) SetUpTableGame(tableID string, gameCount int, participants map[string]int) error {
+	tableIdx := ce.competition.FindTableIdx(func(t *pokertable.Table) bool {
+		return tableID == t.ID
+	})
+	if tableIdx == UnsetValue {
+		return ErrCompetitionTableNotFound
+	}
+
+	return ce.tableManagerBackend.SetUpTableGame(tableID, gameCount, participants)
 }
 
 func (ce *competitionEngine) ReleaseTables() error {
