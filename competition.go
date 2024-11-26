@@ -2,6 +2,7 @@ package pokercompetition
 
 import (
 	"encoding/json"
+	"time"
 
 	"github.com/thoas/go-funk"
 	"github.com/weedbox/pokertable"
@@ -318,4 +319,8 @@ func (bs BlindState) IsStopBuyIn() bool {
 
 	// 當前盲注等級索引值大於 FinalBuyInLevelIndex 代表停止買入階段
 	return bs.CurrentLevelIndex > bs.FinalBuyInLevelIndex
+}
+
+func (cp CompetitionPlayer) ReBuyOverTime() bool {
+	return time.Now().Unix() >= cp.ReBuyEndAt
 }
