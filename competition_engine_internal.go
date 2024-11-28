@@ -594,6 +594,12 @@ func (ce *competitionEngine) handleBreaking(tableID string) {
 		tableIdx := ce.competition.FindTableIdx(func(t *pokertable.Table) bool {
 			return t.ID == tableID
 		})
+
+		// 中場結束後，且到停止買入，結束賽事
+		if ce.competition.PlayingPlayerCount() == 1 && ce.competition.State.Status == CompetitionStateStatus_StoppedBuyIn {
+			ce.CloseCompetition(CompetitionStateStatus_End)
+			return
+		}
 		if len(ce.competition.State.Tables) > tableIdx && tableIdx >= 0 {
 			t := ce.competition.State.Tables[tableIdx]
 

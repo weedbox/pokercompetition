@@ -633,6 +633,7 @@ func (ce *competitionEngine) PlayerRefund(playerID string) error {
 		ce.competition.State.Players[playerIdx].TotalBuyInUnits = 0
 	}
 	ce.deletePlayer(playerIdx)
+	ce.refreshPlayerCompetitionRanks()
 	defer ce.mu.Unlock()
 
 	// emit events
